@@ -1,15 +1,11 @@
 import base64
 from typing import Any
 
-from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from .schemas import ResumeResponse
-
-load_dotenv()
-
-MODEL_NAME = "google_genai:gemini-2.5-flash-lite"
+from app.config import Config
+from app.models.resume import ResumeResponse
 
 PROMPT = """You are a precise resume parser. Analyze the provided PDF document.
 
@@ -51,7 +47,7 @@ def parse_resume(pdf_path: str) -> ResumeResponse:
     pdf_base64 = encode_pdf_to_base64(pdf_path)
 
     agent = create_agent(
-        model=MODEL_NAME,
+        model=Config.MODEL_NAME,
         system_prompt="You are a helpful assistant that analyzes documents and returns structured JSON data.",
         response_format=ToolStrategy(ResumeResponse),
     )

@@ -1,14 +1,10 @@
 from typing import Any
 
-from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from .jd_schemas import JobDescriptionResponse
-
-load_dotenv()
-
-MODEL_NAME = "google_genai:gemini-2.5-flash-lite"
+from app.config import Config
+from app.models.job_description import JobDescriptionResponse
 
 PROMPT = """You are a precise job description parser. Analyze the provided text.
 
@@ -45,7 +41,7 @@ YOU MUST respond with valid JSON matching the JobDescriptionResponse schema."""
 def parse_job_description(text: str) -> JobDescriptionResponse:
     """Parse a job description from plain text and return structured data"""
     agent = create_agent(
-        model=MODEL_NAME,
+        model=Config.MODEL_NAME,
         system_prompt="You are a helpful assistant that analyzes job descriptions and returns structured JSON data.",
         response_format=ToolStrategy(JobDescriptionResponse),
     )
