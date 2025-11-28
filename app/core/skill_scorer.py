@@ -170,7 +170,6 @@ def _generate_summary(
     hire_signal: HireSignal,
     strengths: list[str],
     critical_gaps: list[str],
-    required_score: float,
 ) -> str:
     """Generate HR-friendly summary"""
     score_pct = int(final_score * 100)
@@ -287,7 +286,6 @@ def calculate_skill_score(
         hire_signal=hire_signal,
         strengths=llm_response.strengths,
         critical_gaps=critical_gaps,
-        required_score=required_score,
     )
 
     # --- Return result ---

@@ -85,7 +85,7 @@ def parse_resume_interactive():
             print("\n" + "-" * 60)
             print("Full structured response:")
             print("-" * 60)
-            pprint(result.model_dump(), width=80, compact=False)
+            pprint(result.markdown_content, width=80, compact=False)
         else:
             print(f"✓ Document Type: {result.document_type or 'Unknown'}")
             print("\n⚠️  This document is not a resume/CV.")
@@ -175,14 +175,8 @@ def parse_jd_interactive():
             print(f"✓ Employment Type: {result.employment_type or 'N/A'}")
 
             if result.requirements:
-                if result.requirements.required_skills:
-                    print(
-                        f"✓ Required Skills: {len(result.requirements.required_skills)} found"
-                    )
-                if result.requirements.preferred_skills:
-                    print(
-                        f"✓ Preferred Skills: {len(result.requirements.preferred_skills)} found"
-                    )
+                if result.requirements.skills:
+                    print("✓ Skills: found")
 
             if result.keywords:
                 print(f"✓ Keywords Extracted: {len(result.keywords)}")
