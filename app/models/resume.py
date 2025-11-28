@@ -84,6 +84,14 @@ class ResumeResponse(BaseModel):
 
     is_resume: bool
     document_type: str | None = Field(None, description="Only if not a resume")
+
+    # Markdown content for scoring (preserves full context)
+    markdown_content: str | None = Field(
+        None,
+        description="Clean markdown representation of the entire resume for scoring purposes",
+    )
+
+    # Structured sections for storage/search/filtering
     personal_information: PersonalInformation | None = None
     professional_summary: str | None = None
     work_experience: list[WorkExperience] | None = None

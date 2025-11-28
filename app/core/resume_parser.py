@@ -13,9 +13,60 @@ FIRST: Determine if this is a resume/CV document.
 - A resume/CV typically contains: personal information, work experience, education, skills, and contact details
 - If this is NOT a resume/CV, set is_resume to false and provide a brief description in document_type (max 15 words)
 
-IF THIS IS A RESUME/CV: Extract all information from the document.
+IF THIS IS A RESUME/CV: You must provide TWO outputs:
 
-CRITICAL RULES:
+---
+
+## OUTPUT 1: MARKDOWN CONTENT (for scoring)
+
+Convert the ENTIRE resume to clean markdown format in the `markdown_content` field.
+
+MARKDOWN CONTENT RULES:
+- Preserve ALL text content from the resume - do not summarize or omit anything
+- Use markdown formatting: ## for section headers, **bold** for emphasis, - for bullets
+- Maintain the original section order as it appears in the resume
+- Keep exact wording, dates, numbers, company names, titles
+- Include all bullet points, descriptions, and details
+- Preserve any metrics, achievements, or quantified results
+- This should be a complete, readable representation of the resume
+
+MARKDOWN CONTENT FORMAT:
+```
+# [Candidate Name]
+[Contact details on one line]
+
+## Summary/Objective
+[If present]
+
+## Experience
+### [Job Title] | [Company] | [Dates]
+- [Responsibility/achievement]
+- [Responsibility/achievement]
+
+### [Previous Job Title] | [Company] | [Dates]
+- [Responsibility/achievement]
+
+## Education
+### [Degree] | [Institution] | [Date]
+[Details if any]
+
+## Skills
+[Skills as listed]
+
+## Projects
+### [Project Name]
+[Description and technologies]
+
+[Continue for all sections present...]
+```
+
+---
+
+## OUTPUT 2: STRUCTURED SECTIONS (for storage/search)
+
+Extract information into the structured fields.
+
+STRUCTURED EXTRACTION RULES:
 1. Extract ONLY information that is explicitly present in the PDF
 2. Do NOT infer, assume, or add any information that is not directly stated
 3. Do NOT rephrase or paraphrase - use the EXACT wording from the PDF
@@ -27,6 +78,10 @@ CRITICAL RULES:
 9. Do not correct grammar, spelling, or formatting from the original
 10. Do not expand abbreviations unless they are expanded in the PDF
 11. Preserve all special characters, punctuation, and capitalization
+
+---
+
+IMPORTANT: Both outputs must contain the same information - markdown_content is the full text representation, structured fields are the parsed/categorized version. Neither should contain information not present in the other.
 
 YOU MUST respond with valid JSON matching the ResumeResponse schema."""
 
@@ -43,7 +98,7 @@ def encode_pdf_to_base64(pdf_path: str) -> str:
 
 
 def parse_resume(pdf_path: str) -> ResumeResponse:
-    """Parse a resume PDF and return structured data"""
+    """Parse a resume PDF and return structured data with markdown content for scoring"""
     pdf_base64 = encode_pdf_to_base64(pdf_path)
 
     agent = create_agent(
