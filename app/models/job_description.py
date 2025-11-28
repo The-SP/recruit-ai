@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -17,20 +19,41 @@ class EducationRequirement(BaseModel):
     equivalent_experience_accepted: bool = False
 
 
-class SkillRequirement(BaseModel):
-    name: str
-    proficiency_level: str | None = Field(
-        None, description="e.g., Beginner, Intermediate, Expert"
+class SkillGroup(BaseModel):
+    """A group of alternative skills where matching ANY one satisfies the requirement"""
+
+    options: list[str] = Field(
+        description="Alternative skills - candidate needs any ONE of these"
     )
-    is_required: bool = True
-    years_of_experience: int | None = None
+    min_years: int | None = Field(
+        None, description="Minimum years of experience for this skill"
+    )
+    min_proficiency: (
+        Literal["beginner", "intermediate", "advanced", "expert"] | None
+    ) = Field(None, description="Minimum proficiency level required")
+
+
+class SkillRequirements(BaseModel):
+    """Three-tier skill requirements with alternative groupings"""
+
+    critical: list[SkillGroup] = Field(
+        default_factory=list,
+        description="Dealbreaker skills - missing these disqualifies candidate",
+    )
+    required: list[SkillGroup] = Field(
+        default_factory=list,
+        description="Important skills - weighted heavily in scoring",
+    )
+    preferred: list[SkillGroup] = Field(
+        default_factory=list,
+        description="Nice to have skills - bonus points only",
+    )
 
 
 class JobRequirements(BaseModel):
     education: list[EducationRequirement] | None = None
     experience: ExperienceRequirement | None = None
-    required_skills: list[SkillRequirement] | None = None
-    preferred_skills: list[SkillRequirement] | None = None
+    skills: SkillRequirements | None = None
     certifications: list[str] | None = None
     languages: list[str] | None = Field(None, description="Spoken/written languages")
     other_requirements: list[str] | None = None
