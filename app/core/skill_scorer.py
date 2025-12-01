@@ -4,6 +4,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
+from app.core.logger import init_logger
 from app.models.job_description import SkillGroup, SkillRequirements
 from app.models.skill_evaluation import (
     HireSignal,
@@ -12,6 +13,8 @@ from app.models.skill_evaluation import (
     SkillGroupEvaluation,
     SkillScoreResult,
 )
+
+logger = init_logger(__name__)
 
 # --- Constants ---
 
@@ -214,6 +217,8 @@ def calculate_skill_score(
         SkillScoreResult with scores, evaluations, and hire signal
     """
 
+    logger.info("Starting skill evaluation")
+
     # --- Step 1: Build prompt ---
 
     critical_text = _format_skill_groups(skill_requirements.critical or [], "critical")
@@ -286,6 +291,10 @@ def calculate_skill_score(
         hire_signal=hire_signal,
         strengths=llm_response.strengths,
         critical_gaps=critical_gaps,
+    )
+
+    logger.info(
+        f"Skill evaluation complete - Final score: {final_score:.3f} | Signal: {hire_signal.value} | Critical gaps: {len(critical_gaps)}"
     )
 
     # --- Return result ---

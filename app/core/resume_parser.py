@@ -5,7 +5,10 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
+from app.core.logger import init_logger
 from app.models.resume import ResumeResponse
+
+logger = init_logger(__name__)
 
 PROMPT = """You are a precise resume parser. Analyze the provided PDF document.
 
@@ -121,4 +124,19 @@ def parse_resume(pdf_path: str) -> ResumeResponse:
     ]
 
     result = agent.invoke({"messages": messages})
-    return result["structured_response"]
+    response = result["structured_response"]
+
+    if response.is_resume:
+        name = (
+            response.personal_information.name
+            if response.personal_information
+            else "Unknown"
+        )
+        markdown_chars = (
+            len(response.markdown_content) if response.markdown_content else 0
+        )
+        logger.info(f"Parsed resume: name='{name}' | markdown={markdown_chars} chars")
+    else:
+        logger.warning(f"Document is not a resume - Type: {response.document_type}")
+
+    return response

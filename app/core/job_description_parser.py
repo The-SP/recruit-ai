@@ -4,7 +4,10 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
+from app.core.logger import init_logger
 from app.models.job_description import JobDescriptionResponse
+
+logger = init_logger(__name__)
 
 PROMPT = """You are a precise job description parser. Analyze the provided text.
 
@@ -132,6 +135,7 @@ YOU MUST respond with valid JSON matching the JobDescriptionResponse schema."""
 
 def parse_job_description(text: str) -> JobDescriptionResponse:
     """Parse a job description from plain text and return structured data"""
+    logger.info(f"Parsing job description ({len(text)} chars)")
     agent = create_agent(
         model=Config.MODEL_NAME,
         system_prompt="You are a helpful assistant that analyzes job descriptions and returns structured JSON data.",
@@ -146,4 +150,13 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
     ]
 
     result = agent.invoke({"messages": messages})
-    return result["structured_response"]
+    response = result["structured_response"]
+
+    if response.is_job_description:
+        logger.info(f"Parsed job description - Title: {response.job_title}")
+    else:
+        logger.warning(
+            f"Document is not a job description - Type: {response.document_type}"
+        )
+
+    return response
