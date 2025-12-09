@@ -121,12 +121,41 @@ RESPONSIBILITIES section mentioning skills:
 
 ---
 
+EXPERIENCE REQUIREMENT EXTRACTION:
+
+## Extract experience requirements:
+
+1. **min_years**: Minimum years of experience required
+   - "3+ years" → min_years: 3
+   - "3-5 years" → min_years: 3
+   - "at least 2 years" → min_years: 2
+   - If not specified, set to null
+
+2. **max_years**: Maximum years (if specified, often indicates seniority cap)
+   - "3-5 years" → max_years: 5
+   - Usually null unless explicitly stated
+
+3. **level**: Seniority level of the role
+   - Look for: Entry, Junior, Mid, Mid-Level, Senior, Lead, Principal, Staff
+   - Can infer from title: "Senior Developer" → level: "Senior"
+   - If ambiguous, set to null
+
+4. **key_skills**: List of critical and required skill names only
+   - Extract skill names from critical and required tiers
+   - Just the names, no proficiency or years
+   - Example: ["Python", "FastAPI", "PostgreSQL", "Docker"]
+
+5. **key_responsibilities**: Most essential job responsibilities (max 5)
+   - Focus on core duties that define the role
+   - Skip generic responsibilities like "attend meetings" or "collaborate with team"
+   - Example: ["Design and build scalable APIs", "Optimize database performance", "Lead code reviews"]
+
+---
+
 KEYWORD EXTRACTION:
 - Extract 10-20 key terms that best represent the role for matching purposes
 - Include: role-specific terminology, tools, methodologies, domain terms, certifications
 - Exclude: generic soft skills unless specifically emphasized for this role
-
----
 
 ---
 

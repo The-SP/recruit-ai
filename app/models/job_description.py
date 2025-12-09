@@ -4,11 +4,14 @@ from pydantic import BaseModel, Field
 
 
 class ExperienceRequirement(BaseModel):
-    min_years: int | None = None
-    max_years: int | None = None
+    min_years: float | None = None
+    max_years: float | None = None
     level: str | None = Field(None, description="e.g., Entry, Mid, Senior, Lead")
-    specific_experience: list[str] | None = Field(
-        None, description="Specific types of experience required"
+    key_skills: list[str] | None = Field(
+        None, description="Critical and required skill names for context"
+    )
+    key_responsibilities: list[str] | None = Field(
+        None, description="Most essential job responsibilities (max 5)"
     )
 
 
