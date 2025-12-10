@@ -1,11 +1,11 @@
 """Example usage of the skill, experience, education, and composite scorers"""
 
-from app.core.composite_scorer import calculate_composite_score
-from app.core.education_scorer import calculate_education_score
-from app.core.experience_scorer import calculate_experience_score
 from app.core.job_description_parser import parse_job_description
 from app.core.resume_parser import parse_resume
-from app.core.skill_scorer import calculate_skill_score
+from app.evaluation.composite_scorer import calculate_composite_score
+from app.evaluation.education_scorer import calculate_education_score
+from app.evaluation.experience_scorer import calculate_experience_score
+from app.evaluation.skill_scorer import calculate_skill_score
 from app.models.composite_evaluation import CompositeScoreResult
 from app.models.education_evaluation import EducationScoreResult
 from app.models.experience_evaluation import ExperienceScoreResult
