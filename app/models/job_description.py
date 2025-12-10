@@ -16,10 +16,17 @@ class ExperienceRequirement(BaseModel):
 
 
 class EducationRequirement(BaseModel):
-    degree_level: str | None = Field(None, description="e.g., Bachelor, Master, PhD")
-    fields_of_study: list[str] | None = None
-    is_required: bool = True
-    equivalent_experience_accepted: bool = False
+    min_degree: str | None = Field(
+        None,
+        description="Minimum degree: 'bachelors', 'masters', 'phd'",
+    )
+    preferred_fields: list[str] | None = Field(
+        None, description="Preferred fields of study"
+    )
+    required: bool = Field(
+        default=False,
+        description="Whether education is a hard requirement for this role",
+    )
 
 
 class SkillGroup(BaseModel):
@@ -54,7 +61,7 @@ class SkillRequirements(BaseModel):
 
 
 class JobRequirements(BaseModel):
-    education: list[EducationRequirement] | None = None
+    education: EducationRequirement | None = None
     experience: ExperienceRequirement | None = None
     skills: SkillRequirements | None = None
     certifications: list[str] | None = None

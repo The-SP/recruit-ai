@@ -1,8 +1,10 @@
-"""Example usage of the skill and experience scorers"""
+"""Example usage of the skill, experience, and education scorers"""
 
+from app.core.education_scorer import calculate_education_score
 from app.core.experience_scorer import calculate_experience_score
 from app.core.job_description_parser import parse_job_description
 from app.core.skill_scorer import calculate_skill_score
+from app.models.education_evaluation import EducationScoreResult
 from app.models.experience_evaluation import ExperienceScoreResult
 from app.models.job_description import JobDescriptionResponse
 from app.models.skill_evaluation import SkillScoreResult
@@ -20,7 +22,7 @@ def evaluate_skills(
             resume_markdown=resume_markdown,
         )
     else:
-        raise ValueError("No requirements found in job description")
+        raise ValueError("No skill requirements found in job description")
     print("✓ Skill scoring completed")
     return result
 
@@ -38,8 +40,25 @@ def evaluate_experience(
             job_title=jd.job_title,
         )
     else:
-        raise ValueError("No requirements found in job description")
+        raise ValueError("No experience requirements found in job description")
     print("✓ Experience scoring completed")
+    return result
+
+
+def evaluate_education(
+    jd: JobDescriptionResponse, resume_markdown: str
+) -> EducationScoreResult:
+    """Evaluate education and return result"""
+    print("\nEvaluating education...")
+    if jd.requirements and jd.requirements.education:
+        print(f"Requirements: {jd.requirements.education}")
+        result = calculate_education_score(
+            education_requirement=jd.requirements.education,
+            resume_markdown=resume_markdown,
+        )
+    else:
+        raise ValueError("No education requirements found in job description")
+    print("✓ Education scoring completed")
     return result
 
 
@@ -75,6 +94,17 @@ def print_experience_results(result: ExperienceScoreResult) -> None:
         print()
 
 
+def print_education_results(result: EducationScoreResult) -> None:
+    """Print education score results"""
+    print("\n" + "=" * 50)
+    print("EDUCATION SCORE RESULTS")
+    print("=" * 50)
+    print(f"Score: {result.score}")
+    print(f"Candidate Degree: {result.candidate_degree or 'N/A'}")
+    print(f"Field of Study: {result.field_of_study or 'N/A'}")
+    print(f"Summary: {result.summary}")
+
+
 def main():
     print("Starting scoring process...")
 
@@ -95,8 +125,11 @@ def main():
     # skill_result = evaluate_skills(jd, resume_markdown)
     # print_skill_results(skill_result)
 
-    exp_result = evaluate_experience(jd, resume_markdown)
-    print_experience_results(exp_result)
+    # exp_result = evaluate_experience(jd, resume_markdown)
+    # print_experience_results(exp_result)
+
+    edu_result = evaluate_education(jd, resume_markdown)
+    print_education_results(edu_result)
 
 
 if __name__ == "__main__":

@@ -152,6 +152,23 @@ EXPERIENCE REQUIREMENT EXTRACTION:
 
 ---
 
+EDUCATION REQUIREMENT EXTRACTION:
+
+1. **min_degree**: Minimum degree level
+   - Normalize to: "associates", "bachelors", "masters", "phd"
+   - "BS/BA/Bachelor's" → "bachelors"
+   - "MS/MA/Master's" → "masters"
+   - If not specified, set to null
+
+2. **preferred_fields**: Fields of study mentioned
+   - Extract from phrases like "degree in X, Y, or related field"
+   - Example: "Bachelor's in Computer Science, Engineering or related" → ["Computer Science", "Engineering"]
+   - If not specified, set to null
+
+3. **required**: Is education a hard requirement?
+
+---
+
 KEYWORD EXTRACTION:
 - Extract 10-20 key terms that best represent the role for matching purposes
 - Include: role-specific terminology, tools, methodologies, domain terms, certifications
