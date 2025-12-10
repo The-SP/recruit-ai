@@ -22,6 +22,7 @@ class HireSignal(str, Enum):
     PARTIAL_MATCH = "partial_match"
     WEAK_MATCH = "weak_match"
     NO_MATCH = "no_match"
+    UNDETERMINED = "undetermined"
 
 
 class SkillGroupEvaluation(BaseModel):
