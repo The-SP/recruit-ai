@@ -1,8 +1,21 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 from app.models.education_evaluation import EducationScoreResult
 from app.models.experience_evaluation import ExperienceScoreResult
-from app.models.skill_evaluation import HireSignal, SkillScoreResult
+from app.models.skill_evaluation import SkillScoreResult
+
+
+class HireSignal(str, Enum):
+    """Overall hiring recommendation based on score"""
+
+    STRONG_MATCH = "strong_match"
+    GOOD_MATCH = "good_match"
+    PARTIAL_MATCH = "partial_match"
+    WEAK_MATCH = "weak_match"
+    NO_MATCH = "no_match"
+    UNDETERMINED = "undetermined"
 
 
 class CompositeScoreResult(BaseModel):

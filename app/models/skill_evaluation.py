@@ -14,17 +14,6 @@ class MatchType(str, Enum):
     NONE = "none"  # No evidence
 
 
-class HireSignal(str, Enum):
-    """Overall hiring recommendation based on score"""
-
-    STRONG_MATCH = "strong_match"
-    GOOD_MATCH = "good_match"
-    PARTIAL_MATCH = "partial_match"
-    WEAK_MATCH = "weak_match"
-    NO_MATCH = "no_match"
-    UNDETERMINED = "undetermined"
-
-
 class SkillGroupEvaluation(BaseModel):
     """LLM evaluation for a single skill group"""
 
@@ -66,5 +55,4 @@ class SkillScoreResult(BaseModel):
 
     # Final result
     final_score: float = Field(ge=0.0, le=1.0)
-    hire_signal: HireSignal
     summary: str

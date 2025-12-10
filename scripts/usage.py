@@ -80,7 +80,6 @@ def print_skill_results(result: SkillScoreResult) -> None:
     print("SKILL SCORE RESULTS")
     print("=" * 50)
     print(f"Score: {result.final_score}")
-    print(f"Hire Signal: {result.hire_signal.value}")
     print(f"Summary: {result.summary}")
     if result.critical_gaps:
         print(f"Critical Gaps: {', '.join(result.critical_gaps)}")

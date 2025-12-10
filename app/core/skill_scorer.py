@@ -7,7 +7,6 @@ from app.config import Config
 from app.core.logger import init_logger
 from app.models.job_description import SkillGroup, SkillRequirements
 from app.models.skill_evaluation import (
-    HireSignal,
     LLMEvaluationResponse,
     MatchType,
     SkillGroupEvaluation,
@@ -29,14 +28,6 @@ MATCH_TYPE_SCORES: dict[MatchType, float] = {
 CRITICAL_PASSING_TYPES: set[MatchType] = {MatchType.EXACT, MatchType.EQUIVALENT}
 
 BASE_WEIGHTS = {"required": 85, "preferred": 15}
-
-HIRE_SIGNAL_THRESHOLDS = [
-    (0.85, HireSignal.STRONG_MATCH),
-    (0.70, HireSignal.GOOD_MATCH),
-    (0.55, HireSignal.PARTIAL_MATCH),
-    (0.40, HireSignal.WEAK_MATCH),
-    (0.0, HireSignal.NO_MATCH),
-]
 
 # --- Prompt ---
 
@@ -160,30 +151,21 @@ def _calculate_critical_penalty(gaps_count: int) -> float:
     return 0.5**gaps_count
 
 
-def _determine_hire_signal(score: float) -> HireSignal:
-    """Map final score to hire signal"""
-    for threshold, signal in HIRE_SIGNAL_THRESHOLDS:
-        if score >= threshold:
-            return signal
-    return HireSignal.NO_MATCH
-
-
 def _generate_summary(
     final_score: float,
-    hire_signal: HireSignal,
     strengths: list[str],
     critical_gaps: list[str],
 ) -> str:
     """Generate HR-friendly summary"""
     score_pct = int(final_score * 100)
 
-    if hire_signal == HireSignal.STRONG_MATCH:
+    if final_score >= 0.85:
         opener = f"Excellent skills match ({score_pct}%)."
-    elif hire_signal == HireSignal.GOOD_MATCH:
+    elif final_score >= 0.70:
         opener = f"Good skills match ({score_pct}%)."
-    elif hire_signal == HireSignal.PARTIAL_MATCH:
+    elif final_score >= 0.55:
         opener = f"Partial skills match ({score_pct}%)."
-    elif hire_signal == HireSignal.WEAK_MATCH:
+    elif final_score >= 0.40:
         opener = f"Weak skills match ({score_pct}%)."
     else:
         opener = f"Poor skills match ({score_pct}%)."
@@ -214,7 +196,7 @@ def calculate_skill_score(
         resume_markdown: Full markdown content of resume
 
     Returns:
-        SkillScoreResult with scores, evaluations, and hire signal
+        SkillScoreResult with scores and evaluations
     """
 
     logger.info("Starting skill evaluation")
@@ -280,21 +262,16 @@ def calculate_skill_score(
 
     final_score = base_score * critical_penalty
 
-    # --- Step 8: Determine hire signal ---
-
-    hire_signal = _determine_hire_signal(final_score)
-
-    # --- Step 9: Generate summary ---
+    # --- Step 8: Generate summary ---
 
     summary = _generate_summary(
         final_score=final_score,
-        hire_signal=hire_signal,
         strengths=llm_response.strengths,
         critical_gaps=critical_gaps,
     )
 
     logger.info(
-        f"Skill evaluation complete - Final score: {final_score:.3f} | Signal: {hire_signal.value} | Critical gaps: {len(critical_gaps)}"
+        f"Skill evaluation complete - Final score: {final_score:.3f} | Critical gaps: {len(critical_gaps)}"
     )
 
     # --- Return result ---
@@ -306,6 +283,5 @@ def calculate_skill_score(
         critical_gaps=critical_gaps,
         critical_penalty=round(critical_penalty, 3),
         final_score=round(final_score, 3),
-        hire_signal=hire_signal,
         summary=summary,
     )
