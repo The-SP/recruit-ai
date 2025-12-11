@@ -12,20 +12,26 @@ logger = init_logger(__name__)
 
 PROMPT = """You are a precise resume parser. Analyze the provided PDF document.
 
-FIRST: Determine if this is a resume/CV document.
+## Step 1: Document Classification
+
+Determine if this is a resume/CV document.
 - A resume/CV typically contains: personal information, work experience, education, skills, and contact details
 - If this is NOT a resume/CV, set is_resume to false and provide a brief description in document_type (max 15 words)
 
-IF THIS IS A RESUME/CV: You must provide TWO outputs:
+## Step 2: If This IS a Resume
 
----
+Extract the following:
 
-## OUTPUT 1: MARKDOWN CONTENT (for scoring)
+### 1. Basic Metadata
+- candidate_name: Full name of the candidate
+- candidate_email: Email address if present
+
+### 2. Markdown Content (Critical for Scoring)
 
 Convert the ENTIRE resume to clean markdown format in the `markdown_content` field.
 
-MARKDOWN CONTENT RULES:
-- Preserve ALL text content from the resume - do not summarize or omit anything
+**Rules:**
+- Preserve ALL text content - do not summarize or omit anything
 - Use markdown formatting: ## for section headers, **bold** for emphasis, - for bullets
 - Maintain the original section order as it appears in the resume
 - Keep exact wording, dates, numbers, company names, titles
@@ -46,47 +52,19 @@ MARKDOWN CONTENT FORMAT:
 - [Responsibility/achievement]
 - [Responsibility/achievement]
 
-### [Previous Job Title] | [Company] | [Dates]
-- [Responsibility/achievement]
-
 ## Education
 ### [Degree] | [Institution] | [Date]
-[Details if any]
 
 ## Skills
 [Skills as listed]
 
 ## Projects
-### [Project Name]
-[Description and technologies]
+[If present]
 
 [Continue for all sections present...]
 ```
 
----
-
-## OUTPUT 2: STRUCTURED SECTIONS (for storage/search)
-
-Extract information into the structured fields.
-
-STRUCTURED EXTRACTION RULES:
-1. Extract ONLY information that is explicitly present in the PDF
-2. Do NOT infer, assume, or add any information that is not directly stated
-3. Do NOT rephrase or paraphrase - use the EXACT wording from the PDF
-4. If a section is not present, set it as null or empty array
-5. Preserve all dates, numbers, and formatting exactly as shown
-6. Do not add placeholder text or examples
-7. If you cannot find specific information, leave that field as null
-8. Maintain the exact order of items as they appear in the resume
-9. Do not correct grammar, spelling, or formatting from the original
-10. Do not expand abbreviations unless they are expanded in the PDF
-11. Preserve all special characters, punctuation, and capitalization
-
----
-
-IMPORTANT: Both outputs must contain the same information - markdown_content is the full text representation, structured fields are the parsed/categorized version. Neither should contain information not present in the other.
-
-YOU MUST respond with valid JSON matching the ResumeResponse schema."""
+Respond with valid JSON matching the ResumeResponse schema."""
 
 
 def encode_pdf_to_base64(pdf_path: str) -> str:
@@ -101,7 +79,7 @@ def encode_pdf_to_base64(pdf_path: str) -> str:
 
 
 def parse_resume(pdf_path: str) -> ResumeResponse:
-    """Parse a resume PDF and return structured data with markdown content for scoring"""
+    """Parse a resume PDF and return markdown content for scoring"""
     pdf_base64 = encode_pdf_to_base64(pdf_path)
 
     agent = create_agent(
@@ -114,10 +92,7 @@ def parse_resume(pdf_path: str) -> ResumeResponse:
         {
             "role": "user",
             "content": [
-                {
-                    "type": "text",
-                    "text": PROMPT,
-                },
+                {"type": "text", "text": PROMPT},
                 {"type": "media", "mime_type": "application/pdf", "data": pdf_base64},
             ],
         }

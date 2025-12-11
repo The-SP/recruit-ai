@@ -3,6 +3,7 @@
 Interactive CLI for testing resume parsing and job description parsing locally.
 """
 
+import json
 import sys
 from pathlib import Path
 from pprint import pprint
@@ -12,14 +13,12 @@ from app.core.resume_parser import parse_resume
 
 
 def print_header():
-    """Print CLI header"""
     print("\n" + "=" * 60)
     print("  LLM-Enhanced Resume Screening System - CLI")
     print("=" * 60)
 
 
 def print_menu():
-    """Print main menu"""
     print("\nMain Menu:")
     print("  1. Parse Resume (PDF)")
     print("  2. Parse Job Description (Text)")
@@ -28,32 +27,29 @@ def print_menu():
 
 
 def parse_resume_interactive():
-    """Interactive resume parsing"""
     print("\n" + "=" * 60)
     print("  RESUME PARSING")
     print("=" * 60)
 
     pdf_path = input("\nEnter the path to the resume PDF file: ").strip()
-
-    # Remove quotes if user copied path with quotes
     pdf_path = pdf_path.strip("'\"")
 
     if not pdf_path:
-        print("❌ Error: No file path provided.")
+        print("✗ Error: No file path provided.")
         return
 
     pdf_file = Path(pdf_path)
 
     if not pdf_file.exists():
-        print(f"❌ Error: File '{pdf_path}' not found.")
+        print(f"✗ Error: File '{pdf_path}' not found.")
         return
 
     if not pdf_file.suffix.lower() == ".pdf":
-        print(f"❌ Error: File must be a PDF. Got: {pdf_file.suffix}")
+        print(f"✗ Error: File must be a PDF. Got: {pdf_file.suffix}")
         return
 
     try:
-        print(f"\n🔄 Analyzing '{pdf_file.name}'...")
+        print(f"\n📄 Analyzing '{pdf_file.name}'...")
         result = parse_resume(str(pdf_file))
 
         print("\n" + "=" * 60)
@@ -64,28 +60,27 @@ def parse_resume_interactive():
 
         if result.is_resume:
             if result.personal_information:
-                print(f"✓ Name: {result.personal_information.name or 'N/A'}")
-                print(f"✓ Email: {result.personal_information.email or 'N/A'}")
-                print(f"✓ Phone: {result.personal_information.phone or 'N/A'}")
+                info = result.personal_information.model_dump(exclude_none=True)
+                print("✓ Personal Information:")
+                print(json.dumps(info, indent=2))
             else:
-                print("✓ Name: N/A")
+                print("✓ Personal Information: N/A")
 
-            if result.work_experience:
-                print(f"✓ Work Experience Entries: {len(result.work_experience)}")
+            if result.markdown_content:
+                print(f"✓ Markdown Content: {len(result.markdown_content)} chars")
 
-            if result.education:
-                print(f"✓ Education Entries: {len(result.education)}")
+                # Save markdown to file
+                output_path = save_markdown(pdf_file, result.markdown_content)
+                if output_path:
+                    print(f"✓ Saved to: {output_path}")
 
-            if result.skills:
-                if result.skills.technical_skills:
-                    print(
-                        f"✓ Technical Skills: {len(result.skills.technical_skills)} found"
-                    )
-
-            print("\n" + "-" * 60)
-            print("Full structured response:")
-            print("-" * 60)
-            pprint(result.markdown_content, width=80, compact=False)
+                # Preview
+                print("\n" + "-" * 60)
+                print("Preview (first 500 chars):")
+                print("-" * 60)
+                print(result.markdown_content[:500])
+                if len(result.markdown_content) > 500:
+                    print("...")
         else:
             print(f"✓ Document Type: {result.document_type or 'Unknown'}")
             print("\n⚠️  This document is not a resume/CV.")
@@ -93,16 +88,46 @@ def parse_resume_interactive():
         print("\n" + "=" * 60)
 
     except FileNotFoundError:
-        print(f"❌ Error: File '{pdf_path}' not found.")
+        print(f"✗ Error: File '{pdf_path}' not found.")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"✗ Error: {e}")
         import traceback
 
         traceback.print_exc()
 
 
+def save_markdown(pdf_file: Path, markdown_content: str) -> str | None:
+    """Save markdown content to data/ directory"""
+    try:
+        data_dir = Path("data")
+        data_dir.mkdir(exist_ok=True)
+
+        # Generate output filename: resume.pdf -> resume_md.txt
+        output_name = f"{pdf_file.stem}_md.txt"
+        output_path = data_dir / output_name
+
+        # Check if file exists and prompt for overwrite
+        if output_path.exists():
+            response = (
+                input(f"\n'{output_path}' exists. Overwrite? (y/N): ").strip().lower()
+            )
+            if response != "y":
+                # Generate unique filename
+                counter = 1
+                while output_path.exists():
+                    output_name = f"{pdf_file.stem}_md_{counter}.txt"
+                    output_path = data_dir / output_name
+                    counter += 1
+
+        output_path.write_text(markdown_content, encoding="utf-8")
+        return str(output_path)
+
+    except Exception as e:
+        print(f"⚠️  Warning: Could not save markdown: {e}")
+        return None
+
+
 def parse_jd_interactive():
-    """Interactive job description parsing"""
     print("\n" + "=" * 60)
     print("  JOB DESCRIPTION PARSING")
     print("=" * 60)
@@ -128,7 +153,7 @@ def parse_jd_interactive():
                     break
             jd_text = "\n".join(lines)
         except KeyboardInterrupt:
-            print("\n\n❌ Input cancelled.")
+            print("\n\n✗ Input cancelled.")
             return
 
     elif choice == "2":
@@ -136,30 +161,30 @@ def parse_jd_interactive():
         file_path = file_path.strip("'\"")
 
         if not file_path:
-            print("❌ Error: No file path provided.")
+            print("✗ Error: No file path provided.")
             return
 
         text_file = Path(file_path)
 
         if not text_file.exists():
-            print(f"❌ Error: File '{file_path}' not found.")
+            print(f"✗ Error: File '{file_path}' not found.")
             return
 
         try:
             jd_text = text_file.read_text(encoding="utf-8")
         except Exception as e:
-            print(f"❌ Error reading file: {e}")
+            print(f"✗ Error reading file: {e}")
             return
     else:
-        print("❌ Invalid option selected.")
+        print("✗ Invalid option selected.")
         return
 
     if not jd_text.strip():
-        print("❌ Error: No job description text provided.")
+        print("✗ Error: No job description text provided.")
         return
 
     try:
-        print("\n🔄 Analyzing job description...")
+        print("\n📄 Analyzing job description...")
         result = parse_job_description(jd_text)
 
         print("\n" + "=" * 60)
@@ -172,14 +197,28 @@ def parse_jd_interactive():
             print(f"✓ Job Title: {result.job_title or 'N/A'}")
             print(f"✓ Company: {result.company_name or 'N/A'}")
             print(f"✓ Location: {result.location or 'N/A'}")
+            print(f"✓ Remote Policy: {result.remote_policy or 'N/A'}")
             print(f"✓ Employment Type: {result.employment_type or 'N/A'}")
 
             if result.requirements:
+                if result.requirements.experience:
+                    exp = result.requirements.experience
+                    print(
+                        f"✓ Experience: {exp.min_years or 'N/A'} years ({exp.level or 'N/A'})"
+                    )
+
+                if result.requirements.education:
+                    edu = result.requirements.education
+                    print(f"✓ Education: {edu.min_degree or 'N/A'}")
+
                 if result.requirements.skills:
-                    print("✓ Skills: found")
+                    skills = result.requirements.skills
+                    print(f"✓ Critical Skills: {len(skills.critical)} groups")
+                    print(f"✓ Required Skills: {len(skills.required)} groups")
+                    print(f"✓ Preferred Skills: {len(skills.preferred)} groups")
 
             if result.keywords:
-                print(f"✓ Keywords Extracted: {len(result.keywords)}")
+                print(f"✓ Keywords: {len(result.keywords)} extracted")
 
             print("\n" + "-" * 60)
             print("Full structured response:")
@@ -192,14 +231,13 @@ def parse_jd_interactive():
         print("\n" + "=" * 60)
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"✗ Error: {e}")
         import traceback
 
         traceback.print_exc()
 
 
 def main():
-    """Main CLI loop"""
     print_header()
 
     while True:
@@ -214,7 +252,7 @@ def main():
             print("\n👋 Goodbye!\n")
             sys.exit(0)
         else:
-            print("\n❌ Invalid option. Please select 1, 2, or 3.")
+            print("\n✗ Invalid option. Please select 1, 2, or 3.")
 
         input("\n⏎ Press Enter to continue...")
 
