@@ -65,7 +65,6 @@ class JobRequirements(BaseModel):
     experience: ExperienceRequirement | None = None
     skills: SkillRequirements | None = None
     certifications: list[str] | None = None
-    languages: list[str] | None = Field(None, description="Spoken/written languages")
     other_requirements: list[str] | None = None
 
 
@@ -78,12 +77,6 @@ class JobDescriptionResponse(BaseModel):
     # Basic Information
     job_title: str | None = None
     company_name: str | None = None
-    department: str | None = None
-    location: str | None = None
-    remote_policy: str | None = Field(None, description="Remote, Hybrid, On-site")
-    employment_type: str | None = Field(
-        None, description="Full-time, Part-time, Contract"
-    )
 
     # Role Details
     summary: str | None = Field(None, description="Brief overview of the role")

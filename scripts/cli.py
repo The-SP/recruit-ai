@@ -196,9 +196,6 @@ def parse_jd_interactive():
         if result.is_job_description:
             print(f"✓ Job Title: {result.job_title or 'N/A'}")
             print(f"✓ Company: {result.company_name or 'N/A'}")
-            print(f"✓ Location: {result.location or 'N/A'}")
-            print(f"✓ Remote Policy: {result.remote_policy or 'N/A'}")
-            print(f"✓ Employment Type: {result.employment_type or 'N/A'}")
 
             if result.requirements:
                 if result.requirements.experience:
