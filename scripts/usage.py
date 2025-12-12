@@ -6,11 +6,11 @@ from app.evaluation.composite_scorer import calculate_composite_score
 from app.evaluation.education_scorer import calculate_education_score
 from app.evaluation.experience_scorer import calculate_experience_score
 from app.evaluation.skill_scorer import calculate_skill_score
-from app.models.composite_evaluation import CompositeScoreResult
-from app.models.education_evaluation import EducationScoreResult
-from app.models.experience_evaluation import ExperienceScoreResult
-from app.models.job_description import JobDescriptionResponse
-from app.models.skill_evaluation import SkillScoreResult
+from app.schemas.composite_evaluation import CompositeScoreResult
+from app.schemas.education_evaluation import EducationScoreResult
+from app.schemas.experience_evaluation import ExperienceScoreResult
+from app.schemas.job_description import JobDescriptionResponse
+from app.schemas.skill_evaluation import SkillScoreResult
 
 # --- Individual Evaluators ---
 

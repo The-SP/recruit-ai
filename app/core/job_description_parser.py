@@ -5,7 +5,7 @@ from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
-from app.models.job_description import JobDescriptionResponse
+from app.schemas.job_description import JobDescriptionResponse
 
 logger = init_logger(__name__)
 

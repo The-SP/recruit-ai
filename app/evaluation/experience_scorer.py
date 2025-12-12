@@ -6,13 +6,13 @@ from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
-from app.models.experience_evaluation import (
+from app.schemas.experience_evaluation import (
     ExperienceEvaluation,
     ExperienceRelevance,
     ExperienceScoreResult,
     LLMExperienceResponse,
 )
-from app.models.job_description import ExperienceRequirement
+from app.schemas.job_description import ExperienceRequirement
 
 logger = init_logger(__name__)
 

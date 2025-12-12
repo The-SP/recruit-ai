@@ -5,8 +5,8 @@ from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
-from app.models.education_evaluation import EducationScoreResult
-from app.models.job_description import EducationRequirement
+from app.schemas.education_evaluation import EducationScoreResult
+from app.schemas.job_description import EducationRequirement
 
 logger = init_logger(__name__)
 

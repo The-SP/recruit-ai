@@ -6,7 +6,7 @@ from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
-from app.models.resume import ResumeResponse
+from app.schemas.resume import ResumeResponse
 
 logger = init_logger(__name__)
 

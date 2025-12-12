@@ -60,7 +60,7 @@ class SkillRequirements(BaseModel):
     )
 
 
-class JobRequirements(BaseModel):
+class JobRequirementsSchema(BaseModel):
     education: EducationRequirement | None = None
     experience: ExperienceRequirement | None = None
     skills: SkillRequirements | None = None
@@ -81,7 +81,7 @@ class JobDescriptionResponse(BaseModel):
     # Role Details
     summary: str | None = Field(None, description="Brief overview of the role")
     responsibilities: list[str] | None = None
-    requirements: JobRequirements | None = None
+    requirements: JobRequirementsSchema | None = None
 
     # For matching purposes
     keywords: list[str] | None = Field(

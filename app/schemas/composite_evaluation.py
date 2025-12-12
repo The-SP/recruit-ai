@@ -2,9 +2,9 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from app.models.education_evaluation import EducationScoreResult
-from app.models.experience_evaluation import ExperienceScoreResult
-from app.models.skill_evaluation import SkillScoreResult
+from app.schemas.education_evaluation import EducationScoreResult
+from app.schemas.experience_evaluation import ExperienceScoreResult
+from app.schemas.skill_evaluation import SkillScoreResult
 
 
 class HireSignal(str, Enum):
