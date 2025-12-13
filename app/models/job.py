@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import ARRAY, ForeignKey, String, Text, func
@@ -6,6 +7,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.evaluation import CandidateEvaluation
 
 
 class Job(Base):
@@ -33,6 +37,9 @@ class Job(Base):
     # Relationships
     requirements: Mapped["JobRequirements | None"] = relationship(
         back_populates="job", uselist=False, cascade="all, delete-orphan"
+    )
+    evaluations: Mapped[list["CandidateEvaluation"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
