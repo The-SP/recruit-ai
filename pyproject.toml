@@ -7,7 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
     "langchain>=1.0.5",
     "langchain-google-genai>=3.0.2",
+    "psycopg2>=2.9.11",
     "python-dotenv>=1.2.1",
+    "sqlalchemy>=2.0.45",
 ]
 
 [dependency-groups]

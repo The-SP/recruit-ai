@@ -13,3 +13,8 @@ class Config:
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
     )
     LOG_TO_FILE: bool = os.getenv("LOG_TO_FILE", "false").lower() == "true"
+
+    # Database Configuration
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/recruit-ai"
+    )
