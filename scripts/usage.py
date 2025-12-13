@@ -1,24 +1,190 @@
 """Example usage of the skill, experience, education, and composite scorers"""
 
+from uuid import UUID
+
 from app.core.job_description_parser import parse_job_description
 from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
 from app.evaluation.education_scorer import calculate_education_score
 from app.evaluation.experience_scorer import calculate_experience_score
 from app.evaluation.skill_scorer import calculate_skill_score
+from app.models.database import create_session
+from app.repositories.candidate_repository import CandidateRepository
+from app.repositories.evaluation_repository import EvaluationRepository
+from app.repositories.job_repository import JobRepository
 from app.schemas.composite_evaluation import CompositeScoreResult
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.experience_evaluation import ExperienceScoreResult
-from app.schemas.job_description import JobDescriptionResponse
+from app.schemas.job_description import (
+    EducationRequirement,
+    ExperienceRequirement,
+    JobDescriptionResponse,
+    JobRequirementsSchema,
+    SkillGroup,
+    SkillRequirements,
+)
 from app.schemas.skill_evaluation import SkillScoreResult
 
-# --- Individual Evaluators ---
+# =============================================================================
+# CONFIGURATION - Set these to control behavior
+# =============================================================================
+
+# Set to None to parse fresh, or provide UUID string to fetch from DB
+EXISTING_JOB_ID: str | None = "cf6c7877-389f-426f-a4cb-7c1b7be36f1f"
+EXISTING_CANDIDATE_ID: str | None = "f8ace116-0ce2-4688-8db4-19f8c0aec656"
+
+# File paths for parsing new data
+JOB_FILE_PATH = "data/job.txt"
+RESUME_PDF_PATH = "data/resume.pdf"
+
+# =============================================================================
+# Data Loaders
+# =============================================================================
+
+
+def load_job_description() -> tuple[JobDescriptionResponse, UUID]:
+    """
+    Load job description either from DB or by parsing file.
+    Returns: (JobDescriptionResponse, job_id)
+    """
+    db = create_session()
+    try:
+        repo = JobRepository(db)
+
+        if EXISTING_JOB_ID:
+            print(f"\nFetching job from DB: {EXISTING_JOB_ID}")
+            job_id = UUID(EXISTING_JOB_ID)
+            job = repo.get_by_id(job_id, with_requirements=True)
+            if not job:
+                raise ValueError(f"Job not found: {EXISTING_JOB_ID}")
+            jd = _job_model_to_response(job)
+            print(f"✓ Loaded from DB: {jd.job_title}")
+            return jd, job_id
+        else:
+            print("\nParsing job description from file...")
+            with open(JOB_FILE_PATH) as f:
+                jd_text = f.read()
+            jd = parse_job_description(jd_text)
+            print(f"✓ Parsed: {jd.job_title}")
+
+            # Save to DB
+            job = repo.create(jd, jd_text)
+            print(f"✓ Saved job to DB: {job.id}")
+            return jd, job.id
+    finally:
+        db.close()
+
+
+def load_resume() -> tuple[str, UUID]:
+    """
+    Load resume markdown either from DB or by parsing PDF.
+    Returns: (markdown_content, candidate_id)
+    """
+    db = create_session()
+    try:
+        repo = CandidateRepository(db)
+
+        if EXISTING_CANDIDATE_ID:
+            print(f"\nFetching candidate from DB: {EXISTING_CANDIDATE_ID}")
+            candidate_id = UUID(EXISTING_CANDIDATE_ID)
+            candidate = repo.get_by_id(candidate_id)
+            if not candidate:
+                raise ValueError(f"Candidate not found: {EXISTING_CANDIDATE_ID}")
+            if not candidate.resume_markdown:
+                raise ValueError(
+                    f"Candidate has no resume markdown: {EXISTING_CANDIDATE_ID}"
+                )
+            print(f"✓ Loaded from DB: {candidate.name}")
+            return candidate.resume_markdown, candidate_id
+        else:
+            print("\nParsing resume from PDF...")
+            resume = parse_resume(RESUME_PDF_PATH)
+            if not resume.is_resume or not resume.markdown_content:
+                raise ValueError("Failed to parse resume or not a valid resume")
+            name = (
+                resume.personal_information.name
+                if resume.personal_information
+                else "Unknown"
+            )
+            print(f"✓ Parsed: {name}")
+
+            # Save to DB
+            filename = RESUME_PDF_PATH.split("/")[-1]
+            candidate = repo.create(resume, filename, RESUME_PDF_PATH)
+            print(f"✓ Saved candidate to DB: {candidate.id}")
+            return resume.markdown_content, candidate.id
+    finally:
+        db.close()
+
+
+def save_evaluation(
+    candidate_id: UUID, job_id: UUID, result: CompositeScoreResult
+) -> UUID:
+    """Save evaluation result to DB. Returns evaluation ID."""
+    db = create_session()
+    try:
+        repo = EvaluationRepository(db)
+        evaluation = repo.upsert(candidate_id, job_id, result)
+        print(f"✓ Saved evaluation to DB: {evaluation.id}")
+        return evaluation.id
+    finally:
+        db.close()
+
+
+def _job_model_to_response(job) -> JobDescriptionResponse:
+    """Convert Job model to JobDescriptionResponse schema"""
+    requirements = None
+    if job.requirements:
+        req = job.requirements
+        skills = None
+        if req.skills:
+            skills = SkillRequirements(
+                critical=[SkillGroup(**g) for g in req.skills.get("critical", [])],
+                required=[SkillGroup(**g) for g in req.skills.get("required", [])],
+                preferred=[SkillGroup(**g) for g in req.skills.get("preferred", [])],
+            )
+        requirements = JobRequirementsSchema(
+            experience=ExperienceRequirement(
+                min_years=req.exp_min_years,
+                max_years=req.exp_max_years,
+                level=req.exp_level,
+                key_skills=req.exp_key_skills,
+                key_responsibilities=req.exp_key_responsibilities,
+            )
+            if req.exp_min_years or req.exp_level
+            else None,
+            education=EducationRequirement(
+                min_degree=req.edu_min_degree,
+                preferred_fields=req.edu_preferred_fields,
+                required=req.edu_required,
+            )
+            if req.edu_min_degree
+            else None,
+            skills=skills,
+            certifications=req.certifications,
+            other_requirements=req.other_requirements,
+        )
+
+    return JobDescriptionResponse(
+        is_job_description=job.is_valid_jd or False,
+        document_type=job.document_type,
+        job_title=job.title,
+        company_name=job.company_name,
+        summary=job.summary,
+        responsibilities=job.responsibilities,
+        requirements=requirements,
+        keywords=job.keywords,
+    )
+
+
+# =============================================================================
+# Individual Evaluators
+# =============================================================================
 
 
 def evaluate_skills(
     jd: JobDescriptionResponse, resume_markdown: str
 ) -> SkillScoreResult:
-    """Evaluate skills and return result"""
     print("\nEvaluating skills...")
     if not jd.requirements or not jd.requirements.skills:
         raise ValueError("No skill requirements found in job description")
@@ -33,7 +199,6 @@ def evaluate_skills(
 def evaluate_experience(
     jd: JobDescriptionResponse, resume_markdown: str
 ) -> ExperienceScoreResult:
-    """Evaluate experience and return result"""
     print("\nEvaluating experience...")
     if not jd.requirements or not jd.requirements.experience:
         raise ValueError("No experience requirements found in job description")
@@ -49,7 +214,6 @@ def evaluate_experience(
 def evaluate_education(
     jd: JobDescriptionResponse, resume_markdown: str
 ) -> EducationScoreResult:
-    """Evaluate education and return result"""
     print("\nEvaluating education...")
     if not jd.requirements or not jd.requirements.education:
         raise ValueError("No education requirements found in job description")
@@ -64,18 +228,18 @@ def evaluate_education(
 def evaluate_composite(
     jd: JobDescriptionResponse, resume_markdown: str
 ) -> CompositeScoreResult:
-    """Evaluate composite score and return result"""
     print("\nEvaluating composite score...")
     result = calculate_composite_score(jd=jd, resume_markdown=resume_markdown)
     print("✓ Composite scoring completed")
     return result
 
 
-# --- Result Printers ---
+# =============================================================================
+# Result Printers
+# =============================================================================
 
 
 def print_skill_results(result: SkillScoreResult) -> None:
-    """Print skill score results"""
     print("\n" + "=" * 50)
     print("SKILL SCORE RESULTS")
     print("=" * 50)
@@ -86,7 +250,6 @@ def print_skill_results(result: SkillScoreResult) -> None:
 
 
 def print_experience_results(result: ExperienceScoreResult) -> None:
-    """Print experience score results"""
     print("\n" + "=" * 50)
     print("EXPERIENCE SCORE RESULTS")
     print("=" * 50)
@@ -108,7 +271,6 @@ def print_experience_results(result: ExperienceScoreResult) -> None:
 
 
 def print_education_results(result: EducationScoreResult) -> None:
-    """Print education score results"""
     print("\n" + "=" * 50)
     print("EDUCATION SCORE RESULTS")
     print("=" * 50)
@@ -119,7 +281,6 @@ def print_education_results(result: EducationScoreResult) -> None:
 
 
 def print_composite_results(result: CompositeScoreResult) -> None:
-    """Print composite score results"""
     print("\n" + "=" * 60)
     print("COMPOSITE SCORE RESULTS")
     print("=" * 60)
@@ -150,35 +311,23 @@ def print_composite_results(result: CompositeScoreResult) -> None:
     print("\n" + "=" * 60)
 
 
-# --- Main ---
+# =============================================================================
+# Main
+# =============================================================================
 
 
 def main():
     print("Starting scoring process...")
 
-    # Parse job description
-    print("\nParsing job description...")
-    with open("data/job.txt") as f:
-        jd_text = f.read()
-    jd = parse_job_description(jd_text)
-    print(f"✓ Parsed: {jd.job_title}")
+    # Load job description (from DB or parse new)
+    jd, job_id = load_job_description()
+    print(f"Job ID: {job_id}")
 
-    # Load resume
-    print("\nLoading resume...")
-    with open("data/sp_md.txt") as f:
-        resume_markdown = f.read()
-    print("✓ Resume loaded")
+    # Load resume (from DB or parse new)
+    resume_markdown, candidate_id = load_resume()
+    print(f"Candidate ID: {candidate_id}")
 
-    # # Parse resume
-    # print("\nParsing resume...")
-    # resume = parse_resume("data/resume.pdf")
-    # if not resume.is_resume or not resume.markdown_content:
-    #     print("✗ Failed to parse resume")
-    #     return
-    # print(f"✓ Parsed: {resume.personal_information.name if resume.personal_information else 'Unknown'}")
-    # resume_markdown = resume.markdown_content
-
-    # --- Individual Evaluations (comment out as needed) ---
+    # --- Individual Evaluations (uncomment as needed) ---
 
     # skill_result = evaluate_skills(jd, resume_markdown)
     # print_skill_results(skill_result)
@@ -193,6 +342,10 @@ def main():
 
     composite_result = evaluate_composite(jd, resume_markdown)
     print_composite_results(composite_result)
+
+    # Save evaluation to DB
+    evaluation_id = save_evaluation(candidate_id, job_id, composite_result)
+    print(f"Evaluation ID: {evaluation_id}")
 
 
 if __name__ == "__main__":
