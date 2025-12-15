@@ -18,3 +18,5 @@ class Config:
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/recruit-ai"
     )
+
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
