@@ -96,12 +96,19 @@ def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
     logger.info(f"Starting evaluation run for job={job_id}, folder={folder_path}")
 
     db = create_session()
+    run_id = None
+    item_ids = []
+    jd_dict = {}
     try:
         # Validate job exists
         job_repo = JobRepository(db)
         job = job_repo.get_by_id(UUID(job_id), with_requirements=True)
         if not job:
             raise ValueError(f"Job not found: {job_id}")
+
+        # Serialize JD once for all workers
+        jd = _job_model_to_response(job)
+        jd_dict = jd.model_dump()
 
         # Scan folder for PDFs
         folder = Path(folder_path)
@@ -138,10 +145,21 @@ def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
 
     # Dispatch chord: group of evaluate tasks -> finalize callback
     workflow = chord(
-        group(evaluate_resume.s(item_id) for item_id in item_ids),
+        group(evaluate_resume.s(item_id, jd_dict) for item_id in item_ids),
         finalize_evaluation_run.s(run_id),
     )
-    workflow.apply_async()
+
+    try:
+        workflow.apply_async()
+    except Exception as e:
+        logger.error(f"Failed to dispatch tasks for run={run_id}: {e}")
+        db = create_session()
+        try:
+            run_repo = EvaluationRunRepository(db)
+            run_repo.mark_failed(UUID(run_id), str(e))
+        finally:
+            db.close()
+        raise
 
     logger.info(f"Dispatched {len(item_ids)} tasks for run={run_id}")
     return run_id
@@ -155,12 +173,13 @@ def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
     retry_backoff=True,
     retry_backoff_max=30,
 )
-def evaluate_resume(self, item_id: str) -> dict:
+def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
     """
     Worker task: Process a single resume.
 
     Args:
         item_id: UUID of the EvaluationRunItem
+        jd_dict: Serialized JobDescriptionResponse
 
     Returns:
         dict with status and optional error
@@ -199,23 +218,18 @@ def evaluate_resume(self, item_id: str) -> dict:
             filepath=pdf_path,
         )
 
-        # Load job description
-        job_repo = JobRepository(db)
-        job = job_repo.get_by_id(run.job_id, with_requirements=True)
-        if not job:
-            raise ValueError(f"Job not found: {run.job_id}")
-
-        jd = _job_model_to_response(job)
+        # Deserialize job description
+        jd = JobDescriptionResponse.model_validate(jd_dict)
 
         # Calculate composite score
-        logger.info(f"Scoring candidate={candidate.id} against job={job.id}")
+        logger.info(f"Scoring candidate={candidate.id} against job={run.job_id}")
         result = calculate_composite_score(
             jd=jd, resume_markdown=resume.markdown_content
         )
 
         # Store evaluation
         eval_repo = EvaluationRepository(db)
-        evaluation = eval_repo.create(candidate.id, job.id, result)
+        evaluation = eval_repo.create(candidate.id, run.job_id, result)
 
         # Mark item completed
         item_repo.mark_completed(
