@@ -26,6 +26,12 @@ from app.schemas.job_description import (
     SkillRequirements,
 )
 from app.worker.celery_app import celery_app, get_failed_key, get_progress_key
+from app.worker.circuit_breaker import (
+    handle_circuit_breaker_skip,
+    handle_rate_limit_failure,
+    is_circuit_breaker_active,
+    is_rate_limit_error,
+)
 
 logger = init_logger(__name__)
 
@@ -94,6 +100,15 @@ def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
         evaluation_run_id as string
     """
     logger.info(f"Starting evaluation run for job={job_id}, folder={folder_path}")
+
+    # Check circuit breaker before starting
+    if is_circuit_breaker_active():
+        error_msg = (
+            "Cannot start run - rate limit circuit breaker is active. "
+            "Run 'make circuit-reset' to clear."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     db = create_session()
     run_id = None
@@ -165,14 +180,7 @@ def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
     return run_id
 
 
-@celery_app.task(
-    bind=True,
-    name="evaluate_resume",
-    autoretry_for=(Exception,),
-    retry_kwargs={"max_retries": 3},
-    retry_backoff=True,
-    retry_backoff_max=30,
-)
+@celery_app.task(bind=True, name="evaluate_resume")
 def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
     """
     Worker task: Process a single resume.
@@ -185,6 +193,11 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         dict with status and optional error
     """
     logger.info(f"Processing item={item_id}")
+
+    # Check circuit breaker first - fail fast if rate limit active
+    if is_circuit_breaker_active():
+        handle_circuit_breaker_skip(UUID(item_id))
+        return {"status": "failed", "item_id": item_id, "error": "Rate limit active"}
 
     db = create_session()
     try:
@@ -242,29 +255,37 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         redis_client.incr(get_progress_key(run_id))
 
         logger.info(
-            f"Completed item={item_id}: candidate={candidate.id}, score={result.final_score}"
+            f"✓ Completed item={item_id}: candidate={candidate.id}, score={result.final_score}"
         )
 
         return {"status": "completed", "item_id": item_id}
 
     except Exception as e:
-        logger.error(f"Failed item={item_id}: {e}")
+        # Check if this is a rate limit error
+        if is_rate_limit_error(e):
+            handle_rate_limit_failure(UUID(item_id), UUID(run_id), e, db)
+            return {
+                "status": "failed",
+                "item_id": item_id,
+                "error": "Rate limit exceeded",
+            }
 
-        # Mark item failed
+        # Handle other errors (non-rate-limit)
+        error_str = str(e)
+        logger.error(f"✗ Failed item={item_id}: {error_str}")
+
         try:
             item_repo = EvaluationRunItemRepository(db)
             item = item_repo.get_by_id(UUID(item_id))
             if item:
-                item_repo.mark_failed(item.id, str(e))
+                item_repo.mark_failed(item.id, error_str[:500])
                 run_id = str(item.evaluation_run_id)
                 redis_client.incr(get_failed_key(run_id))
         except Exception as inner_e:
             logger.error(f"Failed to mark item as failed: {inner_e}")
 
-        # Don't re-raise if max retries exceeded - let batch continue
-        if self.request.retries >= self.max_retries:
-            return {"status": "failed", "item_id": item_id, "error": str(e)}
-        raise
+        # Return failure - no retry
+        return {"status": "failed", "item_id": item_id, "error": error_str[:200]}
 
     finally:
         db.close()
@@ -296,11 +317,17 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     db = create_session()
     try:
         run_repo = EvaluationRunRepository(db)
-        run_repo.mark_completed(
-            run_id=UUID(run_id),
-            processed_count=processed,
-            failed_count=failed,
-        )
+        run = run_repo.get_by_id(UUID(run_id))
+
+        # Only mark as completed if not already marked as failed
+        if run and run.status != "failed":
+            run_repo.mark_completed(
+                run_id=UUID(run_id),
+                processed_count=processed,
+                failed_count=failed,
+            )
+        else:
+            logger.info(f"Run already marked as failed, skipping completion")
     finally:
         db.close()
 
@@ -315,5 +342,5 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
         "failed_count": failed,
     }
 
-    logger.info(f"Finalized run={run_id}: {summary}")
+    logger.info(f"✓ Finalized run={run_id}: {summary}")
     return summary
