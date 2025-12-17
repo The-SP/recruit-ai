@@ -31,6 +31,12 @@ batch-results:  ## Check results (usage: make batch-results RUN_ID=<id>)
 	@echo "Checking results for run: $(RUN_ID)"
 	uv run -m scripts.run_batch results $(RUN_ID)
 
+circuit-status:  ## Check circuit breaker status
+	@uv run -m scripts.circuit_breaker status
+
+circuit-reset:  ## Reset circuit breaker manually
+	@uv run -m scripts.circuit_breaker reset
+
 lint:  ## Lint code
 	@echo "Running linter..."
 	uv run ruff check .
