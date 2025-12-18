@@ -5,6 +5,9 @@ help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
+dev: ## Start the FastAPI server in development mode
+	uv run uvicorn app.api.main:app --reload
+
 worker:  ## Start Celery worker
 	uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
 
