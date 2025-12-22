@@ -17,14 +17,8 @@ from app.repositories.evaluation_run_repository import (
     EvaluationRunRepository,
 )
 from app.repositories.job_repository import JobRepository
-from app.schemas.job_description import (
-    EducationRequirement,
-    ExperienceRequirement,
-    JobDescriptionResponse,
-    JobRequirementsSchema,
-    SkillGroup,
-    SkillRequirements,
-)
+from app.schemas.job_description import JobDescriptionResponse
+from app.schemas.job_utils import build_job_requirements_schema
 from app.worker.celery_app import celery_app, get_failed_key, get_progress_key
 from app.worker.circuit_breaker import (
     handle_circuit_breaker_skip,
@@ -43,37 +37,7 @@ KEY_EXPIRATION = 86400
 
 def _job_model_to_response(job) -> JobDescriptionResponse:
     """Convert Job model to JobDescriptionResponse schema"""
-    requirements = None
-    if job.requirements:
-        req = job.requirements
-        skills = None
-        if req.skills:
-            skills = SkillRequirements(
-                critical=[SkillGroup(**g) for g in req.skills.get("critical", [])],
-                required=[SkillGroup(**g) for g in req.skills.get("required", [])],
-                preferred=[SkillGroup(**g) for g in req.skills.get("preferred", [])],
-            )
-        requirements = JobRequirementsSchema(
-            experience=ExperienceRequirement(
-                min_years=req.exp_min_years,
-                max_years=req.exp_max_years,
-                level=req.exp_level,
-                key_skills=req.exp_key_skills,
-                key_responsibilities=req.exp_key_responsibilities,
-            )
-            if req.exp_min_years or req.exp_level
-            else None,
-            education=EducationRequirement(
-                min_degree=req.edu_min_degree,
-                preferred_fields=req.edu_preferred_fields,
-                required=req.edu_required,
-            )
-            if req.edu_min_degree
-            else None,
-            skills=skills,
-            certifications=req.certifications,
-            other_requirements=req.other_requirements,
-        )
+    requirements = build_job_requirements_schema(job.requirements)
 
     return JobDescriptionResponse(
         is_job_description=job.is_valid_jd or False,

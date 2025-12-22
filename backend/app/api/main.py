@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.exceptions import register_exception_handlers
-from app.api.routes import health
+from app.api.routes import health, jobs
 from app.core.logger import init_logger
 
 logger = init_logger(__name__)
@@ -39,6 +39,7 @@ def create_app() -> FastAPI:
 
     # Routes
     app.include_router(health.router)
+    app.include_router(jobs.router)
 
     return app
 
