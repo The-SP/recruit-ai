@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.logger import init_logger
@@ -48,6 +48,11 @@ class CandidateRepository:
             .limit(limit)
         )
         return list(self.db.scalars(stmt).all())
+
+    def count(self) -> int:
+        """Count total candidates"""
+        stmt = select(func.count()).select_from(Candidate)
+        return self.db.scalar(stmt) or 0
 
     def delete(self, candidate_id: UUID) -> bool:
         candidate = self.get_by_id(candidate_id)
