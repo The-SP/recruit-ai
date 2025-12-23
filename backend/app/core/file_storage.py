@@ -9,39 +9,39 @@ from uuid import UUID
 UPLOAD_BASE = Path("data/uploads")
 
 
-def get_batch_folder(run_id: UUID) -> Path:
-    """Get the folder path for a batch run."""
-    return UPLOAD_BASE / str(run_id)
-
-
-def ensure_batch_folder(run_id: UUID) -> Path:
-    """Create batch folder if it doesn't exist, return path."""
-    folder = get_batch_folder(run_id)
+def ensure_folder(folder_path: str) -> Path:
+    """Create folder if it doesn't exist, return path."""
+    folder = Path(folder_path)
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 
 
-def save_uploaded_file(run_id: UUID, filename: str, content: bytes) -> Path:
-    """Save uploaded file to batch folder. Returns file path."""
-    folder = ensure_batch_folder(run_id)
+def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> Path:
+    """
+    Save uploaded file to specified folder.
+
+    Args:
+        folder_path: Target folder path
+        filename: Filename to save as
+        content: File content bytes
+
+    Returns:
+        Path to saved file
+    """
+    folder = ensure_folder(folder_path)
     file_path = folder / filename
     file_path.write_bytes(content)
     return file_path
 
 
-def get_file_path(run_id: UUID, filename: str) -> Path:
-    """Get full path to a file in batch folder."""
-    return get_batch_folder(run_id) / filename
-
-
-def file_exists(run_id: UUID, filename: str) -> bool:
-    """Check if file already exists in batch folder."""
-    return get_file_path(run_id, filename).exists()
+def get_batch_folder(run_id: UUID) -> Path:
+    """Get the folder path for a batch run."""
+    return UPLOAD_BASE / str(run_id)
 
 
 def delete_file(run_id: UUID, filename: str) -> bool:
     """Delete a file from batch folder. Returns True if deleted."""
-    file_path = get_file_path(run_id, filename)
+    file_path = get_batch_folder(run_id) / filename
     if file_path.exists():
         file_path.unlink()
         return True

@@ -1,19 +1,19 @@
-import os
-from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.candidates import CandidateListResponse, CandidateResponse
+from app.core.file_storage import save_uploaded_file
+from app.core.file_upload import read_pdf_content, validate_pdf_filename
 from app.core.resume_parser import parse_resume
 from app.repositories.candidate_repository import CandidateRepository
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
-UPLOAD_DIR = Path("data/uploads")
+STANDALONE_UPLOAD_DIR = "data/uploads/standalone"
 
 
 @router.post("", response_model=CandidateResponse, status_code=201)
@@ -21,34 +21,21 @@ async def create_candidate(
     file: UploadFile, db: Session = Depends(get_db)
 ) -> CandidateResponse:
     """Upload a resume PDF and create a candidate."""
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise ValidationError("File must be a PDF")
-
-    # Ensure upload directory exists
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    filename = validate_pdf_filename(file.filename)
+    content, _ = await read_pdf_content(file)
 
     # Save uploaded file
-    filepath = UPLOAD_DIR / file.filename
-    try:
-        content = await file.read()
-        with open(filepath, "wb") as f:
-            f.write(content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+    unique_filename = f"{uuid4()}_{filename}"
+    filepath = save_uploaded_file(STANDALONE_UPLOAD_DIR, unique_filename, content)
 
-    # Parse resume
     try:
         resume = parse_resume(str(filepath))
     except Exception as e:
-        # Clean up file on parse failure
-        if filepath.exists():
-            os.remove(filepath)
+        filepath.unlink(missing_ok=True)
         raise ValidationError(f"Failed to parse resume: {e}")
 
     if not resume.is_resume:
-        # Clean up file if not a valid resume
-        if filepath.exists():
-            os.remove(filepath)
+        filepath.unlink(missing_ok=True)
         raise ValidationError(
             f"Document is not a valid resume. Detected: {resume.document_type}"
         )
@@ -57,7 +44,7 @@ async def create_candidate(
     repo = CandidateRepository(db)
     candidate = repo.create(
         resume=resume,
-        filename=file.filename,
+        filename=filename,
         filepath=str(filepath),
     )
 
