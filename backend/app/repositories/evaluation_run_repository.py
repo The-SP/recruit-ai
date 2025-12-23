@@ -1,11 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.file_storage import delete_batch_folder, get_batch_folder
 from app.core.logger import init_logger
-from app.models.evaluation_run import EvaluationRun, EvaluationRunItem, RunStatus
+from app.models.evaluation_run import (
+    EvaluationRun,
+    EvaluationRunItem,
+    ItemStatus,
+    RunStatus,
+)
 
 logger = init_logger(__name__)
 
@@ -14,32 +20,23 @@ class EvaluationRunRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create(
-        self, job_id: UUID, folder_path: str, filenames: list[str]
-    ) -> EvaluationRun:
-        """Create an evaluation run with all its items"""
+    def create_draft(self, job_id: UUID) -> EvaluationRun:
+        """Create a draft evaluation run for file uploads."""
         run = EvaluationRun(
             job_id=job_id,
-            folder_path=folder_path,
-            status=RunStatus.PENDING.value,
-            total_count=len(filenames),
+            folder_path="",  # Will be set after we have the ID
+            status=RunStatus.DRAFT.value,
+            total_count=0,
         )
         self.db.add(run)
         self.db.flush()
 
-        items = [
-            EvaluationRunItem(
-                evaluation_run_id=run.id,
-                pdf_filename=filename,
-                status=RunStatus.PENDING.value,
-            )
-            for filename in filenames
-        ]
-        self.db.add_all(items)
+        # Set folder path using the generated ID
+        run.folder_path = str(get_batch_folder(run.id))
         self.db.commit()
         self.db.refresh(run)
 
-        logger.info(f"Created evaluation run: id={run.id}, items={len(filenames)}")
+        logger.info(f"Created draft evaluation run: id={run.id}")
         return run
 
     def get_by_id(self, run_id: UUID, with_items: bool = False) -> EvaluationRun | None:
@@ -47,6 +44,27 @@ class EvaluationRunRepository:
         if with_items:
             stmt = stmt.options(joinedload(EvaluationRun.items))
         return self.db.scalars(stmt).first()
+
+    def increment_total_count(self, run_id: UUID) -> None:
+        """Increment total_count when a file is added."""
+        run = self.get_by_id(run_id)
+        if run:
+            run.total_count += 1
+            self.db.commit()
+
+    def decrement_total_count(self, run_id: UUID) -> None:
+        """Decrement total_count when a file is removed."""
+        run = self.get_by_id(run_id)
+        if run and run.total_count > 0:
+            run.total_count -= 1
+            self.db.commit()
+
+    def mark_pending(self, run_id: UUID) -> None:
+        """Transition from draft to pending (ready to start)."""
+        run = self.get_by_id(run_id)
+        if run:
+            run.status = RunStatus.PENDING.value
+            self.db.commit()
 
     def mark_started(self, run_id: UUID) -> None:
         run = self.get_by_id(run_id)
@@ -88,17 +106,47 @@ class EvaluationRunRepository:
         )
         return list(self.db.scalars(stmt).all())
 
+    def delete(self, run_id: UUID) -> bool:
+        """Delete evaluation run and its folder."""
+        run = self.get_by_id(run_id)
+        if not run:
+            return False
+
+        # Delete folder first (before DB record)
+        delete_batch_folder(run_id)
+
+        self.db.delete(run)
+        self.db.commit()
+        logger.info(f"Deleted evaluation run: id={run_id}")
+        return True
+
 
 class EvaluationRunItemRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    def create_uploaded(
+        self, run_id: UUID, filename: str, file_size: int
+    ) -> EvaluationRunItem:
+        """Create an item for an uploaded file."""
+        item = EvaluationRunItem(
+            evaluation_run_id=run_id,
+            pdf_filename=filename,
+            file_size=file_size,
+            status=ItemStatus.UPLOADED.value,
+        )
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        logger.info(f"Created uploaded item: id={item.id}, filename={filename}")
+        return item
 
     def get_by_id(self, item_id: UUID) -> EvaluationRunItem | None:
         stmt = select(EvaluationRunItem).where(EvaluationRunItem.id == item_id)
         return self.db.scalars(stmt).first()
 
     def get_with_run(self, item_id: UUID) -> EvaluationRunItem | None:
-        """Get item with its parent run loaded"""
+        """Get item with its parent run loaded."""
         stmt = (
             select(EvaluationRunItem)
             .where(EvaluationRunItem.id == item_id)
@@ -106,10 +154,58 @@ class EvaluationRunItemRepository:
         )
         return self.db.scalars(stmt).first()
 
+    def get_by_run(self, run_id: UUID) -> list[EvaluationRunItem]:
+        stmt = (
+            select(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .order_by(EvaluationRunItem.created_at)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_uploaded_items(self, run_id: UUID) -> list[EvaluationRunItem]:
+        """Get items with 'uploaded' status for a run."""
+        stmt = (
+            select(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.status == ItemStatus.UPLOADED.value)
+            .order_by(EvaluationRunItem.created_at)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def mark_all_pending(self, run_id: UUID):
+        """Bulk update all 'uploaded' items to 'pending'. Returns count updated."""
+        stmt = (
+            update(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.status == ItemStatus.UPLOADED.value)
+            .values(status=ItemStatus.PENDING.value)
+        )
+        self.db.execute(stmt)
+        self.db.commit()
+
+    def delete_item(self, item_id: UUID) -> bool:
+        """Delete an item. Returns True if deleted."""
+        item = self.get_by_id(item_id)
+        if item:
+            self.db.delete(item)
+            self.db.commit()
+            logger.info(f"Deleted item: id={item_id}")
+            return True
+        return False
+
+    def filename_exists(self, run_id: UUID, filename: str) -> bool:
+        """Check if filename already exists in run."""
+        stmt = (
+            select(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.pdf_filename == filename)
+        )
+        return self.db.scalars(stmt).first() is not None
+
     def mark_started(self, item_id: UUID) -> None:
         item = self.get_by_id(item_id)
         if item:
-            item.status = RunStatus.PROCESSING.value
+            item.status = ItemStatus.PROCESSING.value
             item.started_at = datetime.now()
             self.db.commit()
 
@@ -118,7 +214,7 @@ class EvaluationRunItemRepository:
     ) -> None:
         item = self.get_by_id(item_id)
         if item:
-            item.status = RunStatus.COMPLETED.value
+            item.status = ItemStatus.COMPLETED.value
             item.candidate_id = candidate_id
             item.evaluation_id = evaluation_id
             item.completed_at = datetime.now()
@@ -131,7 +227,7 @@ class EvaluationRunItemRepository:
     def mark_failed(self, item_id: UUID, error_message: str) -> None:
         item = self.get_by_id(item_id)
         if item:
-            item.status = RunStatus.FAILED.value
+            item.status = ItemStatus.FAILED.value
             item.error_message = error_message
             item.completed_at = datetime.now()
             if item.started_at:
@@ -139,11 +235,3 @@ class EvaluationRunItemRepository:
                     item.completed_at - item.started_at
                 ).total_seconds()
             self.db.commit()
-
-    def get_by_run(self, run_id: UUID) -> list[EvaluationRunItem]:
-        stmt = (
-            select(EvaluationRunItem)
-            .where(EvaluationRunItem.evaluation_run_id == run_id)
-            .order_by(EvaluationRunItem.created_at)
-        )
-        return list(self.db.scalars(stmt).all())

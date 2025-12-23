@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from uuid import UUID
 
 from celery import chord, group
@@ -10,6 +9,7 @@ from app.core.logger import init_logger
 from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
 from app.models.database import create_session
+from app.models.evaluation_run import ItemStatus, RunStatus
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
@@ -36,7 +36,7 @@ KEY_EXPIRATION = 86400
 
 
 def _job_model_to_response(job) -> JobDescriptionResponse:
-    """Convert Job model to JobDescriptionResponse schema"""
+    """Convert Job model to JobDescriptionResponse schema."""
     requirements = build_job_requirements_schema(job.requirements)
 
     return JobDescriptionResponse(
@@ -51,73 +51,75 @@ def _job_model_to_response(job) -> JobDescriptionResponse:
     )
 
 
-@celery_app.task(bind=True, name="start_evaluation_run")
-def start_evaluation_run(self, job_id: str, folder_path: str) -> str:
+@celery_app.task(bind=True, name="process_evaluation_run")
+def process_evaluation_run(self, run_id: str) -> str:
     """
-    Orchestrator task: Creates evaluation run and dispatches worker tasks.
+    Orchestrator task: Dispatches worker tasks for an existing evaluation run.
+
+    Run and items are already created via API. This task:
+    1. Validates run exists and is in pending state
+    2. Fetches job and serializes JD
+    3. Dispatches chord of evaluate tasks
 
     Args:
-        job_id: UUID of the job to evaluate against
-        folder_path: Path to folder containing resume PDFs
+        run_id: UUID of the EvaluationRun
 
     Returns:
-        evaluation_run_id as string
+        run_id as string
     """
-    logger.info(f"Starting evaluation run for job={job_id}, folder={folder_path}")
+    logger.info(f"Processing evaluation run: {run_id}")
 
-    # Check circuit breaker before starting
     if is_circuit_breaker_active():
         error_msg = (
-            "Cannot start run - rate limit circuit breaker is active. "
+            "Cannot process run - rate limit circuit breaker is active. "
             "Run 'make circuit-reset' to clear."
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
 
     db = create_session()
-    run_id = None
     item_ids = []
     jd_dict = {}
-    try:
-        # Validate job exists
-        job_repo = JobRepository(db)
-        job = job_repo.get_by_id(UUID(job_id), with_requirements=True)
-        if not job:
-            raise ValueError(f"Job not found: {job_id}")
 
-        # Serialize JD once for all workers
+    try:
+        run_repo = EvaluationRunRepository(db)
+        run = run_repo.get_by_id(UUID(run_id), with_items=True)
+
+        if not run:
+            raise ValueError(f"Evaluation run not found: {run_id}")
+
+        if run.status != RunStatus.PENDING.value:
+            raise ValueError(
+                f"Run is not in pending state: {run.status}. Cannot process."
+            )
+
+        # Fetch and serialize job description
+        job_repo = JobRepository(db)
+        job = job_repo.get_by_id(run.job_id, with_requirements=True)
+        if not job:
+            raise ValueError(f"Job not found: {run.job_id}")
+
         jd = _job_model_to_response(job)
         jd_dict = jd.model_dump()
 
-        # Scan folder for PDFs
-        folder = Path(folder_path)
-        if not folder.exists():
-            raise ValueError(f"Folder not found: {folder_path}")
+        # Get pending item IDs
+        item_ids = [
+            str(item.id)
+            for item in run.items
+            if item.status == ItemStatus.PENDING.value
+        ]
 
-        pdf_files = sorted([f.name for f in folder.glob("*.pdf")])
-        if not pdf_files:
-            raise ValueError(f"No PDF files found in: {folder_path}")
+        if not item_ids:
+            raise ValueError(f"No pending items found for run: {run_id}")
 
-        logger.info(f"Found {len(pdf_files)} PDF files")
-
-        # Create evaluation run with items
-        run_repo = EvaluationRunRepository(db)
-        run = run_repo.create(
-            job_id=UUID(job_id),
-            folder_path=folder_path,
-            filenames=pdf_files,
-        )
-        run_id = str(run.id)
+        logger.info(f"Found {len(item_ids)} pending items for run={run_id}")
 
         # Initialize Redis counters
         redis_client.set(get_progress_key(run_id), 0, ex=KEY_EXPIRATION)
         redis_client.set(get_failed_key(run_id), 0, ex=KEY_EXPIRATION)
 
-        # Mark run as started
-        run_repo.mark_started(run.id)
-
-        # Get item IDs for task dispatch
-        item_ids = [str(item.id) for item in run.items]
+        # Mark run as processing
+        run_repo.mark_started(UUID(run_id))
 
     finally:
         db.close()
@@ -158,12 +160,13 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
     """
     logger.info(f"Processing item={item_id}")
 
-    # Check circuit breaker first - fail fast if rate limit active
     if is_circuit_breaker_active():
         handle_circuit_breaker_skip(UUID(item_id))
         return {"status": "failed", "item_id": item_id, "error": "Rate limit active"}
 
     db = create_session()
+    run_id = None
+
     try:
         item_repo = EvaluationRunItemRepository(db)
         item = item_repo.get_with_run(UUID(item_id))
@@ -225,8 +228,7 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         return {"status": "completed", "item_id": item_id}
 
     except Exception as e:
-        # Check if this is a rate limit error
-        if is_rate_limit_error(e):
+        if run_id and is_rate_limit_error(e):
             handle_rate_limit_failure(UUID(item_id), UUID(run_id), e, db)
             return {
                 "status": "failed",
@@ -248,7 +250,6 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         except Exception as inner_e:
             logger.error(f"Failed to mark item as failed: {inner_e}")
 
-        # Return failure - no retry
         return {"status": "failed", "item_id": item_id, "error": error_str[:200]}
 
     finally:
@@ -291,7 +292,7 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
                 failed_count=failed,
             )
         else:
-            logger.info(f"Run already marked as failed, skipping completion")
+            logger.info("Run already marked as failed, skipping completion")
     finally:
         db.close()
 

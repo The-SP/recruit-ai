@@ -20,7 +20,7 @@ class CandidateRepository:
         filename: str | None = None,
         filepath: str | None = None,
     ) -> Candidate:
-        """Create a candidate from parsed resume"""
+        """Create a candidate from parsed resume."""
         pi = resume.personal_information
         candidate = Candidate(
             name=pi.name if pi else None,
@@ -50,7 +50,7 @@ class CandidateRepository:
         return list(self.db.scalars(stmt).all())
 
     def count(self) -> int:
-        """Count total candidates"""
+        """Count total candidates."""
         stmt = select(func.count()).select_from(Candidate)
         return self.db.scalar(stmt) or 0
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import Config
 from app.core.logger import init_logger
 from app.models.database import create_session
+from app.models.evaluation_run import RunStatus
 from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
     EvaluationRunRepository,
@@ -27,15 +28,7 @@ CIRCUIT_BREAKER_KEY = "rate_limit_circuit_breaker"
 
 
 def is_rate_limit_error(error: Exception | str) -> bool:
-    """
-    Check if error is a rate limit/quota error.
-
-    Args:
-        error: Exception or error string to check
-
-    Returns:
-        True if this is a rate limit error, False otherwise
-    """
+    """Check if error is a rate limit/quota error."""
     error_str = str(error)
     return (
         "ResourceExhausted" in error_str
@@ -45,12 +38,7 @@ def is_rate_limit_error(error: Exception | str) -> bool:
 
 
 def is_circuit_breaker_active() -> bool:
-    """
-    Check if rate limit circuit breaker is currently active.
-
-    Returns:
-        True if circuit breaker is active (blocking tasks), False otherwise
-    """
+    """Check if rate limit circuit breaker is currently active."""
     return redis_client.get(CIRCUIT_BREAKER_KEY) is not None
 
 
@@ -110,7 +98,8 @@ def handle_rate_limit_failure(
                 "Rate limit exceeded (daily quota).",
             )
             logger.error(
-                f"Marked run={run_id} as failed due to rate limit. Run 'make circuit-reset' after quota resets."
+                f"Marked run={run_id} as failed due to rate limit. "
+                "Run 'make circuit-reset' after quota resets."
             )
         except Exception as e:
             logger.error(f"Failed to mark run as failed: {e}")

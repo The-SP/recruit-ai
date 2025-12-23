@@ -14,6 +14,15 @@ if TYPE_CHECKING:
 
 
 class RunStatus(str, Enum):
+    DRAFT = "draft"
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ItemStatus(str, Enum):
+    UPLOADED = "uploaded"
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -27,7 +36,7 @@ class EvaluationRun(Base):
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
 
     folder_path: Mapped[str] = mapped_column(String(512))
-    status: Mapped[str] = mapped_column(String(20), default=RunStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(String(20), default=RunStatus.DRAFT.value)
 
     # Counts
     total_count: Mapped[int] = mapped_column(default=0)
@@ -63,9 +72,10 @@ class EvaluationRunItem(Base):
 
     # File info
     pdf_filename: Mapped[str] = mapped_column(String(255))
+    file_size: Mapped[int | None] = mapped_column(default=None)  # Size in KB
 
     # Status tracking
-    status: Mapped[str] = mapped_column(String(20), default=RunStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(String(20), default=ItemStatus.UPLOADED.value)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Links to created records (set on successful completion)
