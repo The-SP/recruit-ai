@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.file_storage import delete_batch_folder, get_batch_folder
+from app.core.file_storage import delete_batch_folder, ensure_folder, get_batch_folder
 from app.core.logger import init_logger
 from app.models.evaluation_run import (
     EvaluationRun,
@@ -35,6 +35,9 @@ class EvaluationRunRepository:
         run.folder_path = str(get_batch_folder(run.id))
         self.db.commit()
         self.db.refresh(run)
+
+        # Create the folder on disk
+        ensure_folder(run.folder_path)
 
         logger.info(f"Created draft evaluation run: id={run.id}")
         return run

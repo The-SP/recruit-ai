@@ -15,7 +15,7 @@ from app.api.schemas.batch import (
     BatchResultsResponse,
     BatchRunResponse,
 )
-from app.core.file_storage import delete_file, ensure_folder, save_uploaded_file
+from app.core.file_storage import delete_file, save_uploaded_file
 from app.core.file_upload import read_pdf_content, validate_pdf_filename
 from app.models.evaluation_run import RunStatus
 from app.repositories.candidate_repository import CandidateRepository
@@ -41,9 +41,6 @@ def create_batch(
 
     run_repo = EvaluationRunRepository(db)
     run = run_repo.create_draft(request.job_id)
-
-    # Create the folder on disk
-    ensure_folder(run.folder_path)
 
     return BatchRunResponse.model_validate(run)
 

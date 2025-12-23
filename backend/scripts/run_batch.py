@@ -9,34 +9,85 @@ To run a batch evaluation:
 3. Run this script: uv run -m scripts.run_batch
 """
 
+import math
+import os
+import shutil
 from uuid import UUID
 
 from app.models.database import create_session
-from app.repositories.evaluation_run_repository import EvaluationRunRepository
-from app.worker.tasks import start_evaluation_run
+from app.repositories.evaluation_run_repository import (
+    EvaluationRunItemRepository,
+    EvaluationRunRepository,
+)
+from app.repositories.job_repository import JobRepository
+from app.worker.tasks import process_evaluation_run
 
 # Configuration
 JOB_ID = "cf6c7877-389f-426f-a4cb-7c1b7be36f1f"  # Existing job UUID
 RESUME_FOLDER = "data/resumes"  # Folder containing PDF resumes
 
 
-def start_batch():
-    """Start a batch evaluation run"""
-    print(f"Starting evaluation run for job={JOB_ID}")
-    print(f"Resume folder: {RESUME_FOLDER}")
+def create_batch_from_folder(job_id: str, folder_path: str) -> str:
+    """
+    Create a batch run by scanning a folder for PDFs.
+    Mimics the API flow: create draft -> add files -> start.
+    """
+    db = create_session()
+    try:
+        # Validate job exists
+        job_repo = JobRepository(db)
+        job = job_repo.get_by_id(UUID(job_id), with_requirements=True)
+        if not job:
+            raise ValueError(f"Job not found: {job_id}")
 
-    # Dispatch the task (returns immediately)
-    result = start_evaluation_run.delay(JOB_ID, RESUME_FOLDER)
+        # Create draft run
+        run_repo = EvaluationRunRepository(db)
+        run = run_repo.create_draft(UUID(job_id))
+        print(f"✓ Created batch run: {run.id}")
 
-    # Wait for orchestrator to complete and get run_id
-    run_id = result.get(timeout=60)
-    print(f"Evaluation run created: {run_id}")
+        # Scan folder for PDFs
+        item_repo = EvaluationRunItemRepository(db)
+        pdf_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".pdf")]
 
-    return run_id
+        if not pdf_files:
+            raise ValueError(f"No PDF files found in: {folder_path}")
+
+        # Copy files to batch folder and create items
+        for filename in pdf_files:
+            src_path = os.path.join(folder_path, filename)
+            dst_path = os.path.join(run.folder_path, filename)
+
+            # Copy file to batch folder
+            shutil.copy(src_path, dst_path)
+
+            # Get file size in KB
+            file_size = math.ceil(os.path.getsize(src_path) / 1024)
+
+            # Create item record
+            item_repo.create_uploaded(run.id, filename, file_size)
+            run_repo.increment_total_count(run.id)
+            print(f"  + Added: {filename} ({file_size} KB)")
+
+        # Transition to pending
+        item_repo.mark_all_pending(run.id)
+        run_repo.mark_pending(run.id)
+        print(f"✓ Batch ready with {run.total_count} files")
+
+        return str(run.id)
+
+    finally:
+        db.close()
+
+
+def start_batch(run_id: str):
+    """Dispatch Celery task to process the batch."""
+    print(f"Starting batch processing: {run_id}")
+    process_evaluation_run.delay(run_id)
+    print(f"✓ Task dispatched")
 
 
 def check_status(run_id: str):
-    """Check status of an evaluation run"""
+    """Check status of an evaluation run."""
     db = create_session()
     try:
         repo = EvaluationRunRepository(db)
@@ -63,6 +114,7 @@ def check_status(run_id: str):
                 "failed": "✗",
                 "processing": "⟳",
                 "pending": "○",
+                "uploaded": "↑",
             }.get(item.status, "?")
 
             line = f"  {status_icon} {item.pdf_filename} [{item.status}]"
@@ -77,7 +129,7 @@ def check_status(run_id: str):
 
 
 def get_results(run_id: str):
-    """Get ranked results from a completed run"""
+    """Get ranked results from a completed run."""
     db = create_session()
     try:
         repo = EvaluationRunRepository(db)
@@ -134,7 +186,8 @@ if __name__ == "__main__":
     command = sys.argv[1]
 
     if command == "start":
-        start_batch()
+        run_id = create_batch_from_folder(JOB_ID, RESUME_FOLDER)
+        start_batch(run_id)
     elif command == "status" and len(sys.argv) > 2:
         check_status(sys.argv[2])
     elif command == "results" and len(sys.argv) > 2:
