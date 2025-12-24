@@ -52,14 +52,14 @@ def _job_model_to_response(job) -> JobDescriptionResponse:
     )
 
 
-def _send_failure_email(run_id: UUID, error: str) -> None:
+def _send_failure_email(run_id: UUID) -> None:
     """Send failure email if run has email configured."""
     db = create_session()
     try:
         run_repo = EvaluationRunRepository(db)
         run = run_repo.get_by_id(run_id)
         if run and run.email and run.access_token:
-            send_batch_failed(run.email, run.access_token, error)
+            send_batch_failed(run.email, run.access_token)
     except Exception as e:
         logger.error(f"Failed to send failure email: {e}")
     finally:
@@ -90,7 +90,7 @@ def process_evaluation_run(self, run_id: str) -> str:
             "Run 'make circuit-reset' to clear."
         )
         logger.error(error_msg)
-        _send_failure_email(UUID(run_id), error_msg)
+        _send_failure_email(UUID(run_id))
         raise ValueError(error_msg)
 
     db = create_session()
@@ -138,7 +138,7 @@ def process_evaluation_run(self, run_id: str) -> str:
         run_repo.mark_started(UUID(run_id))
 
     except Exception as e:
-        _send_failure_email(UUID(run_id), str(e))
+        _send_failure_email(UUID(run_id))
         raise
     finally:
         db.close()
@@ -157,7 +157,7 @@ def process_evaluation_run(self, run_id: str) -> str:
         try:
             run_repo = EvaluationRunRepository(db)
             run_repo.mark_failed(UUID(run_id), str(e))
-            _send_failure_email(UUID(run_id), str(e))
+            _send_failure_email(UUID(run_id))
         finally:
             db.close()
         raise
@@ -315,7 +315,7 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
 
             # Send completion email
             if run.email and run.access_token:
-                send_batch_completed(run.email, run.access_token, processed, failed)
+                send_batch_completed(run.email, run.access_token)
         else:
             logger.info("Run already marked as failed, skipping completion")
 

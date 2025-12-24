@@ -1,85 +1,61 @@
-"""
-Mock email service for batch notifications.
+from pathlib import Path
 
-In production, replace logging with actual email sending (e.g., SendGrid, SES).
-"""
+import resend
+from jinja2 import Environment, FileSystemLoader
 
+from app.config import Config
 from app.core.logger import init_logger
 
 logger = init_logger(__name__)
 
-BASE_URL = "http://localhost:8000"  # Configure via environment in production
+resend.api_key = Config.RESEND_API_KEY
+
+# Setup Jinja2 template loader
+TEMPLATE_DIR = Path("app/templates/emails")
+env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
-def send_batch_started(email: str, token: str) -> None:
-    """
-    Send notification that batch processing has started.
+def send_batch_completed(email: str, token: str) -> None:
+    """Send notification that batch processing has completed."""
+    base_url = f"{Config.BASE_URL}/batch/status"
+    results_url = f"{base_url}/{token}"
 
-    Args:
-        email: Recipient email address
-        token: Access token for viewing results
-    """
-    results_url = f"{BASE_URL}/batch/status/{token}"
+    try:
+        template = env.get_template("batch_completed.html")
+        html = template.render(base_url=base_url, results_url=results_url, token=token)
 
-    logger.info(
-        f"\n{'=' * 60}\n"
-        f"📧 EMAIL: Batch Started\n"
-        f"{'=' * 60}\n"
-        f"To: {email}\n"
-        f"Subject: Your resume evaluation has started\n"
-        f"\n"
-        f"Your batch evaluation is now being processed.\n"
-        f"View results at: {results_url}\n"
-        f"{'=' * 60}\n"
-    )
+        params: resend.Emails.SendParams = {
+            "from": Config.FROM_EMAIL,
+            "to": [email],
+            "subject": "Your Candidate Evaluations Are Ready",
+            "html": html,
+        }
 
+        response = resend.Emails.send(params)
+        logger.info(f"Sent batch completed email to {email} (id: {response['id']})")
 
-def send_batch_completed(email: str, token: str, processed: int, failed: int) -> None:
-    """
-    Send notification that batch processing has completed.
-
-    Args:
-        email: Recipient email address
-        token: Access token for viewing results
-        processed: Number of successfully processed resumes
-        failed: Number of failed resumes
-    """
-    results_url = f"{BASE_URL}/batch/status/{token}"
-
-    logger.info(
-        f"\n{'=' * 60}\n"
-        f"📧 EMAIL: Batch Completed\n"
-        f"{'=' * 60}\n"
-        f"To: {email}\n"
-        f"Subject: Your resume evaluation is complete\n"
-        f"\n"
-        f"Your batch evaluation has finished processing.\n"
-        f"Results: {processed} processed, {failed} failed\n"
-        f"View results at: {results_url}\n"
-        f"{'=' * 60}\n"
-    )
+    except Exception as e:
+        logger.error(f"Failed to send batch completed email to {email}: {e}")
 
 
-def send_batch_failed(email: str, token: str, error: str) -> None:
-    """
-    Send notification that batch processing has failed.
+def send_batch_failed(email: str, token: str) -> None:
+    """Send notification that batch processing has failed."""
+    base_url = f"{Config.BASE_URL}/batch/status"
+    results_url = f"{base_url}/{token}"
 
-    Args:
-        email: Recipient email address
-        token: Access token for viewing results
-        error: Error message describing the failure
-    """
-    results_url = f"{BASE_URL}/batch/status/{token}"
+    try:
+        template = env.get_template("batch_failed.html")
+        html = template.render(base_url=base_url, results_url=results_url, token=token)
 
-    logger.info(
-        f"\n{'=' * 60}\n"
-        f"📧 EMAIL: Batch Failed\n"
-        f"{'=' * 60}\n"
-        f"To: {email}\n"
-        f"Subject: Your resume evaluation encountered an error\n"
-        f"\n"
-        f"Your batch evaluation has failed.\n"
-        f"Error: {error}\n"
-        f"View details at: {results_url}\n"
-        f"{'=' * 60}\n"
-    )
+        params: resend.Emails.SendParams = {
+            "from": Config.FROM_EMAIL,
+            "to": [email],
+            "subject": "Your candidate evaluations encountered an error",
+            "html": html,
+        }
+
+        response = resend.Emails.send(params)
+        logger.info(f"Sent batch failed email to {email} (id: {response['id']})")
+
+    except Exception as e:
+        logger.error(f"Failed to send batch failed email to {email}: {e}")

@@ -20,3 +20,9 @@ class Config:
     )
 
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    # Email Configuration
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    FROM_EMAIL: str = os.getenv("FROM_EMAIL", "Recruit AI <onboarding@resend.dev>")
+
+    BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")

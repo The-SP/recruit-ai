@@ -33,7 +33,6 @@ from app.repositories.evaluation_run_repository import (
     EvaluationRunRepository,
 )
 from app.repositories.job_repository import JobRepository
-from app.services.email_service import send_batch_started
 from app.worker.tasks import process_evaluation_run
 
 router = APIRouter(prefix="/batch", tags=["batch"])
@@ -128,9 +127,6 @@ async def submit_batch(
     except Exception as e:
         run_repo.mark_failed(run.id, str(e))
         raise ValidationError(f"Failed to start batch processing: {e}")
-
-    # Send notification email
-    send_batch_started(email, token)
 
     return CreateBatchResponse(
         token=token,
