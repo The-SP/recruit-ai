@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Status Badge -->
+<div style="padding: 30px 20px 20px; text-align: center;">
+    <div style="display: inline-block; background: #fee2e2; color: #991b1b; padding: 8px 20px; border-radius: 20px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">
+        Processing Failed
+    </div>
+</div>
+
+<!-- Main Content -->
+<div style="padding: 0 40px 40px;">
+    <h2 style="color: #1f2937; font-size: 20px; font-weight: 600; margin: 0 0 30px; text-align: center;">
+        Candidate Evaluations Encountered an Error
+    </h2>
+
+    <!-- CTA Button -->
+    <div style="text-align: center; margin: 0 0 30px;">
+        <a href="{{ results_url }}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">
+            View Details
+        </a>
+    </div>
+
+    <!-- Alternative Access -->
+    <div style="background: #f0fdf4; border-left: 3px solid #059669; padding: 16px; margin: 30px 0; border-radius: 4px;">
+        <p style="margin: 0 0 12px; font-size: 13px; color: #374151; line-height: 1.5;">
+            <strong style="color: #059669;">Alternative access:</strong> Visit <a href="{{ base_url }}" style="color: #059669; text-decoration: none; font-weight: 600;">{{ base_url }}</a> and enter your token manually.
+        </p>
+        <div style="background: white; border: 1px solid #d1d5db; padding: 12px; border-radius: 4px;">
+            <p style="margin: 0 0 4px; font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">
+                Your Access Token:
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #991b1b; font-family: monospace; word-break: break-all;">
+                {{ token }}
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
