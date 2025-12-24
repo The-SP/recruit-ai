@@ -38,6 +38,12 @@ class EvaluationRun(Base):
     folder_path: Mapped[str] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(20), default=RunStatus.DRAFT.value)
 
+    # Public access
+    access_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, default=None
+    )
+    email: Mapped[str | None] = mapped_column(String(255), default=None)
+
     # Counts
     total_count: Mapped[int] = mapped_column(default=0)
     processed_count: Mapped[int] = mapped_column(default=0)

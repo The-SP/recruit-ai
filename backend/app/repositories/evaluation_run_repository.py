@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime
 from uuid import UUID
 
@@ -42,10 +43,71 @@ class EvaluationRunRepository:
         logger.info(f"Created draft evaluation run: id={run.id}")
         return run
 
+    def create_with_token(self, job_id: UUID, email: str) -> tuple[EvaluationRun, str]:
+        """
+        Create an evaluation run with access token for public API.
+
+        Args:
+            job_id: UUID of the job to evaluate against
+            email: Email address for notifications
+
+        Returns:
+            Tuple of (EvaluationRun, access_token)
+        """
+        token = secrets.token_urlsafe(32)
+
+        run = EvaluationRun(
+            job_id=job_id,
+            folder_path="",
+            status=RunStatus.DRAFT.value,
+            total_count=0,
+            access_token=token,
+            email=email,
+        )
+        self.db.add(run)
+        self.db.flush()
+
+        run.folder_path = str(get_batch_folder(run.id))
+        self.db.commit()
+        self.db.refresh(run)
+
+        ensure_folder(run.folder_path)
+
+        logger.info(f"Created evaluation run with token: id={run.id}")
+        return run, token
+
     def get_by_id(self, run_id: UUID, with_items: bool = False) -> EvaluationRun | None:
         stmt = select(EvaluationRun).where(EvaluationRun.id == run_id)
         if with_items:
             stmt = stmt.options(joinedload(EvaluationRun.items))
+        return self.db.scalars(stmt).first()
+
+    def get_by_token(
+        self,
+        token: str,
+        with_items: bool = False,
+        with_job: bool = False,
+    ) -> EvaluationRun | None:
+        """
+        Retrieve an evaluation run by its access token.
+
+        Args:
+            token: The access token
+            with_items: Whether to eagerly load items
+            with_job: Whether to eagerly load job details
+
+        Returns:
+            EvaluationRun or None if not found
+        """
+        stmt = select(EvaluationRun).where(EvaluationRun.access_token == token)
+
+        if with_items:
+            stmt = stmt.options(
+                joinedload(EvaluationRun.items).joinedload(EvaluationRunItem.evaluation)
+            )
+        if with_job:
+            stmt = stmt.options(joinedload(EvaluationRun.job))
+
         return self.db.scalars(stmt).first()
 
     def increment_total_count(self, run_id: UUID) -> None:

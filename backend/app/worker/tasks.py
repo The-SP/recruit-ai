@@ -19,6 +19,7 @@ from app.repositories.evaluation_run_repository import (
 from app.repositories.job_repository import JobRepository
 from app.schemas.job_description import JobDescriptionResponse
 from app.schemas.job_utils import build_job_requirements_schema
+from app.services.email_service import send_batch_completed, send_batch_failed
 from app.worker.celery_app import celery_app, get_failed_key, get_progress_key
 from app.worker.circuit_breaker import (
     handle_circuit_breaker_skip,
@@ -51,6 +52,20 @@ def _job_model_to_response(job) -> JobDescriptionResponse:
     )
 
 
+def _send_failure_email(run_id: UUID, error: str) -> None:
+    """Send failure email if run has email configured."""
+    db = create_session()
+    try:
+        run_repo = EvaluationRunRepository(db)
+        run = run_repo.get_by_id(run_id)
+        if run and run.email and run.access_token:
+            send_batch_failed(run.email, run.access_token, error)
+    except Exception as e:
+        logger.error(f"Failed to send failure email: {e}")
+    finally:
+        db.close()
+
+
 @celery_app.task(bind=True, name="process_evaluation_run")
 def process_evaluation_run(self, run_id: str) -> str:
     """
@@ -75,6 +90,7 @@ def process_evaluation_run(self, run_id: str) -> str:
             "Run 'make circuit-reset' to clear."
         )
         logger.error(error_msg)
+        _send_failure_email(UUID(run_id), error_msg)
         raise ValueError(error_msg)
 
     db = create_session()
@@ -121,6 +137,9 @@ def process_evaluation_run(self, run_id: str) -> str:
         # Mark run as processing
         run_repo.mark_started(UUID(run_id))
 
+    except Exception as e:
+        _send_failure_email(UUID(run_id), str(e))
+        raise
     finally:
         db.close()
 
@@ -138,6 +157,7 @@ def process_evaluation_run(self, run_id: str) -> str:
         try:
             run_repo = EvaluationRunRepository(db)
             run_repo.mark_failed(UUID(run_id), str(e))
+            _send_failure_email(UUID(run_id), str(e))
         finally:
             db.close()
         raise
@@ -280,6 +300,7 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     failed = int(failed_raw) if isinstance(failed_raw, (int, bytes, str)) else 0
 
     db = create_session()
+
     try:
         run_repo = EvaluationRunRepository(db)
         run = run_repo.get_by_id(UUID(run_id))
@@ -291,8 +312,13 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
                 processed_count=processed,
                 failed_count=failed,
             )
+
+            # Send completion email
+            if run.email and run.access_token:
+                send_batch_completed(run.email, run.access_token, processed, failed)
         else:
             logger.info("Run already marked as failed, skipping completion")
+
     finally:
         db.close()
 
