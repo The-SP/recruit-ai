@@ -49,3 +49,13 @@ format:  ## Format code
 	@echo "Formatting code..."
 	uv run ruff format .
 	@echo "✓ Formatted"
+
+# Database migrations
+migrate:
+	uv run alembic upgrade head
+
+migrate-create:
+	uv run alembic revision --autogenerate -m "$(m)"
+
+migrate-down:
+	uv run alembic downgrade -1

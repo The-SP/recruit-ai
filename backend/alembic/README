@@ -1,1 +1,19 @@
 Generic single-database configuration.
+
+# Alembic Migrations
+
+## Commands
+
+```bash
+# Apply all migrations
+uv run alembic upgrade head
+
+# Create new migration
+uv run alembic revision --autogenerate -m "description"
+
+# Rollback one migration
+uv run alembic downgrade -1
+
+# Show current version
+uv run alembic current
+```
