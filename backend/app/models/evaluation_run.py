@@ -33,7 +33,9 @@ class EvaluationRun(Base):
     __tablename__ = "evaluation_runs"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), index=True
+    )
 
     folder_path: Mapped[str] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(20), default=RunStatus.DRAFT.value)
@@ -73,7 +75,7 @@ class EvaluationRunItem(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     evaluation_run_id: Mapped[UUID] = mapped_column(
-        ForeignKey("evaluation_runs.id", ondelete="CASCADE")
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"), index=True
     )
 
     # File info
@@ -86,10 +88,12 @@ class EvaluationRunItem(Base):
 
     # Links to created records (set on successful completion)
     candidate_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("candidates.id", ondelete="SET NULL"), default=None
+        ForeignKey("candidates.id", ondelete="SET NULL"), index=True, default=None
     )
     evaluation_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("candidate_evaluations.id", ondelete="SET NULL"), default=None
+        ForeignKey("candidate_evaluations.id", ondelete="SET NULL"),
+        index=True,
+        default=None,
     )
 
     # Time tracking
