@@ -1,12 +1,13 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import { Header } from "@/components/header";
+import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Recruit AI',
-  description: 'AI-powered resume screening',
+  title: "Recruit AI",
+  description: "AI-powered resume screening",
 };
 
 export default function RootLayout({
@@ -16,7 +17,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>{children}</body>
+      <body
+        className={`${inter.className} antialiased min-h-screen bg-gradient-to-b from-blue-50 via-white to-blue-50`}
+      >
+        <Header />
+        {children}
+      </body>
     </html>
   );
 }
