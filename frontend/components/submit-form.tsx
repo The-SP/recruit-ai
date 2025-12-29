@@ -16,6 +16,7 @@ export function SubmitForm() {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFiles = (newFiles: FileList | null) => {
@@ -24,6 +25,7 @@ export function SubmitForm() {
       (f) => f.type === "application/pdf"
     );
     setFiles((prev) => [...prev, ...pdfFiles]);
+    setFilesError(null);
   };
 
   const removeFile = (index: number) => {
@@ -50,16 +52,8 @@ export function SubmitForm() {
     e.preventDefault();
     setError(null);
 
-    if (!jobDescription.trim()) {
-      setError("Job description is required");
-      return;
-    }
     if (files.length === 0) {
-      setError("At least one resume PDF is required");
-      return;
-    }
-    if (!email.trim()) {
-      setError("Email is required");
+      setFilesError("At least one resume PDF is required");
       return;
     }
 
@@ -112,6 +106,7 @@ export function SubmitForm() {
             id="job-description"
             placeholder="Paste the job description here..."
             rows={6}
+            required
             value={jobDescription}
             onChange={(e) => setJobDescription(e.target.value)}
             className="resize-none"
@@ -128,9 +123,11 @@ export function SubmitForm() {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
-              isDragging
-                ? "border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100"
-                : "border-zinc-200 bg-zinc-50 hover:border-blue-300 hover:bg-gradient-to-br hover:from-blue-50 hover:to-white"
+              filesError
+                ? "border-red-500 bg-red-50"
+                : isDragging
+                  ? "border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100"
+                  : "border-zinc-200 bg-zinc-50 hover:border-blue-300 hover:bg-gradient-to-br hover:from-blue-50 hover:to-white"
             }`}
             onClick={() => document.getElementById("file-input")?.click()}
           >
@@ -143,8 +140,8 @@ export function SubmitForm() {
               onChange={(e) => handleFiles(e.target.files)}
             />
             <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <Upload className="w-6 h-6 text-blue-600" />
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${filesError ? "bg-red-100" : "bg-blue-100"}`}>
+                <Upload className={`w-6 h-6 ${filesError ? "text-red-600" : "text-blue-600"}`} />
               </div>
               <p className="text-zinc-700 font-medium">
                 Choose PDF files or drag and drop
@@ -154,6 +151,9 @@ export function SubmitForm() {
               </p>
             </div>
           </div>
+          {filesError && (
+            <p className="text-sm text-red-500">{filesError}</p>
+          )}
 
           {files.length > 0 && (
             <div className="border rounded-md divide-y bg-white">
@@ -193,6 +193,7 @@ export function SubmitForm() {
             id="email"
             type="email"
             placeholder="you@company.com"
+            required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -201,9 +202,9 @@ export function SubmitForm() {
           </p>
         </div>
 
-        <Button 
-          type="submit" 
-          className="w-full py-6 text-base cursor-pointer" 
+        <Button
+          type="submit"
+          className="w-full py-6 text-base cursor-pointer"
           disabled={isSubmitting}
         >
           {isSubmitting ? "Processing..." : "Submit for Evaluation"}
