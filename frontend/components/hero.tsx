@@ -7,15 +7,15 @@ export function Hero() {
       <div className="max-w-5xl mx-auto text-center space-y-6">
         <Badge 
           variant="outline" 
-          className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-700 px-4 py-1.5 gap-2 text-sm font-medium shadow-sm"
+          className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10 hover:text-primary px-4 py-1.5 gap-2 text-sm font-medium shadow-sm transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Next-Gen Recruiting</span>
         </Badge>
-        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-zinc-900">
-          AI-Powered <span className="text-blue-600">Resume</span> Screening
+        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-foreground">
+          AI-Powered <span className="text-primary">Resume</span> Screening
         </h1>
-        <p className="text-lg md:text-xl text-zinc-600 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
           Stop drowning in applications. Rank candidates against your job requirements 
           with high-precision AI evaluation in just minutes.
         </p>

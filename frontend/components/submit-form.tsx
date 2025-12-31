@@ -109,170 +109,166 @@ export function SubmitForm() {
   };
 
   return (
-    <Card className="max-w-3xl mx-auto p-0 shadow-xl border-zinc-200/60 overflow-hidden">
-      <div className="bg-zinc-950 px-8 py-6 text-white flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-400" />
+    <Card className="max-w-3xl mx-auto p-0 shadow-2xl border-border overflow-hidden rounded-3xl">
+      <div className="bg-primary px-8 py-8 text-primary-foreground flex items-center justify-between relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl" />
+        <div className="relative z-10">
+          <h2 className="text-2xl font-black flex items-center gap-3 tracking-tight">
+            <Sparkles className="w-6 h-6 text-primary-foreground/80" />
             New Evaluation
           </h2>
-          <p className="text-zinc-400 text-sm mt-1">Fill in the details to start the AI screening</p>
+          <p className="text-primary-foreground/70 text-sm mt-1.5 font-medium">Fill in the details to start the AI screening</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-8">
+      <form onSubmit={handleSubmit} className="p-8 space-y-10">
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-4 rounded-xl flex items-start gap-3">
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
             <X className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <p className="font-medium">{error}</p>
+            <p className="font-semibold">{error}</p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-6 md:col-span-2">
-            <div className="space-y-3">
-              <Label htmlFor="job-description" className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-blue-600" />
-                Job Description <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="job-description"
-                placeholder="Paste the job description or requirements here..."
-                rows={8}
-                required
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                className="resize-none border-zinc-200 focus:ring-blue-500 focus:border-blue-500 rounded-xl bg-zinc-50/30"
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <Label htmlFor="job-description" className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
+              <Briefcase className="w-4 h-4 text-primary" />
+              Job Description <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="job-description"
+              placeholder="Paste the job description or requirements here..."
+              rows={8}
+              required
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              className="resize-none border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 p-4 text-base transition-all"
+            />
+          </div>
+
+          <div className="space-y-4">
+            <Label className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
+              <FileText className="w-4 h-4 text-primary" />
+              Candidate Resumes <span className="text-destructive">*</span>
+            </Label>
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`group relative border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 ${
+                filesError
+                  ? "border-destructive bg-destructive/5"
+                  : isDragging
+                    ? "border-primary bg-primary/5 scale-[1.01]"
+                    : "border-border bg-muted/30 hover:border-primary/50 hover:bg-primary/5"
+              }`}
+              onClick={() => document.getElementById("file-input")?.click()}
+            >
+              <input
+                id="file-input"
+                type="file"
+                accept=".pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
               />
-            </div>
-          </div>
-
-          <div className="space-y-6 md:col-span-2">
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-600" />
-                Candidate Resumes <span className="text-red-500">*</span>
-              </Label>
-              <div
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                className={`group relative border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 ${
-                  filesError
-                    ? "border-red-400 bg-red-50/50"
-                    : isDragging
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-zinc-200 bg-zinc-50/50 hover:border-blue-400 hover:bg-blue-50"
-                }`}
-                onClick={() => document.getElementById("file-input")?.click()}
-              >
-                <input
-                  id="file-input"
-                  type="file"
-                  accept=".pdf"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
-                />
-                <div className="flex flex-col items-center gap-3">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${filesError ? "bg-red-100 text-red-600" : "bg-white text-blue-600 shadow-sm group-hover:bg-blue-600 group-hover:text-white"}`}>
-                    <Upload className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <p className="text-zinc-900 font-bold">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-sm text-zinc-500 mt-1">
-                      Support multiple PDF resumes
-                    </p>
-                  </div>
+              <div className="flex flex-col items-center gap-4">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${filesError ? "bg-destructive/10 text-destructive" : "bg-background text-primary shadow-sm group-hover:bg-primary group-hover:text-primary-foreground group-hover:rotate-6"}`}>
+                  <Upload className="w-8 h-8" />
+                </div>
+                <div>
+                  <p className="text-foreground font-black text-lg tracking-tight">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1.5 font-medium">
+                    Support multiple PDF resumes
+                  </p>
                 </div>
               </div>
-              {filesError && (
-                <p className="text-sm font-medium text-red-500 flex items-center gap-1.5 ml-1">
-                  <X className="w-4 h-4" /> {filesError}
-                </p>
-              )}
-
-              {files.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                  {files.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between px-4 py-3 bg-white border border-zinc-200 rounded-xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-sm font-semibold text-zinc-900 truncate">
-                            {file.name}
-                          </span>
-                          <span className="text-[10px] text-zinc-500 font-medium">
-                            {formatFileSize(file.size)}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFile(index);
-                        }}
-                        className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          </div>
-
-          <div className="space-y-6 md:col-span-2 pt-4">
-            <div className="space-y-3">
-              <Label htmlFor="email" className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-                <Mail className="w-4 h-4 text-blue-600" />
-                Notification Email <span className="text-red-500">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="hr@company.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-4 h-12 border-zinc-200 focus:ring-blue-500 focus:border-blue-500 rounded-xl bg-zinc-50/30"
-                />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400">
-                  <CheckCircle2 className={`w-5 h-5 transition-colors ${email.includes('@') && email.includes('.') ? "text-green-500" : "opacity-0"}`} />
-                </div>
-              </div>
-              <p className="text-xs text-zinc-500 font-medium ml-1">
-                We&apos;ll notify you here as soon as the results are ready.
+            {filesError && (
+              <p className="text-sm font-semibold text-destructive flex items-center gap-2 ml-1 animate-in fade-in slide-in-from-left-2">
+                <X className="w-4 h-4" /> {filesError}
               </p>
+            )}
+
+            {files.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                {files.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between px-5 py-4 bg-background border border-border rounded-2xl shadow-sm hover:shadow-md hover:border-primary/20 transition-all group animate-in fade-in slide-in-from-bottom-2 duration-300"
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="p-2.5 bg-primary/10 text-primary rounded-xl group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-bold text-foreground truncate">
+                          {file.name}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground font-bold">
+                          {formatFileSize(file.size)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(index);
+                      }}
+                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4 pt-2">
+            <Label htmlFor="email" className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
+              <Mail className="w-4 h-4 text-primary" />
+              Notification Email <span className="text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <Input
+                id="email"
+                type="email"
+                placeholder="hr@company.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="pl-5 h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
+              />
+              <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                <CheckCircle2 className={`w-6 h-6 transition-all duration-300 ${email.includes('@') && email.includes('.') ? "text-emerald-500 scale-100 opacity-100" : "scale-50 opacity-0"}`} />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground font-semibold ml-1.5 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+              We&apos;ll notify you here as soon as the results are ready.
+            </p>
           </div>
         </div>
 
-        <div className="pt-4">
+        <div className="pt-6">
           <Button
             type="submit"
-            className="group relative w-full h-14 text-base font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100"
+            className="group relative w-full h-16 text-lg font-black bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 cursor-pointer"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
               <div className="flex items-center gap-3">
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-6 h-6 animate-spin" />
                 <span>Processing Resumes...</span>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3 w-full">
                 <span>Submit for Evaluation</span>
-                <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                <Sparkles className="w-6 h-6 group-hover:rotate-12 transition-transform duration-300" />
               </div>
             )}
           </Button>
