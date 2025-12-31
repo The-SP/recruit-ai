@@ -2,17 +2,17 @@ const steps = [
   {
     number: 1,
     title: "Upload",
-    description: "Paste your job description and upload resume PDFs",
+    description: "Paste your job description and upload multiple candidate resumes in PDF format.",
   },
   {
     number: 2,
-    title: "Get Notified",
-    description: "Receive an email when processing is complete",
+    title: "AI Analysis",
+    description: "Our advanced LLMs analyze each resume against specific job requirements and skills.",
   },
   {
     number: 3,
     title: "View Results",
-    description: "See ranked candidates with match scores",
+    description: "Receive an email when processing is complete.See ranked candidates with match scores",
   },
 ];
 
@@ -26,7 +26,7 @@ export function HowItWorks() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {steps.map((step) => (
           <div key={step.number} className="flex gap-3">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium">
               {step.number}
             </div>
             <div>
