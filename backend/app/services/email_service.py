@@ -1,3 +1,8 @@
+import smtplib
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import resend
@@ -8,54 +13,154 @@ from app.core.logger import init_logger
 
 logger = init_logger(__name__)
 
-resend.api_key = Config.RESEND_API_KEY
+_template_env = Environment(loader=FileSystemLoader(Path("app/templates/emails")))
 
-# Setup Jinja2 template loader
-TEMPLATE_DIR = Path("app/templates/emails")
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+
+@dataclass(frozen=True, slots=True)
+class GmailCredentials:
+    email: str
+    password: str
+    from_name: str = "Recruit AI"
+    server: str = "smtp.gmail.com"
+    port: int = 587
+
+
+@dataclass(frozen=True, slots=True)
+class ResendCredentials:
+    api_key: str
+    from_email: str
+
+
+class EmailProvider(ABC):
+    """Abstract base class for email providers."""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def send(self, to: str, subject: str, html: str) -> None:
+        pass
+
+
+class GmailProvider(EmailProvider):
+    """Gmail SMTP email provider."""
+
+    def __init__(self, credentials: GmailCredentials):
+        self._cred = credentials
+
+    @property
+    def name(self) -> str:
+        return "gmail"
+
+    def send(self, to: str, subject: str, html: str) -> None:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{self._cred.from_name} <{self._cred.email}>"
+        msg["To"] = to
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(self._cred.server, self._cred.port) as server:
+            server.starttls()
+            server.login(self._cred.email, self._cred.password)
+            server.sendmail(self._cred.email, to, msg.as_string())
+
+
+class ResendProvider(EmailProvider):
+    """Resend API email provider."""
+
+    def __init__(self, credentials: ResendCredentials):
+        self._cred = credentials
+
+    @property
+    def name(self) -> str:
+        return "resend"
+
+    def send(self, to: str, subject: str, html: str) -> None:
+        resend.api_key = self._cred.api_key
+        resend.Emails.send(
+            {
+                "from": self._cred.from_email,
+                "to": [to],
+                "subject": subject,
+                "html": html,
+            }
+        )
+
+
+class EmailService:
+    """Email service that delegates to a provider."""
+
+    def __init__(self, provider: EmailProvider, base_url: str):
+        self._provider = provider
+        self._base_url = base_url
+
+    def _render(self, template_name: str, **kwargs) -> str:
+        return _template_env.get_template(template_name).render(**kwargs)
+
+    def _send(self, to: str, subject: str, template: str, **context) -> None:
+        try:
+            html = self._render(template, **context)
+            self._provider.send(to, subject, html)
+            logger.info(f"Sent email to {to} via {self._provider.name}")
+        except Exception as e:
+            logger.error(f"Failed to send email to {to}: {e}")
+
+    def send_batch_completed(self, email: str, token: str) -> None:
+        results_url = f"{self._base_url}/batch/status/{token}"
+        self._send(
+            to=email,
+            subject="Your Candidate Evaluations Are Ready",
+            template="batch_completed.html",
+            results_url=results_url,
+            token=token,
+        )
+
+    def send_batch_failed(self, email: str, token: str) -> None:
+        results_url = f"{self._base_url}/batch/status/{token}"
+        self._send(
+            to=email,
+            subject="Your candidate evaluations encountered an error",
+            template="batch_failed.html",
+            results_url=results_url,
+            token=token,
+        )
+
+
+def _create_provider() -> EmailProvider:
+    if Config.EMAIL_PROVIDER.lower() == "resend":
+        return ResendProvider(
+            ResendCredentials(
+                api_key=Config.RESEND_API_KEY,
+                from_email=Config.RESEND_FROM_EMAIL,
+            )
+        )
+    return GmailProvider(
+        GmailCredentials(
+            email=Config.MAIL_FROM,
+            password=Config.MAIL_PASSWORD,
+            from_name=Config.MAIL_FROM_NAME,
+            server=Config.MAIL_SERVER,
+            port=Config.MAIL_PORT,
+        )
+    )
+
+
+_service: EmailService | None = None
+
+
+def get_email_service() -> EmailService:
+    """Get the singleton email service instance."""
+    global _service
+    if _service is None:
+        _service = EmailService(_create_provider(), Config.BASE_URL)
+    return _service
 
 
 def send_batch_completed(email: str, token: str) -> None:
-    """Send notification that batch processing has completed."""
-    base_url = f"{Config.BASE_URL}/batch/status"
-    results_url = f"{base_url}/{token}"
-
-    try:
-        template = env.get_template("batch_completed.html")
-        html = template.render(base_url=base_url, results_url=results_url, token=token)
-
-        params: resend.Emails.SendParams = {
-            "from": Config.FROM_EMAIL,
-            "to": [email],
-            "subject": "Your Candidate Evaluations Are Ready",
-            "html": html,
-        }
-
-        response = resend.Emails.send(params)
-        logger.info(f"Sent batch completed email to {email} (id: {response['id']})")
-
-    except Exception as e:
-        logger.error(f"Failed to send batch completed email to {email}: {e}")
+    get_email_service().send_batch_completed(email, token)
 
 
 def send_batch_failed(email: str, token: str) -> None:
-    """Send notification that batch processing has failed."""
-    base_url = f"{Config.BASE_URL}/batch/status"
-    results_url = f"{base_url}/{token}"
-
-    try:
-        template = env.get_template("batch_failed.html")
-        html = template.render(base_url=base_url, results_url=results_url, token=token)
-
-        params: resend.Emails.SendParams = {
-            "from": Config.FROM_EMAIL,
-            "to": [email],
-            "subject": "Your candidate evaluations encountered an error",
-            "html": html,
-        }
-
-        response = resend.Emails.send(params)
-        logger.info(f"Sent batch failed email to {email} (id: {response['id']})")
-
-    except Exception as e:
-        logger.error(f"Failed to send batch failed email to {email}: {e}")
+    get_email_service().send_batch_failed(email, token)
