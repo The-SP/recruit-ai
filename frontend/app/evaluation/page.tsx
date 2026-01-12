@@ -1,45 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { KeyRound, Loader2, RefreshCw, ChevronLeft, LayoutDashboard, Clock, Users, FileText, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+    ChevronLeft, Clock, FileText, KeyRound, LayoutDashboard, Loader2, RefreshCw, Users, X
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
-interface BatchStatus {
-  run_id: string;
-  status: "draft" | "pending" | "processing" | "completed" | "failed";
-  progress: {
-    total: number;
-    processed: number;
-    failed: number;
-  };
-  job: {
-    title: string | null;
-  } | null;
-  results: {
-    candidate_id: string | null;
-    candidate_name: string | null;
-    filename: string;
-    final_score: number | null;
-    hire_signal: string | null;
-    status: string;
-  }[];
-  processing_time_seconds: number | null;
-  created_at: string;
-}
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/components/ui/table';
+import { ApiError } from '@/services/api';
+import { BatchStatus, getBatchStatus } from '@/services/batch';
 
 const signalStyles: Record<string, string> = {
   strong_match: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -76,16 +53,13 @@ export default function EvaluationPage() {
     }
     
     try {
-      const res = await fetch(`http://localhost:8000/batch/status/${t}`);
-      if (!res.ok) {
-        if (res.status === 404) throw new Error("Invalid or expired token");
-        throw new Error("Failed to fetch status");
-      }
-      const json = await res.json();
-      setData(json);
+      const data = await getBatchStatus(t);
+      setData(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (err instanceof ApiError) {
+        setError(err.status === 404 ? 'Invalid or expired token' : err.message);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

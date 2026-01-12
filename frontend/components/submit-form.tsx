@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { FileText, Mail, Upload, Briefcase, X, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+    Briefcase, CheckCircle2, FileText, Loader2, Mail, Sparkles, Upload, X
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { ApiError } from '@/services/api';
+import { submitBatch } from '@/services/batch';
 
 export function SubmitForm() {
   const router = useRouter();
@@ -78,29 +83,15 @@ export function SubmitForm() {
 
     setIsSubmitting(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("job_text", jobDescription);
-      formData.append("email", email);
-      files.forEach((file) => formData.append("files", file));
+  try {
+    const data = await submitBatch(jobDescription, email, files);
+    router.push(`/evaluation?token=${data.token}`);
+  } catch (err) {
+    setError(err instanceof ApiError ? err.message : "Something went wrong");
+  } finally {
+    setIsSubmitting(false);
+  }
 
-      const res = await fetch("http://localhost:8000/batch/submit", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || "Submission failed");
-      }
-
-      const data = await res.json();
-      router.push(`/evaluation?token=${data.token}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const formatFileSize = (bytes: number) => {
