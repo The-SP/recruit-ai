@@ -92,9 +92,9 @@ class ResendProvider(EmailProvider):
 class EmailService:
     """Email service that delegates to a provider."""
 
-    def __init__(self, provider: EmailProvider, base_url: str):
+    def __init__(self, provider: EmailProvider, frontend_url: str):
         self._provider = provider
-        self._base_url = base_url
+        self._frontend_url = frontend_url
 
     def _render(self, template_name: str, **kwargs) -> str:
         return _template_env.get_template(template_name).render(**kwargs)
@@ -108,7 +108,7 @@ class EmailService:
             logger.error(f"Failed to send email to {to}: {e}")
 
     def send_batch_completed(self, email: str, token: str) -> None:
-        results_url = f"{self._base_url}/batch/status/{token}"
+        results_url = f"{self._frontend_url}/evaluation?token={token}"
         self._send(
             to=email,
             subject="Your Candidate Evaluations Are Ready",
@@ -118,7 +118,7 @@ class EmailService:
         )
 
     def send_batch_failed(self, email: str, token: str) -> None:
-        results_url = f"{self._base_url}/batch/status/{token}"
+        results_url = f"{self._frontend_url}/evaluation?token={token}"
         self._send(
             to=email,
             subject="Your candidate evaluations encountered an error",
@@ -154,7 +154,7 @@ def get_email_service() -> EmailService:
     """Get the singleton email service instance."""
     global _service
     if _service is None:
-        _service = EmailService(_create_provider(), Config.BASE_URL)
+        _service = EmailService(_create_provider(), Config.FRONTEND_URL)
     return _service
 
 

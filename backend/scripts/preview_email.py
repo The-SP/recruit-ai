@@ -11,8 +11,8 @@ env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 # Sample data for rendering
 context = {
     "base_url": "http://localhost:8000/batch/status",
-    "results_url": "http://localhost:8000/batch/status/5j6gmftOeNQDuTTMaLeDL1dcItuI4996F-vn0QxQtjA",
-    "token": "5j6gmftOeNQDuTTMaLeDL1dcItuI4996F-vn0QxQtjA",
+    "results_url": "http://localhost:3000/evaluation?token=wNxdEtpOXz1B7VOJ6UpqNEbAkK48D5nHXwsfyZvV_DQ",
+    "token": "wNxdEtpOXz1B7VOJ6UpqNEbAkK48D5nHXwsfyZvV_DQ",
 }
 
 # Get all HTML templates (exclude base.html)
