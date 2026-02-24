@@ -3,6 +3,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.education_evaluation import EducationScoreResult
+from app.schemas.experience_evaluation import ExperienceScoreResult
+from app.schemas.skill_evaluation import SkillScoreResult
+
 
 class CreateBatchRequest(BaseModel):
     """Request for creating a batch evaluation."""
@@ -58,3 +62,20 @@ class BatchStatusResponse(BaseModel):
     results: list[CandidateResult] = Field(default_factory=list)
     processing_time_seconds: float | None = None
     created_at: datetime
+
+
+class CandidateBreakdownResponse(BaseModel):
+    """Full evaluation breakdown for a single candidate."""
+
+    candidate_id: UUID
+    candidate_name: str | None = None
+    filename: str
+    final_score: float | None = None
+    hire_signal: str | None = None
+    skill_score: float | None = None
+    experience_score: float | None = None
+    education_score: float | None = None
+    summary: str | None = None
+    skills: SkillScoreResult | None = None
+    experience: ExperienceScoreResult | None = None
+    education: EducationScoreResult | None = None

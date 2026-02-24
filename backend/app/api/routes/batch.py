@@ -18,6 +18,7 @@ from app.api.schemas.batch import (
 )
 from app.api.schemas.public import (
     BatchStatusResponse,
+    CandidateBreakdownResponse,
     CandidateResult,
     CreateBatchResponse,
     JobSummary,
@@ -28,11 +29,15 @@ from app.core.file_upload import read_pdf_content, validate_pdf_filename
 from app.core.job_description_parser import parse_job_description
 from app.models.evaluation_run import RunStatus
 from app.repositories.candidate_repository import CandidateRepository
+from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
     EvaluationRunRepository,
 )
 from app.repositories.job_repository import JobRepository
+from app.schemas.education_evaluation import EducationScoreResult
+from app.schemas.experience_evaluation import ExperienceScoreResult
+from app.schemas.skill_evaluation import SkillScoreResult
 from app.worker.tasks import process_evaluation_run
 
 router = APIRouter(prefix="/batch", tags=["batch"])
@@ -210,6 +215,71 @@ def get_batch_status_by_token(
         results=results,
         processing_time_seconds=run.processing_time_seconds,
         created_at=run.created_at,
+    )
+
+
+@router.get(
+    "/status/{token}/candidate/{candidate_id}",
+    response_model=CandidateBreakdownResponse,
+)
+def get_candidate_breakdown(
+    token: str,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+) -> CandidateBreakdownResponse:
+    """
+    Get full evaluation breakdown for a single candidate, authenticated by
+    the batch access token.
+    """
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_token(token, with_items=True)
+    if not run:
+        raise NotFoundError("Batch", token)
+
+    matching_item = next(
+        (item for item in run.items if item.candidate_id == candidate_id),
+        None,
+    )
+    if not matching_item:
+        raise NotFoundError("Candidate", str(candidate_id))
+
+    eval_repo = EvaluationRepository(db)
+    evaluation = eval_repo.get_by_candidate_and_job(candidate_id, run.job_id)
+    if not evaluation:
+        raise NotFoundError("Evaluation", str(candidate_id))
+
+    candidate_repo = CandidateRepository(db)
+    candidate = candidate_repo.get_by_id(candidate_id)
+
+    skills = (
+        SkillScoreResult.model_validate(evaluation.skill_result)
+        if evaluation.skill_result
+        else None
+    )
+    experience = (
+        ExperienceScoreResult.model_validate(evaluation.experience_result)
+        if evaluation.experience_result
+        else None
+    )
+    education = (
+        EducationScoreResult.model_validate(evaluation.education_result)
+        if evaluation.education_result
+        else None
+    )
+
+    return CandidateBreakdownResponse(
+        candidate_id=candidate_id,
+        candidate_name=candidate.name if candidate else None,
+        filename=matching_item.pdf_filename,
+        final_score=evaluation.final_score,
+        hire_signal=evaluation.hire_signal,
+        skill_score=evaluation.skill_score,
+        experience_score=evaluation.experience_score,
+        education_score=evaluation.education_score,
+        summary=evaluation.summary,
+        skills=skills,
+        experience=experience,
+        education=education,
     )
 
 

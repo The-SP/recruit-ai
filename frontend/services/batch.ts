@@ -34,6 +34,74 @@ export interface CandidateResult {
   status: string;
 }
 
+// Candidate breakdown types (mirrors backend internal schemas)
+export interface SkillGroupDetail {
+  skill_options: string[];
+  tier: "critical" | "required" | "preferred";
+  match_type: "exact" | "equivalent" | "transferable" | "foundational" | "none";
+  matched_by: string | null;
+  evidence: string;
+  reasoning: string;
+}
+
+export interface SkillBreakdown {
+  llm_response: {
+    evaluations: SkillGroupDetail[];
+    strengths: string[];
+    development_areas: string[];
+  };
+  required_score: number;
+  preferred_score: number;
+  critical_gaps: string[];
+  critical_penalty: number;
+  final_score: number;
+  summary: string;
+}
+
+export interface ExperienceJobDetail {
+  job_title: string;
+  company: string | null;
+  start_date: string;
+  end_date: string | null;
+  duration_months: number;
+  relevance: "high" | "medium" | "low" | "none";
+  evidence: string;
+}
+
+export interface ExperienceBreakdown {
+  llm_response: {
+    evaluations: ExperienceJobDetail[];
+    notes: string | null;
+  };
+  effective_months: number;
+  effective_years: number;
+  required_years: number;
+  experience_score: number;
+  summary: string;
+}
+
+export interface EducationBreakdown {
+  score: number;
+  candidate_degree: string | null;
+  field_of_study: string | null;
+  summary: string;
+}
+
+export interface CandidateBreakdown {
+  candidate_id: string;
+  candidate_name: string | null;
+  filename: string;
+  final_score: number | null;
+  hire_signal: string | null;
+  skill_score: number | null;
+  experience_score: number | null;
+  education_score: number | null;
+  summary: string | null;
+  skills: SkillBreakdown | null;
+  experience: ExperienceBreakdown | null;
+  education: EducationBreakdown | null;
+}
+
 // API functions
 export async function submitBatch(
   jobText: string,
@@ -53,4 +121,13 @@ export async function submitBatch(
 
 export async function getBatchStatus(token: string): Promise<BatchStatus> {
   return apiRequest<BatchStatus>(`/batch/status/${token}`);
+}
+
+export async function getCandidateBreakdown(
+  token: string,
+  candidateId: string
+): Promise<CandidateBreakdown> {
+  return apiRequest<CandidateBreakdown>(
+    `/batch/status/${token}/candidate/${candidateId}`
+  );
 }
