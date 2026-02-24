@@ -1,8 +1,8 @@
 "use client";
 
 import {
-    BookOpen, Briefcase, ChevronDown, ChevronLeft, ChevronUp, Clock, FileText,
-    KeyRound, LayoutDashboard, Loader2, RefreshCw, Users, X, Zap
+    BookOpen, Briefcase, ChevronDown, ChevronLeft, ChevronUp, Clock, Download,
+    FileText, KeyRound, LayoutDashboard, Loader2, RefreshCw, Users, X, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -294,6 +294,29 @@ export default function EvaluationPage() {
     }
   };
 
+  const exportToCSV = () => {
+    if (!data?.results) return;
+    const headers = ["Rank", "Name", "File", "Score (%)", "Hire Signal", "Status"];
+    const rows = data.results.map((r, i) => [
+      i + 1,
+      r.candidate_name ?? r.filename,
+      r.filename,
+      r.final_score != null ? (r.final_score * 100).toFixed(1) : "N/A",
+      r.hire_signal ?? "N/A",
+      r.status,
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(data.job?.title ?? "results").replace(/\s+/g, "-").toLowerCase()}-candidates.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleRowClick = async (candidateId: string | null) => {
     if (!candidateId || !token) return;
     if (expandedId === candidateId) {
@@ -413,6 +436,17 @@ export default function EvaluationPage() {
               {isProcessing ? "Processing" : "Completed"}
             </Badge>
           </div>
+          {!isProcessing && data.results.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              className="h-10 px-4 rounded-xl border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
           <Button
             variant="outline"
             size="icon"
