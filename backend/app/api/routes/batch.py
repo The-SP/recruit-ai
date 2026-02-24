@@ -21,6 +21,8 @@ from app.api.schemas.public import (
     CandidateBreakdownResponse,
     CandidateResult,
     CreateBatchResponse,
+    HistoryItem,
+    HistoryListResponse,
     JobSummary,
     ProgressInfo,
 )
@@ -281,6 +283,28 @@ def get_candidate_breakdown(
         experience=experience,
         education=education,
     )
+
+
+@router.get("/history", response_model=HistoryListResponse)
+def get_history(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+) -> HistoryListResponse:
+    """List past evaluation runs for the history page."""
+    run_repo = EvaluationRunRepository(db)
+    runs = run_repo.get_all(limit=limit)
+    items = [
+        HistoryItem(
+            token=run.access_token,
+            job_title=run.job.title if run.job else None,
+            company_name=run.job.company_name if run.job else None,
+            candidate_count=run.total_count,
+            status=run.status,
+            created_at=run.created_at,
+        )
+        for run in runs
+    ]
+    return HistoryListResponse(items=items, total=len(items))
 
 
 # =============================================================================

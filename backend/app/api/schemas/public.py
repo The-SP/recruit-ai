@@ -64,6 +64,24 @@ class BatchStatusResponse(BaseModel):
     created_at: datetime
 
 
+class HistoryItem(BaseModel):
+    """Single evaluation run entry for the history page."""
+
+    token: str
+    job_title: str | None = None
+    company_name: str | None = None
+    candidate_count: int
+    status: str
+    created_at: datetime
+
+
+class HistoryListResponse(BaseModel):
+    """Response for the history listing endpoint."""
+
+    items: list[HistoryItem]
+    total: int
+
+
 class CandidateBreakdownResponse(BaseModel):
     """Full evaluation breakdown for a single candidate."""
 
