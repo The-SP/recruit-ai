@@ -82,6 +82,17 @@ class HistoryListResponse(BaseModel):
     total: int
 
 
+class AddCandidatesResponse(BaseModel):
+    """Response after adding candidates to an existing batch."""
+
+    uploaded: int = Field(..., description="Number of files successfully uploaded")
+    failed: int = Field(..., description="Number of files that failed to upload")
+    errors: list[str] = Field(
+        default_factory=list, description="Error messages for failed uploads"
+    )
+    run_status: str = Field(..., description="New run status after adding candidates")
+
+
 class CandidateBreakdownResponse(BaseModel):
     """Full evaluation breakdown for a single candidate."""
 

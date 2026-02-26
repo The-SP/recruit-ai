@@ -116,6 +116,13 @@ export interface HistoryListResponse {
   total: number;
 }
 
+export interface AddCandidatesResponse {
+  uploaded: number;
+  failed: number;
+  errors: string[];
+  run_status: string;
+}
+
 // API functions
 export async function submitBatch(
   jobText: string,
@@ -148,4 +155,16 @@ export async function getCandidateBreakdown(
 
 export async function getHistory(limit = 50): Promise<HistoryListResponse> {
   return apiRequest<HistoryListResponse>(`/batch/history?limit=${limit}`);
+}
+
+export async function addCandidatesToBatch(
+  token: string,
+  files: File[]
+): Promise<AddCandidatesResponse> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  return apiRequest<AddCandidatesResponse>(
+    `/batch/status/${token}/add-candidates`,
+    { method: "POST", body: formData }
+  );
 }

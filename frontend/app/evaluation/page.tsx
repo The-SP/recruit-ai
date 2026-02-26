@@ -2,12 +2,13 @@
 
 import {
     BookOpen, Briefcase, ChevronDown, ChevronLeft, ChevronUp, Clock, Download,
-    FileText, KeyRound, LayoutDashboard, Loader2, RefreshCw, Users, X, Zap
+    FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, Sparkles, Users, X, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 
+import { ResumeFileUpload } from '@/components/resume-file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,7 +21,8 @@ import {
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/services/api';
 import {
-    BatchStatus, CandidateBreakdown, getCandidateBreakdown, getBatchStatus
+    AddCandidatesResponse, BatchStatus, CandidateBreakdown,
+    addCandidatesToBatch, getCandidateBreakdown, getBatchStatus
 } from '@/services/batch';
 
 const signalStyles: Record<string, string> = {
@@ -242,6 +244,116 @@ function CandidateBreakdownPanel({
   );
 }
 
+function AddCandidatesPanel({
+  token,
+  onSuccess,
+}: {
+  token: string;
+  onSuccess: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<AddCandidatesResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filesError, setFilesError] = useState<string | null>(null);
+
+  const handleFilesChange = (newFiles: File[]) => {
+    setFiles(newFiles);
+    if (newFiles.length === 0 && isOpen) {
+      setFilesError(null);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (files.length === 0) {
+      setFilesError("At least one resume PDF is required");
+      return;
+    }
+    setError(null);
+    setFilesError(null);
+    setIsSubmitting(true);
+    try {
+      const res = await addCandidatesToBatch(token, files);
+      setResult(res);
+      setFiles([]);
+      setIsOpen(false);
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {result && (
+        <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2 font-medium">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+          Added {result.uploaded} candidate{result.uploaded !== 1 ? "s" : ""} — evaluating now...
+          {result.errors.length > 0 && (
+            <span className="text-amber-600 ml-2">({result.errors.length} skipped)</span>
+          )}
+        </div>
+      )}
+
+      {!isOpen ? (
+        <button
+          onClick={() => { setIsOpen(true); setResult(null); }}
+          className="flex items-center gap-2 px-4 py-2 text-base font-bold text-primary rounded-xl hover:bg-primary/10 transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          Add More Candidates
+        </button>
+      ) : (
+        <Card className="p-6 border-zinc-200 rounded-2xl shadow-sm space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-primary text-base">Add More Candidates</h3>
+            <button
+              onClick={() => { setIsOpen(false); setFiles([]); setError(null); setFilesError(null); }}
+              className="p-1 text-zinc-400 hover:text-zinc-600 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+              <X className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="font-medium">{error}</p>
+            </div>
+          )}
+
+          <ResumeFileUpload
+            files={files}
+            onChange={handleFilesChange}
+            error={filesError}
+          />
+
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || files.length === 0}
+            className="w-full h-12 font-bold rounded-xl cursor-pointer"
+          >
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Uploading...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                Evaluate {files.length > 0 ? `${files.length} ` : ""}Candidate{files.length !== 1 ? "s" : ""}
+                <Sparkles className="w-4 h-4" />
+              </span>
+            )}
+          </Button>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function EvaluationPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -282,6 +394,15 @@ export default function EvaluationPage() {
     if (!token) return;
     fetchStatus(token);
   }, [token]);
+
+  const isProcessing = data?.status === "processing" || data?.status === "pending";
+
+  // Auto-poll every 10 seconds while the run is processing
+  useEffect(() => {
+    if (!token || !isProcessing) return;
+    const interval = setInterval(() => fetchStatus(token, true), 10000);
+    return () => clearInterval(interval);
+  }, [token, isProcessing]);
 
   const handleRefresh = () => {
     if (token) fetchStatus(token, true);
@@ -408,7 +529,6 @@ export default function EvaluationPage() {
 
   if (!data) return null;
 
-  const isProcessing = data.status === "processing" || data.status === "pending";
   const progressPercent = data.progress.total > 0
     ? (data.progress.processed / data.progress.total) * 100
     : 0;
@@ -589,13 +709,19 @@ export default function EvaluationPage() {
             </Table>
           </div>
 
-          <div className="flex justify-center pt-10">
-            <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ChevronLeft className="w-4 h-4" />
-                Submit Another Batch
-              </Button>
-            </Link>
+          <div className="space-y-6 pt-2">
+            <AddCandidatesPanel
+              token={token}
+              onSuccess={() => fetchStatus(token)}
+            />
+            <div className="flex justify-center pt-4">
+              <Link href="/">
+                <Button variant="outline" className="gap-2">
+                  <ChevronLeft className="w-4 h-4" />
+                  Submit Another Batch
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       )}

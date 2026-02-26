@@ -294,12 +294,14 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     processed_raw = redis_client.get(get_progress_key(run_id))
     failed_raw = redis_client.get(get_failed_key(run_id))
 
-    processed = (
+    wave_processed = (
         int(processed_raw) if isinstance(processed_raw, (int, bytes, str)) else 0
     )
-    failed = int(failed_raw) if isinstance(failed_raw, (int, bytes, str)) else 0
+    wave_failed = int(failed_raw) if isinstance(failed_raw, (int, bytes, str)) else 0
 
     db = create_session()
+    total_processed = wave_processed
+    total_failed = wave_failed
 
     try:
         run_repo = EvaluationRunRepository(db)
@@ -307,10 +309,13 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
 
         # Only mark as completed if not already marked as failed
         if run and run.status != "failed":
+            # Accumulate onto existing counts (handles re-open case; for first run these are 0)
+            total_processed = (run.processed_count or 0) + wave_processed
+            total_failed = (run.failed_count or 0) + wave_failed
             run_repo.mark_completed(
                 run_id=UUID(run_id),
-                processed_count=processed,
-                failed_count=failed,
+                processed_count=total_processed,
+                failed_count=total_failed,
             )
 
             # Send completion email
@@ -329,8 +334,8 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     summary = {
         "run_id": run_id,
         "status": "completed",
-        "processed_count": processed,
-        "failed_count": failed,
+        "processed_count": total_processed,
+        "failed_count": total_failed,
     }
 
     logger.info(f"✓ Finalized run={run_id}: {summary}")

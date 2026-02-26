@@ -17,6 +17,7 @@ from app.api.schemas.batch import (
     BatchRunResponse,
 )
 from app.api.schemas.public import (
+    AddCandidatesResponse,
     BatchStatusResponse,
     CandidateBreakdownResponse,
     CandidateResult,
@@ -93,13 +94,14 @@ async def submit_batch(
     uploaded = 0
     failed = 0
     errors: list[str] = []
+    duplicate_files: list[str] = []
 
     for file in files:
         try:
             filename = validate_pdf_filename(file.filename)
 
             if item_repo.filename_exists(run.id, filename):
-                errors.append(f"{filename}: duplicate filename")
+                duplicate_files.append(filename)
                 failed += 1
                 continue
 
@@ -115,6 +117,9 @@ async def submit_batch(
         except Exception as e:
             errors.append(f"{file.filename or 'unknown'}: {str(e)[:100]}")
             failed += 1
+
+    if duplicate_files:
+        errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
 
     # Check if we have any valid files
     if uploaded == 0:
@@ -220,6 +225,91 @@ def get_batch_status_by_token(
     )
 
 
+@router.post("/status/{token}/add-candidates", response_model=AddCandidatesResponse)
+async def add_candidates_to_batch(
+    token: str,
+    files: list[UploadFile] = [],
+    db: Session = Depends(get_db),
+) -> AddCandidatesResponse:
+    """
+    Add new candidate PDFs to an already-completed (or failed) batch run.
+
+    The new resumes are evaluated against the same job description as the
+    original batch. Already-evaluated candidates are not re-processed.
+
+    Allowed only when the run status is 'completed' or 'failed'. Returns
+    400 if the run is currently pending or processing.
+    """
+    if not files:
+        raise ValidationError("At least one PDF file is required")
+
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_token(token)
+    if not run:
+        raise NotFoundError("Batch", token)
+
+    allowed_statuses = {RunStatus.COMPLETED.value, RunStatus.FAILED.value}
+    if run.status not in allowed_statuses:
+        raise ValidationError(
+            f"Cannot add candidates to a run with status '{run.status}'. "
+            "The run must be completed or failed."
+        )
+
+    item_repo = EvaluationRunItemRepository(db)
+    uploaded = 0
+    failed = 0
+    errors: list[str] = []
+    duplicate_files: list[str] = []
+
+    for file in files:
+        try:
+            filename = validate_pdf_filename(file.filename)
+
+            if item_repo.filename_exists(run.id, filename):
+                duplicate_files.append(filename)
+                failed += 1
+                continue
+
+            content, file_size = await read_pdf_content(file)
+            save_uploaded_file(run.folder_path, filename, content)
+            item_repo.create_uploaded(run.id, filename, file_size)
+            run_repo.increment_total_count(run.id)
+            uploaded += 1
+
+        except ValidationError as e:
+            errors.append(f"{file.filename or 'unknown'}: {e.message}")
+            failed += 1
+        except Exception as e:
+            errors.append(f"{file.filename or 'unknown'}: {str(e)[:100]}")
+            failed += 1
+
+    if duplicate_files:
+        errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
+
+    if uploaded == 0:
+        raise ValidationError(
+            f"No valid PDF files uploaded. Errors: {'; '.join(errors)}"
+        )
+
+    item_repo.mark_all_pending(run.id)
+    run_repo.mark_reopened(run.id)
+
+    try:
+        process_evaluation_run.delay(str(run.id))
+    except Exception as e:
+        run_repo.mark_failed(run.id, str(e))
+        raise ValidationError(f"Failed to start batch processing: {e}")
+
+    db.refresh(run)
+
+    return AddCandidatesResponse(
+        uploaded=uploaded,
+        failed=failed,
+        errors=errors,
+        run_status=run.status,
+    )
+
+
 @router.get(
     "/status/{token}/candidate/{candidate_id}",
     response_model=CandidateBreakdownResponse,
@@ -303,6 +393,7 @@ def get_history(
             created_at=run.created_at,
         )
         for run in runs
+        if run.access_token is not None
     ]
     return HistoryListResponse(items=items, total=len(items))
 

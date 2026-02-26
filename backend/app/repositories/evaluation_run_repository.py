@@ -131,6 +131,16 @@ class EvaluationRunRepository:
             run.status = RunStatus.PENDING.value
             self.db.commit()
 
+    def mark_reopened(self, run_id: UUID) -> None:
+        """Transition a completed/failed run back to pending for adding new candidates."""
+        run = self.get_by_id(run_id)
+        if run:
+            run.status = RunStatus.PENDING.value
+            run.completed_at = None  # cleared so mark_completed can compute wave delta
+            run.started_at = None  # cleared so wave duration is measured from new start
+            self.db.commit()
+            logger.info(f"Reopened evaluation run: id={run_id}")
+
     def mark_started(self, run_id: UUID) -> None:
         run = self.get_by_id(run_id)
         if run:
@@ -148,9 +158,10 @@ class EvaluationRunRepository:
             run.failed_count = failed_count
             run.completed_at = datetime.now()
             if run.started_at:
+                current_wave = (run.completed_at - run.started_at).total_seconds()
                 run.processing_time_seconds = (
-                    run.completed_at - run.started_at
-                ).total_seconds()
+                    run.processing_time_seconds or 0
+                ) + current_wave
             self.db.commit()
             logger.info(f"Completed evaluation run: id={run_id}")
 
