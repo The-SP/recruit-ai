@@ -3,7 +3,7 @@
 1. Clone the repository
 2. Set up environment variables in `.env`:
 
-   - Create a `.env` file in the `backend/` directory using `.env.sample` as a template
+   - Create a `.env` file in the `backend/` directory using `.env.example` as a template
    - Configure your API keys, email configs and database connection
 
 3. **Install dependencies:**
