@@ -26,8 +26,6 @@ class Job(Base):
     title: Mapped[str | None] = mapped_column(String(255))
     company_name: Mapped[str | None] = mapped_column(String(255))
     summary: Mapped[str | None] = mapped_column(Text)
-    responsibilities: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    keywords: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

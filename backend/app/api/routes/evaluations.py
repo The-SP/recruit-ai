@@ -27,9 +27,7 @@ def _job_to_jd_response(job) -> JobDescriptionResponse:
         job_title=job.title,
         company_name=job.company_name,
         summary=job.summary,
-        responsibilities=job.responsibilities,
         requirements=build_job_requirements_schema(job.requirements),
-        keywords=job.keywords,
     )
 
 

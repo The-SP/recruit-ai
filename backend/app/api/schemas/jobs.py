@@ -19,9 +19,7 @@ class JobResponse(BaseModel):
     job_title: str | None = None
     company_name: str | None = None
     summary: str | None = None
-    responsibilities: list[str] | None = None
     requirements: JobRequirementsSchema | None = None
-    keywords: list[str] | None = None
     is_valid_jd: bool | None = None
     document_type: str | None = None
     created_at: datetime

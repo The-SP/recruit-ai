@@ -171,9 +171,7 @@ def _job_model_to_response(job) -> JobDescriptionResponse:
         job_title=job.title,
         company_name=job.company_name,
         summary=job.summary,
-        responsibilities=job.responsibilities,
         requirements=requirements,
-        keywords=job.keywords,
     )
 
 

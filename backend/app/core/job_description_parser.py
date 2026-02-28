@@ -9,11 +9,17 @@ from app.schemas.job_description import JobDescriptionResponse
 
 logger = init_logger(__name__)
 
-PROMPT = """You are a precise job description parser. Analyze the provided text.
+PROMPT = """You are a structured data extractor for job postings.
 
-FIRST: Determine if this is a job description/posting.
-- A job description typically contains: job title, responsibilities, requirements, qualifications
-- If this is NOT a job description, set is_job_description to false and provide a brief description in document_type (max 15 words)
+FIRST: Determine whether this document is a job description — an open role being advertised to candidates.
+
+A document IS a job description if it:
+- Describes an open position a company is hiring for
+- Uses applicant-directed language: "you will", "we're looking for", "the ideal candidate"
+- Lists requirements or qualifications a candidate must or should have
+
+If NOT a job description, set is_job_description to false and set document_type to
+a short label describing what the document is (e.g., "resume", "cover letter", "news article").
 
 IF THIS IS A JOB DESCRIPTION: Extract all information from the text.
 
@@ -166,13 +172,6 @@ EDUCATION REQUIREMENT EXTRACTION:
    - If not specified, set to null
 
 3. **required**: Is education a hard requirement?
-
----
-
-KEYWORD EXTRACTION:
-- Extract 10-20 key terms that best represent the role for matching purposes
-- Include: role-specific terminology, tools, methodologies, domain terms, certifications
-- Exclude: generic soft skills unless specifically emphasized for this role
 
 ---
 

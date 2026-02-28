@@ -53,8 +53,6 @@ class JobRepository:
             title=jd.job_title,
             company_name=jd.company_name,
             summary=jd.summary,
-            responsibilities=jd.responsibilities,
-            keywords=jd.keywords,
         )
 
         self.db.add(job)

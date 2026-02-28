@@ -72,7 +72,10 @@ class JobDescriptionResponse(BaseModel):
     """Response schema for job description parsing"""
 
     is_job_description: bool
-    document_type: str | None = Field(None, description="Only if not a job description")
+    document_type: str | None = Field(
+        None,
+        description="Short label for what the document is. Null if is_job_description is true.",
+    )
 
     # Basic Information
     job_title: str | None = None
@@ -80,10 +83,4 @@ class JobDescriptionResponse(BaseModel):
 
     # Role Details
     summary: str | None = Field(None, description="Brief overview of the role")
-    responsibilities: list[str] | None = None
     requirements: JobRequirementsSchema | None = None
-
-    # For matching purposes
-    keywords: list[str] | None = Field(
-        None, description="Key terms extracted for matching"
-    )
