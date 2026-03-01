@@ -1,7 +1,6 @@
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
@@ -174,8 +173,7 @@ EDUCATION REQUIREMENT EXTRACTION:
 3. **required**: Is education a hard requirement?
 
 ---
-
-YOU MUST respond with valid JSON matching the JobDescriptionResponse schema."""
+"""
 
 
 def parse_job_description(text: str) -> JobDescriptionResponse:
@@ -183,14 +181,14 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
     logger.info(f"Parsing job description ({len(text)} chars)")
     agent = create_agent(
         model=Config.MODEL_NAME,
-        system_prompt="You are a helpful assistant that analyzes job descriptions and returns structured JSON data.",
-        response_format=ToolStrategy(JobDescriptionResponse),
+        system_prompt=PROMPT,
+        response_format=JobDescriptionResponse,
     )
 
     messages: Any = [
         {
             "role": "user",
-            "content": f"{PROMPT}\n\n---\n\nJOB DESCRIPTION:\n{text}",
+            "content": f"JOB DESCRIPTION:\n{text}",
         }
     ]
 

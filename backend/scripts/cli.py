@@ -10,12 +10,25 @@ from pprint import pprint
 
 from app.core.job_description_parser import parse_job_description
 from app.core.resume_parser import parse_resume
+from app.schemas.job_description import JobDescriptionResponse
+
+
+def print_separator(newline: bool = True) -> None:
+    if newline:
+        print()
+    print("=" * 60)
+
+
+def print_divider(newline: bool = False) -> None:
+    if newline:
+        print()
+    print("-" * 60)
 
 
 def print_header():
-    print("\n" + "=" * 60)
+    print_separator()
     print("  LLM-Enhanced Resume Screening System - CLI")
-    print("=" * 60)
+    print_separator(newline=False)
 
 
 def print_menu():
@@ -23,13 +36,13 @@ def print_menu():
     print("  1. Parse Resume (PDF)")
     print("  2. Parse Job Description (Text)")
     print("  3. Exit")
-    print("-" * 60)
+    print_divider()
 
 
 def parse_resume_interactive():
-    print("\n" + "=" * 60)
+    print_separator()
     print("  RESUME PARSING")
-    print("=" * 60)
+    print_separator(newline=False)
 
     pdf_path = input("\nEnter the path to the resume PDF file: ").strip()
     pdf_path = pdf_path.strip("'\"")
@@ -52,9 +65,9 @@ def parse_resume_interactive():
         print(f"\n📄 Analyzing '{pdf_file.name}'...")
         result = parse_resume(str(pdf_file))
 
-        print("\n" + "=" * 60)
+        print_separator()
         print("  PARSING RESULTS")
-        print("=" * 60)
+        print_separator(newline=False)
 
         print(f"\n✓ Is Resume: {result.is_resume}")
 
@@ -75,9 +88,9 @@ def parse_resume_interactive():
                     print(f"✓ Saved to: {output_path}")
 
                 # Preview
-                print("\n" + "-" * 60)
+                print_divider(newline=True)
                 print("Preview (first 500 chars):")
-                print("-" * 60)
+                print_divider()
                 print(result.markdown_content[:500])
                 if len(result.markdown_content) > 500:
                     print("...")
@@ -85,7 +98,7 @@ def parse_resume_interactive():
             print(f"✓ Document Type: {result.document_type or 'Unknown'}")
             print("\n⚠️  This document is not a resume/CV.")
 
-        print("\n" + "=" * 60)
+        print_separator()
 
     except FileNotFoundError:
         print(f"✗ Error: File '{pdf_path}' not found.")
@@ -127,10 +140,43 @@ def save_markdown(pdf_file: Path, markdown_content: str) -> str | None:
         return None
 
 
+def save_parsed_jd(result: JobDescriptionResponse, source_name: str) -> str | None:
+    """Save parsed job description as JSON to data/parsed_jobs/ directory"""
+    try:
+        data_dir = Path("data/parsed_jobs")
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate output filename: job1 -> job1_parsed.json
+        output_name = f"{source_name}_parsed.json"
+        output_path = data_dir / output_name
+
+        # Check if file exists and prompt for overwrite
+        if output_path.exists():
+            response = (
+                input(f"\n'{output_path}' exists. Overwrite? (y/N): ").strip().lower()
+            )
+            if response != "y":
+                # Generate unique filename
+                counter = 1
+                while output_path.exists():
+                    output_name = f"{source_name}_parsed_{counter}.json"
+                    output_path = data_dir / output_name
+                    counter += 1
+
+        output_path.write_text(
+            json.dumps(result.model_dump(), indent=2), encoding="utf-8"
+        )
+        return str(output_path)
+
+    except Exception as e:
+        print(f"⚠️  Warning: Could not save parsed JD: {e}")
+        return None
+
+
 def parse_jd_interactive():
-    print("\n" + "=" * 60)
+    print_separator()
     print("  JOB DESCRIPTION PARSING")
-    print("=" * 60)
+    print_separator(newline=False)
 
     print("\nOptions:")
     print("  1. Enter job description text directly")
@@ -139,10 +185,11 @@ def parse_jd_interactive():
     choice = input("\nSelect option (1 or 2): ").strip()
 
     jd_text = ""
+    source_name = "jd"
 
     if choice == "1":
         print("\nEnter the job description (press Ctrl+D or Ctrl+Z when done):")
-        print("-" * 60)
+        print_divider()
         try:
             lines = []
             while True:
@@ -172,6 +219,7 @@ def parse_jd_interactive():
 
         try:
             jd_text = text_file.read_text(encoding="utf-8")
+            source_name = text_file.stem
         except Exception as e:
             print(f"✗ Error reading file: {e}")
             return
@@ -187,9 +235,9 @@ def parse_jd_interactive():
         print("\n📄 Analyzing job description...")
         result = parse_job_description(jd_text)
 
-        print("\n" + "=" * 60)
+        print_separator()
         print("  PARSING RESULTS")
-        print("=" * 60)
+        print_separator(newline=False)
 
         print(f"\n✓ Is Job Description: {result.is_job_description}")
 
@@ -214,18 +262,19 @@ def parse_jd_interactive():
                     print(f"✓ Required Skills: {len(skills.required)} groups")
                     print(f"✓ Preferred Skills: {len(skills.preferred)} groups")
 
-            if result.keywords:
-                print(f"✓ Keywords: {len(result.keywords)} extracted")
-
-            print("\n" + "-" * 60)
+            print_divider(newline=True)
             print("Full structured response:")
-            print("-" * 60)
+            print_divider()
             pprint(result.model_dump(), width=80, compact=False)
         else:
             print(f"✓ Document Type: {result.document_type or 'Unknown'}")
             print("\n⚠️  This document is not a job description.")
 
-        print("\n" + "=" * 60)
+        output_path = save_parsed_jd(result, source_name)
+        if output_path:
+            print(f"\n✓ Saved to: {output_path}")
+
+        print_separator()
 
     except Exception as e:
         print(f"✗ Error: {e}")
