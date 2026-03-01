@@ -67,10 +67,6 @@ class JobRequirements(Base):
     # Skills (nested structure)
     skills: Mapped[dict | None] = mapped_column(JSONB)
 
-    # Other requirements
-    certifications: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    other_requirements: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

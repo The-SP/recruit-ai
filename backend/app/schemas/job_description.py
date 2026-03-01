@@ -64,8 +64,6 @@ class JobRequirementsSchema(BaseModel):
     education: EducationRequirement | None = None
     experience: ExperienceRequirement | None = None
     skills: SkillRequirements | None = None
-    certifications: list[str] | None = None
-    other_requirements: list[str] | None = None
 
 
 class JobDescriptionResponse(BaseModel):

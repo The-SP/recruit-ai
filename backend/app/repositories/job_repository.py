@@ -74,8 +74,6 @@ class JobRepository:
                 edu_preferred_fields=edu.preferred_fields if edu else None,
                 edu_required=edu.required if edu else False,
                 skills=self._build_skills_jsonb(jd),
-                certifications=req.certifications,
-                other_requirements=req.other_requirements,
             )
             self.db.add(job_requirements)
 

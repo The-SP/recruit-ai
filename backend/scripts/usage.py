@@ -161,8 +161,6 @@ def _job_model_to_response(job) -> JobDescriptionResponse:
             if req.edu_min_degree
             else None,
             skills=skills,
-            certifications=req.certifications,
-            other_requirements=req.other_requirements,
         )
 
     return JobDescriptionResponse(

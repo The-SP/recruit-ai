@@ -39,6 +39,4 @@ def build_job_requirements_schema(job_requirements) -> JobRequirementsSchema | N
         if req.edu_min_degree
         else None,
         skills=skills,
-        certifications=req.certifications,
-        other_requirements=req.other_requirements,
     )
