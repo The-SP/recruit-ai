@@ -1,6 +1,7 @@
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
 from app.core.logger import init_logger
@@ -20,7 +21,7 @@ A document IS a job description if it:
 If NOT a job description, set is_job_description to false and set document_type to
 a short label describing what the document is (e.g., "resume", "cover letter", "news article").
 
-IF THIS IS A JOB DESCRIPTION: Extract all information from the text.
+IF THIS IS A JOB DESCRIPTION: Extract all information from the text. You MUST populate the `requirements` field — it is never null. Populate `requirements.skills`, `requirements.experience`, and `requirements.education` from the text, using null/empty only for sub-fields not mentioned.
 
 ---
 
@@ -182,7 +183,7 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
     agent = create_agent(
         model=Config.MODEL_NAME,
         system_prompt=PROMPT,
-        response_format=JobDescriptionResponse,
+        response_format=ToolStrategy(JobDescriptionResponse),
     )
 
     messages: Any = [

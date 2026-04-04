@@ -61,9 +61,17 @@ class SkillRequirements(BaseModel):
 
 
 class JobRequirementsSchema(BaseModel):
-    education: EducationRequirement | None = None
-    experience: ExperienceRequirement | None = None
-    skills: SkillRequirements | None = None
+    education: EducationRequirement | None = Field(
+        None,
+        description="Education requirements. Null only if the job description mentions nothing about education.",
+    )
+    experience: ExperienceRequirement | None = Field(
+        None,
+        description="Experience requirements. Always populate when years or seniority level are mentioned.",
+    )
+    skills: SkillRequirements = Field(
+        description="Skill requirements grouped by tier. Always populate — use empty lists for tiers with no skills."
+    )
 
 
 class JobDescriptionResponse(BaseModel):
@@ -81,4 +89,6 @@ class JobDescriptionResponse(BaseModel):
 
     # Role Details
     summary: str | None = Field(None, description="Brief overview of the role")
-    requirements: JobRequirementsSchema | None = None
+    requirements: JobRequirementsSchema = Field(
+        description="All structured requirements extracted from the job description. Always populate this for job descriptions — never leave null.",
+    )
