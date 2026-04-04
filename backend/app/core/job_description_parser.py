@@ -69,32 +69,10 @@ PREFERRED (check these LAST):
 
 ## 2. GROUP ALTERNATIVE SKILLS
 
-When multiple skills can satisfy the SAME requirement, group them as alternatives with an options array. The candidate needs ANY ONE, not all.
+When multiple skills satisfy the SAME requirement (joined by "or", "/", "such as", "e.g."), group them into a single SkillGroup with all options listed. The candidate needs ANY ONE.
+Separate skills joined by "and" or listed as independent requirements stay as separate groups.
 
-DETECT ALTERNATIVES BY:
-- Explicit "or": "X, Y, or Z" → options: [X, Y, Z]
-- Slash notation: "X/Y" → options: [X, Y]
-- Parenthetical lists: "X (such as Y, Z)" → options: [Y, Z]
-- "such as", "like", "e.g.": "X such as Y or Z" → options: [Y, Z]
-- Semicolon-separated alternatives: "X; Y; or Z" → options: [X, Y, Z]
-
-WHEN NOT TO GROUP:
-- Skills listed with "and" → separate requirements, not alternatives
-- Skills in different sentences → likely separate requirements
-- Skills with different proficiency levels → separate requirements
-
-## 3. ELIMINATE REDUNDANT SKILLS
-
-Apply the SPECIFICITY RULE: If a specific skill implies a general category, keep ONLY the specific skill.
-
-DETECT REDUNDANCY BY:
-- Parent-child relationships (specific tool vs general category)
-- Skill that is a prerequisite of another listed skill
-- Category name alongside specific instances of that category
-
-DO NOT list both the general category AND specific instances.
-
-## 4. INFER PROFICIENCY FROM LANGUAGE
+## 3. INFER PROFICIENCY FROM LANGUAGE
 
 Map qualifying language to proficiency levels:
 
@@ -105,25 +83,6 @@ BEGINNER: "familiar", "basic", "exposure to", "awareness of", "foundational"
 NULL: No qualifier present, or just "experience with" - do not guess
 
 WHEN IN DOUBT: Leave proficiency as null. Only set it when the language CLEARLY maps to a level.
-
-## 5. EXTRACT EXPERIENCE REQUIREMENTS
-
-SKILL-SPECIFIC YEARS: Only when years are explicitly tied to a skill
-- "5+ years of X" → attach years_of_experience: 5 to that skill
-- "X with 3 years experience" → attach years_of_experience: 3 to that skill
-
-GENERAL YEARS: Overall experience requirements go in the experience section, not on skills
-
-## 6. HANDLE AMBIGUOUS SECTIONS
-
-TECH STACK / TOOLS / TECHNOLOGIES sections without context:
-- If skill also appears in Requirements → do not duplicate
-- If skill only in Tech Stack → classify as required (assumed expected)
-
-RESPONSIBILITIES section mentioning skills:
-- Extract skills mentioned but classify based on context
-- "You will use X" suggests required
-- "Opportunity to learn X" suggests preferred
 
 ---
 

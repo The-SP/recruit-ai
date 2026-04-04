@@ -43,17 +43,13 @@ const signalLabels: Record<string, string> = {
 
 const matchTypeStyles: Record<string, string> = {
   exact: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  equivalent: "bg-blue-100 text-blue-700 border-blue-200",
-  transferable: "bg-amber-100 text-amber-700 border-amber-200",
-  foundational: "bg-orange-100 text-orange-700 border-orange-200",
+  partial: "bg-amber-100 text-amber-700 border-amber-200",
   none: "bg-zinc-100 text-zinc-500 border-zinc-200",
 };
 
 const matchTypeLabels: Record<string, string> = {
   exact: "Exact",
-  equivalent: "Equivalent",
-  transferable: "Transferable",
-  foundational: "Foundational",
+  partial: "Partial",
   none: "No Match",
 };
 

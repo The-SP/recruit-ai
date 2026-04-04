@@ -38,7 +38,7 @@ export interface CandidateResult {
 export interface SkillGroupDetail {
   skill_options: string[];
   tier: "critical" | "required" | "preferred";
-  match_type: "exact" | "equivalent" | "transferable" | "foundational" | "none";
+  match_type: "exact" | "partial" | "none";
   matched_by: string | null;
   evidence: string;
   reasoning: string;
@@ -48,7 +48,6 @@ export interface SkillBreakdown {
   llm_response: {
     evaluations: SkillGroupDetail[];
     strengths: string[];
-    development_areas: string[];
   };
   required_score: number;
   preferred_score: number;

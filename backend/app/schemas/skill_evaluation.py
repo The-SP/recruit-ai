@@ -8,9 +8,7 @@ class MatchType(str, Enum):
     """Classification of how well a candidate skill matches a job requirement"""
 
     EXACT = "exact"  # Skill explicitly present
-    EQUIVALENT = "equivalent"  # Different name, same capability
-    TRANSFERABLE = "transferable"  # Related skill, knowledge transfers
-    FOUNDATIONAL = "foundational"  # Has prerequisites, can learn quickly
+    PARTIAL = "partial"  # Related or equivalent skill present
     NONE = "none"  # No evidence
 
 
@@ -34,15 +32,12 @@ class LLMEvaluationResponse(BaseModel):
 
     evaluations: list[SkillGroupEvaluation]
     strengths: list[str] = Field(description="Skills where candidate excels")
-    development_areas: list[str] = Field(
-        description="Skills that could be improved or are missing"
-    )
 
 
 class SkillScoreResult(BaseModel):
     """Final scoring result with all details"""
 
-    # LLM output (contains evaluations, strengths, development_areas)
+    # LLM output (contains evaluations, strengths)
     llm_response: LLMEvaluationResponse
 
     # Computed scores

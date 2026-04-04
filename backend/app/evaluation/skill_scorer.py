@@ -19,13 +19,11 @@ logger = init_logger(__name__)
 
 MATCH_TYPE_SCORES: dict[MatchType, float] = {
     MatchType.EXACT: 1.0,
-    MatchType.EQUIVALENT: 0.85,
-    MatchType.TRANSFERABLE: 0.65,
-    MatchType.FOUNDATIONAL: 0.40,
+    MatchType.PARTIAL: 0.65,
     MatchType.NONE: 0.0,
 }
 
-CRITICAL_PASSING_TYPES: set[MatchType] = {MatchType.EXACT, MatchType.EQUIVALENT}
+CRITICAL_PASSING_TYPES: set[MatchType] = {MatchType.EXACT, MatchType.PARTIAL}
 
 BASE_WEIGHTS = {"required": 85, "preferred": 15}
 
@@ -40,9 +38,7 @@ Evaluate EACH skill group below against the candidate's resume. For each skill g
 ## Match Type Definitions
 
 - **exact**: Skill explicitly listed in resume (e.g., job needs "Python", resume lists "Python")
-- **equivalent**: Different name but same capability (e.g., "FastAPI" ≈ "Django" for Python web frameworks)
-- **transferable**: Related skill with knowledge transfer (e.g., "React" experience transfers to "Vue.js")
-- **foundational**: Has prerequisite knowledge, can learn quickly (e.g., strong "JavaScript" for "TypeScript" role)
+- **partial**: Related or equivalent skill present (e.g., "Django" for a "FastAPI" role; "React" for "Vue.js"; strong "JavaScript" base for "TypeScript")
 - **none**: No evidence of skill or related experience in resume
 
 ## Evaluation Rules
