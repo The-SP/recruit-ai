@@ -41,6 +41,7 @@ class SkillScoreResult(BaseModel):
     llm_response: LLMEvaluationResponse
 
     # Computed scores
+    critical_score: float = Field(default=0.0, ge=0.0, le=1.0)
     required_score: float = Field(ge=0.0, le=1.0)
     preferred_score: float = Field(ge=0.0, le=1.0)
 

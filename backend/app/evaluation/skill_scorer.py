@@ -25,7 +25,7 @@ MATCH_TYPE_SCORES: dict[MatchType, float] = {
 
 CRITICAL_PASSING_TYPES: set[MatchType] = {MatchType.EXACT, MatchType.PARTIAL}
 
-BASE_WEIGHTS = {"required": 85, "preferred": 15}
+BASE_WEIGHTS: dict[str, float] = {"critical": 0.30, "required": 0.55, "preferred": 0.15}
 
 # --- Prompt ---
 
@@ -74,7 +74,7 @@ Evaluate each skill group and respond with the LLMEvaluationResponse schema."""
 # --- Helper Functions ---
 
 
-def _format_skill_groups(skill_groups: list[SkillGroup], tier: str) -> str:
+def _format_skill_groups(skill_groups: list[SkillGroup]) -> str:
     """Format skill groups for prompt"""
     if not skill_groups:
         return "None specified"
@@ -95,22 +95,25 @@ def _format_skill_groups(skill_groups: list[SkillGroup], tier: str) -> str:
 
 
 def _calculate_dynamic_weights(
-    has_required: bool, has_preferred: bool
+    has_critical: bool, has_required: bool, has_preferred: bool
 ) -> dict[str, float]:
     """Calculate weights based on which tiers are present"""
     present = {}
 
+    if has_critical:
+        present["critical"] = BASE_WEIGHTS["critical"]
     if has_required:
         present["required"] = BASE_WEIGHTS["required"]
     if has_preferred:
         present["preferred"] = BASE_WEIGHTS["preferred"]
 
     if not present:
-        return {"required": 0.0, "preferred": 0.0}
+        return {"critical": 0.0, "required": 0.0, "preferred": 0.0}
 
     total = sum(present.values())
 
     return {
+        "critical": present.get("critical", 0) / total,
         "required": present.get("required", 0) / total,
         "preferred": present.get("preferred", 0) / total,
     }
@@ -145,6 +148,29 @@ def _calculate_critical_penalty(gaps_count: int) -> float:
     if gaps_count == 0:
         return 1.0
     return 0.5**gaps_count
+
+
+def _validate_evaluation_counts(
+    llm_response: LLMEvaluationResponse,
+    skill_requirements: SkillRequirements,
+) -> None:
+    """Log warnings if LLM evaluation counts don't match expected skill groups."""
+    expected = {
+        "critical": len(skill_requirements.critical or []),
+        "required": len(skill_requirements.required or []),
+        "preferred": len(skill_requirements.preferred or []),
+    }
+
+    actual: dict[str, int] = {"critical": 0, "required": 0, "preferred": 0}
+    for e in llm_response.evaluations:
+        if e.tier in actual:
+            actual[e.tier] += 1
+
+    for tier in ("critical", "required", "preferred"):
+        if expected[tier] != actual[tier]:
+            logger.warning(
+                f"Tier '{tier}' count mismatch: expected {expected[tier]}, got {actual[tier]}"
+            )
 
 
 def _generate_summary(
@@ -199,11 +225,9 @@ def calculate_skill_score(
 
     # --- Step 1: Build prompt ---
 
-    critical_text = _format_skill_groups(skill_requirements.critical or [], "critical")
-    required_text = _format_skill_groups(skill_requirements.required or [], "required")
-    preferred_text = _format_skill_groups(
-        skill_requirements.preferred or [], "preferred"
-    )
+    critical_text = _format_skill_groups(skill_requirements.critical or [])
+    required_text = _format_skill_groups(skill_requirements.required or [])
+    preferred_text = _format_skill_groups(skill_requirements.preferred or [])
 
     prompt = EVALUATION_PROMPT.format(
         critical_skills=critical_text,
@@ -220,32 +244,64 @@ def calculate_skill_score(
         response_format=ToolStrategy(LLMEvaluationResponse),
     )
 
-    messages: Any = [{"role": "user", "content": prompt}]
+    messages: list[Any] = [{"role": "user", "content": prompt}]
     result = agent.invoke({"messages": messages})
     llm_response: LLMEvaluationResponse = result["structured_response"]
 
+    _validate_evaluation_counts(llm_response, skill_requirements)
+
     # --- Step 3: Calculate tier scores ---
 
+    critical_evals = [e for e in llm_response.evaluations if e.tier == "critical"]
     required_evals = [e for e in llm_response.evaluations if e.tier == "required"]
     preferred_evals = [e for e in llm_response.evaluations if e.tier == "preferred"]
 
-    required_score = _calculate_tier_score(required_evals) if required_evals else 1.0
-    preferred_score = _calculate_tier_score(preferred_evals) if preferred_evals else 0.0
+    if critical_evals:
+        critical_score = _calculate_tier_score(critical_evals)
+    elif skill_requirements.critical:
+        logger.warning(
+            f"LLM returned 0 critical evaluations but {len(skill_requirements.critical)} critical skill groups exist"
+        )
+        critical_score = 0.0
+    else:
+        critical_score = 0.0
+
+    if required_evals:
+        required_score = _calculate_tier_score(required_evals)
+    elif skill_requirements.required:
+        logger.warning(
+            f"LLM returned 0 required evaluations but {len(skill_requirements.required)} required skill groups exist"
+        )
+        required_score = 0.0
+    else:
+        required_score = 0.0
+
+    if preferred_evals:
+        preferred_score = _calculate_tier_score(preferred_evals)
+    elif skill_requirements.preferred:
+        logger.warning(
+            f"LLM returned 0 preferred evaluations but {len(skill_requirements.preferred)} preferred skill groups exist"
+        )
+        preferred_score = 0.0
+    else:
+        preferred_score = 0.0
 
     # --- Step 4: Calculate dynamic weights ---
 
     weights = _calculate_dynamic_weights(
+        has_critical=bool(skill_requirements.critical),
         has_required=bool(skill_requirements.required),
         has_preferred=bool(skill_requirements.preferred),
     )
 
     # --- Step 5: Calculate base score ---
 
-    if weights["required"] == 0 and weights["preferred"] == 0:
-        base_score = 1.0  # No required/preferred skills defined
+    if all(w == 0 for w in weights.values()):
+        base_score = 1.0  # No skills defined at all
     else:
         base_score = (
-            weights["required"] * required_score
+            weights["critical"] * critical_score
+            + weights["required"] * required_score
             + weights["preferred"] * preferred_score
         )
 
@@ -274,6 +330,7 @@ def calculate_skill_score(
 
     return SkillScoreResult(
         llm_response=llm_response,
+        critical_score=round(critical_score, 3),
         required_score=round(required_score, 3),
         preferred_score=round(preferred_score, 3),
         critical_gaps=critical_gaps,
