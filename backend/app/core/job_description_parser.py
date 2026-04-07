@@ -120,7 +120,7 @@ EXPERIENCE REQUIREMENT EXTRACTION:
 EDUCATION REQUIREMENT EXTRACTION:
 
 1. **min_degree**: Minimum degree level
-   - Normalize to: "associates", "bachelors", "masters", "phd"
+   - Normalize to: "bachelors", "masters", "phd"
    - "BS/BA/Bachelor's" → "bachelors"
    - "MS/MA/Master's" → "masters"
    - If not specified, set to null
@@ -131,6 +131,9 @@ EDUCATION REQUIREMENT EXTRACTION:
    - If not specified, set to null
 
 3. **required**: Is education a hard requirement?
+   - true if the JD uses hard language: "must have a degree", "requires a degree", "minimum education", "BS/MS required"
+   - false if it says "preferred", "a plus", "nice to have", or is silent on education
+   - Default to false when ambiguous
 
 ---
 """

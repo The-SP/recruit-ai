@@ -10,6 +10,8 @@ from app.schemas.job_description import EducationRequirement
 
 logger = init_logger(__name__)
 
+EDUCATION_OPTIONAL_SCORE_FLOOR = 0.4
+
 # --- Prompt ---
 
 EVALUATION_PROMPT = """You are an expert recruiter evaluating education qualifications.
@@ -22,11 +24,11 @@ Evaluate the candidate's education against the job requirements and provide a sc
 
 | Score Range | Criteria |
 |-------------|----------|
-| 0.9 - 1.0 | Meets/exceeds degree requirement with directly relevant field |
-| 0.7 - 0.9 | Meets degree requirement with related field, OR exceeds requirement with tangential field |
-| 0.5 - 0.7 | Partially meets (lower degree but relevant field, OR meets degree but unrelated field) |
-| 0.3 - 0.5 | Doesn't meet requirement but has some formal education |
-| 0.0 - 0.3 | No relevant education when education is required |
+| 0.9 - 1.0  | Meets/exceeds degree requirement with directly relevant field |
+| 0.7 - 0.89 | Meets degree requirement with related field, OR exceeds requirement with tangential field |
+| 0.5 - 0.69 | Partially meets (lower degree but relevant field, OR meets degree but unrelated field) |
+| 0.3 - 0.49 | Doesn't meet requirement but has some formal education |
+| 0.0 - 0.29 | No relevant education when education is required |
 
 ## Field Relevance (for tech roles)
 
@@ -126,7 +128,7 @@ def calculate_education_score(
     # --- Apply floor if education not required ---
 
     if not education_requirement.required:
-        llm_response.score = max(llm_response.score, 0.5)
+        llm_response.score = max(llm_response.score, EDUCATION_OPTIONAL_SCORE_FLOOR)
 
     logger.info(
         f"Education evaluation complete - Score: {llm_response.score:.2f} | "
