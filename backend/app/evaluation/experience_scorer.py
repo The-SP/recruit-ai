@@ -91,31 +91,73 @@ def _calculate_duration_months(start_date: str, end_date: str | None) -> int:
     return max(months, 1)
 
 
-def _calculate_effective_months(evaluations: list[ExperienceEvaluation]) -> float:
-    """Calculate weighted effective months"""
-    total = 0.0
+def _calculate_effective_months(
+    evaluations: list[ExperienceEvaluation],
+) -> tuple[float, bool]:
+    """Calculate weighted effective months, handling overlapping roles.
+
+    Uses a sweep-line over interval boundaries. For each segment between
+    consecutive boundary dates, picks the most recently started overlapping
+    role (recency wins), preventing double-counting of concurrent positions.
+    All intervals (including NONE-relevance) participate in cutoff tracking
+    so that irrelevant recent roles correctly block older relevant ones.
+
+    Returns:
+        (effective_months, had_overlap) — had_overlap is True if any roles
+        overlapped in time, for use in summary messaging.
+    """
+    if not evaluations:
+        return 0.0, False
+
+    intervals: list[tuple[date, date, float]] = []
     for e in evaluations:
         weight = RELEVANCE_WEIGHTS.get(e.relevance, 0.0)
-        total += e.duration_months * weight
-    return total
+        start = _parse_date(e.start_date)
+        end = _parse_date(e.end_date) if e.end_date else date.today()
+        intervals.append((start, end, weight))
+
+    # Sort by start descending so most recently started role takes priority
+    intervals.sort(key=lambda x: x[0], reverse=True)
+
+    total = 0.0
+    had_overlap = False
+    cutoff = None
+    for interval_start, interval_end, weight in intervals:
+        if cutoff is not None and interval_end > cutoff:
+            had_overlap = True
+            interval_end = cutoff
+        if weight > 0.0 and interval_end > interval_start:
+            months = (interval_end.year - interval_start.year) * 12 + (
+                interval_end.month - interval_start.month
+            )
+            total += months * weight
+        cutoff = interval_start
+
+    return total, had_overlap
 
 
 def _generate_summary(
     effective_years: float,
     required_years: float,
     score: float,
+    had_overlap: bool = False,
 ) -> str:
     """Generate summary"""
     score_pct = int(score * 100)
 
     if score >= 1.0:
-        return f"Meets experience requirement ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
+        base = f"Meets experience requirement ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
     elif score >= 0.7:
-        return f"Mostly meets requirement ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
+        base = f"Mostly meets requirement ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
     elif score >= 0.4:
-        return f"Partial experience match ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
+        base = f"Partial experience match ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
     else:
-        return f"Limited relevant experience ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
+        base = f"Limited relevant experience ({effective_years:.1f}/{required_years:.1f} years relevant, {score_pct}%)"
+
+    if had_overlap:
+        base += " | [Concurrent roles detected: only the most recent role was counted per overlapping period]"
+
+    return base
 
 
 # --- Main Function ---
@@ -195,14 +237,18 @@ def calculate_experience_score(
 
     # --- Calculate score ---
 
-    effective_months = _calculate_effective_months(llm_response.evaluations)
+    effective_months, had_overlap = _calculate_effective_months(
+        llm_response.evaluations
+    )
     effective_years = effective_months / 12
 
     experience_score = min(effective_years / required_years, 1.0)
 
     # --- Generate summary ---
 
-    summary = _generate_summary(effective_years, required_years, experience_score)
+    summary = _generate_summary(
+        effective_years, required_years, experience_score, had_overlap
+    )
 
     logger.info(
         f"Experience evaluation complete - Score: {experience_score:.3f} | "
