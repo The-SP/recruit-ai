@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Header } from "@/components/header";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -20,8 +21,10 @@ export default function RootLayout({
       <body
         className={`${inter.className} antialiased min-h-screen bg-gradient-to-b from-blue-50 via-white to-blue-50`}
       >
-        <Header />
-        {children}
+        <TooltipProvider>
+          <Header />
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   );
