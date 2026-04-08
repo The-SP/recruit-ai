@@ -76,16 +76,38 @@ Respond with the LLMExperienceResponse schema."""
 # --- Helper Functions ---
 
 
+_PRESENT_STRINGS = {
+    "present",
+    "current",
+    "ongoing",
+    "now",
+    "today",
+    "null",
+    "none",
+    "n/a",
+    "-",
+}
+
+
 def _parse_date(date_str: str) -> date:
     """Parse YYYY-MM string to date object"""
     parts = date_str.split("-")
     return date(int(parts[0]), int(parts[1]), 1)
 
 
+def _is_present(date_str: str | None) -> bool:
+    """Return True if the date string means 'currently employed'."""
+    return date_str is None or date_str.strip().lower() in _PRESENT_STRINGS
+
+
 def _calculate_duration_months(start_date: str, end_date: str | None) -> int:
     """Calculate duration in months between start and end date"""
     start = _parse_date(start_date)
-    end = _parse_date(end_date) if end_date else date.today()
+    end = (
+        _parse_date(end_date)
+        if (end_date and not _is_present(end_date))
+        else date.today()
+    )
 
     months = (end.year - start.year) * 12 + (end.month - start.month)
     return max(months, 1)
@@ -113,7 +135,11 @@ def _calculate_effective_months(
     for e in evaluations:
         weight = RELEVANCE_WEIGHTS.get(e.relevance, 0.0)
         start = _parse_date(e.start_date)
-        end = _parse_date(e.end_date) if e.end_date else date.today()
+        end = (
+            _parse_date(e.end_date)
+            if (e.end_date and not _is_present(e.end_date))
+            else date.today()
+        )
         intervals.append((start, end, weight))
 
     # Sort by start descending so most recently started role takes priority

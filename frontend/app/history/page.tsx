@@ -108,7 +108,7 @@ export default function HistoryPage() {
               {items.map((item) => (
                 <TableRow key={item.token}>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                    {new Date(item.created_at).toLocaleDateString(undefined, {
+                    {new Date(item.created_at).toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
