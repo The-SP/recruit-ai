@@ -7,10 +7,10 @@ from app.schemas.job_description import (
 )
 
 
-def build_job_requirements_schema(job_requirements) -> JobRequirementsSchema | None:
+def build_job_requirements_schema(job_requirements) -> JobRequirementsSchema:
     """Builds a JobRequirementsSchema from job requirements model."""
     if not job_requirements:
-        return None
+        return JobRequirementsSchema(skills=SkillRequirements())
 
     req = job_requirements
     skills = None
