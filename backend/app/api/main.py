@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.exceptions import register_exception_handlers
 from app.api.routes import batch, candidates, evaluations, health, jobs
+from app.config import Config
 from app.core.logger import init_logger
 
 logger = init_logger(__name__)
@@ -28,7 +29,7 @@ def create_app() -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[Config.FRONTEND_URL],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
