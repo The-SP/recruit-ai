@@ -3,6 +3,7 @@ Common utilities for file uploads.
 """
 
 import math
+from pathlib import Path
 
 from fastapi import UploadFile
 
@@ -17,7 +18,7 @@ def validate_pdf_filename(filename: str | None) -> str:
         filename: Original filename
 
     Returns:
-        Validated filename
+        Sanitized filename (basename only, no path components)
 
     Raises:
         ValidationError: If filename is missing or not PDF
@@ -25,10 +26,16 @@ def validate_pdf_filename(filename: str | None) -> str:
     if not filename:
         raise ValidationError("Filename is required")
 
-    if not filename.lower().endswith(".pdf"):
+    # Strip any path components to prevent directory traversal
+    safe_filename = Path(filename).name
+
+    if not safe_filename or safe_filename in (".", ".."):
+        raise ValidationError("Invalid filename")
+
+    if not safe_filename.lower().endswith(".pdf"):
         raise ValidationError("File must be a PDF")
 
-    return filename
+    return safe_filename
 
 
 async def read_pdf_content(file: UploadFile) -> tuple[bytes, int]:

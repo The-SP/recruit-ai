@@ -16,6 +16,19 @@ def ensure_folder(folder_path: str) -> Path:
     return folder
 
 
+def resolve_safe_path(folder: Path, filename: str) -> Path:
+    """
+    Resolve filename relative to folder, rejecting any path traversal.
+
+    Raises:
+        ValueError: If the resolved path escapes the folder.
+    """
+    resolved = (folder / Path(filename).name).resolve()
+    if not resolved.is_relative_to(folder.resolve()):
+        raise ValueError("Invalid filename: path traversal detected")
+    return resolved
+
+
 def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> Path:
     """
     Save uploaded file to specified folder.
@@ -27,9 +40,12 @@ def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> Path:
 
     Returns:
         Path to saved file
+
+    Raises:
+        ValueError: If resolved path escapes the target folder
     """
     folder = ensure_folder(folder_path)
-    file_path = folder / filename
+    file_path = resolve_safe_path(folder, filename)
     file_path.write_bytes(content)
     return file_path
 
@@ -41,7 +57,8 @@ def get_batch_folder(run_id: UUID) -> Path:
 
 def delete_file(run_id: UUID, filename: str) -> bool:
     """Delete a file from batch folder. Returns True if deleted."""
-    file_path = get_batch_folder(run_id) / filename
+    folder = get_batch_folder(run_id)
+    file_path = resolve_safe_path(folder, filename)
     if file_path.exists():
         file_path.unlink()
         return True
