@@ -663,16 +663,18 @@ export default function EvaluationPage() {
           </div>
           <div className="text-3xl font-black text-zinc-900">{data.results.length}</div>
         </div>
-        <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
-            <Clock className="w-3.5 h-3.5 text-amber-500" />
-            Proc. Time
+        {!isProcessing && (
+          <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              Proc. Time
+            </div>
+            <div className="text-3xl font-black text-zinc-900">
+              {data.processing_time_seconds ? Math.round(data.processing_time_seconds) : "—"}
+              <span className="text-xs font-bold text-zinc-400 ml-1 uppercase">s</span>
+            </div>
           </div>
-          <div className="text-3xl font-black text-zinc-900">
-            {data.processing_time_seconds ? Math.round(data.processing_time_seconds) : "—"}
-            <span className="text-xs font-bold text-zinc-400 ml-1 uppercase">s</span>
-          </div>
-        </div>
+        )}
         <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
@@ -698,86 +700,88 @@ export default function EvaluationPage() {
         </Tooltip>
       </div>
 
-      {/* Progress View */}
-      {isProcessing ? (
-        <Card className="p-10 shadow-xl border-zinc-200/60 rounded-3xl bg-white text-center">
-          <div className="max-w-md mx-auto space-y-8">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm font-black text-zinc-900 uppercase tracking-widest">
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  Analyzing Resumes
-                </span>
-                <span>{Math.round(progressPercent)}%</span>
-              </div>
-              <div className="relative h-4 w-full bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
-                <div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 rounded-full shadow-[0_0_10px_theme(colors.primary/30%)]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <p className="text-zinc-500 text-sm font-medium">
-                {data.progress.processed} of {data.progress.total} candidates completed
-              </p>
+      {/* Progress Card */}
+      {isProcessing && (
+        <Card className="p-8 shadow-xl border-zinc-200/60 rounded-3xl bg-white mb-8">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-4 text-sm font-black text-zinc-900 uppercase tracking-widest">
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                Analyzing Resumes
+              </span>
+              <span className="tabular-nums">{Math.round(progressPercent)}%</span>
             </div>
-
-            <div className="pt-4">
-              <Button
-                variant="outline"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="h-12 px-8 rounded-xl border-zinc-200 font-bold flex items-center gap-2 hover:bg-zinc-50 active:scale-95 transition-all cursor-pointer"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                {isRefreshing ? "Updating..." : "Check Progress"}
-              </Button>
+            <div className="relative h-3 w-full bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
+              <div
+                className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 rounded-full shadow-[0_0_10px_theme(colors.primary/30%)]"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-zinc-400 font-medium pt-0.5">
+              <span>{data.progress.processed} of {data.progress.total} candidates completed</span>
+              <span className="flex items-center gap-1.5">
+                <RefreshCw className="w-3 h-3" />
+                Auto-refreshing every 10s
+              </span>
             </div>
           </div>
         </Card>
-      ) : (
-        <div className="space-y-8">
-          {data.results.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mb-4">
-                <Users className="w-7 h-7 text-zinc-400" />
+      )}
+
+      <div className="space-y-8">
+        {/* Results table — shown when completed, or when partial results exist during processing */}
+        {(!isProcessing || completedResults.length > 0) && (
+          <>
+            {isProcessing && (
+              <div className="flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                Results So Far
               </div>
-              <p className="text-zinc-900 font-bold text-lg">No candidates yet</p>
-              <p className="text-zinc-500 text-sm mt-1">Add resumes below to start evaluating candidates.</p>
-            </div>
-          ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-20 text-center">Rank</TableHead>
-                    <TableHead>Resume</TableHead>
-                    <TableHead className="w-32 text-center">Score</TableHead>
-                    <TableHead className="w-40 text-center">Hire Signal</TableHead>
-                    <TableHead className="w-24 text-right pr-4">
-                      {(() => {
-                        const expandableIds = data.results
-                          .map(r => r.candidate_id)
-                          .filter(Boolean) as string[];
-                        const allExpanded = expandableIds.length > 0 && expandableIds.every(id => expandedIds.has(id));
-                        const handleExpandAll = () => {
-                          if (allExpanded) { setExpandedIds(new Set()); return; }
-                          setExpandedIds(new Set(expandableIds));
-                          expandableIds.forEach(id => { if (!breakdownCache[id]) handleRowClick(id); });
-                        };
-                        return (
-                          <button
-                            onClick={handleExpandAll}
-                            className="text-xs font-semibold text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
-                          >
-                            {allExpanded ? "Collapse all" : "Expand all"}
-                          </button>
-                        );
-                      })()}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.results.map((result, index) => {
+            )}
+
+            {!isProcessing && data.results.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mb-4">
+                  <Users className="w-7 h-7 text-zinc-400" />
+                </div>
+                <p className="text-zinc-900 font-bold text-lg">No candidates yet</p>
+                <p className="text-zinc-500 text-sm mt-1">Add resumes below to start evaluating candidates.</p>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-20 text-center">Rank</TableHead>
+                      <TableHead>Resume</TableHead>
+                      <TableHead className="w-32 text-center">Score</TableHead>
+                      <TableHead className="w-40 text-center">Hire Signal</TableHead>
+                      <TableHead className="w-24 text-right pr-4">
+                        {(() => {
+                          const displayResults = isProcessing ? completedResults : data.results;
+                          const expandableIds = displayResults
+                            .map(r => r.candidate_id)
+                            .filter(Boolean) as string[];
+                          const allExpanded = expandableIds.length > 0 && expandableIds.every(id => expandedIds.has(id));
+                          const handleExpandAll = () => {
+                            if (allExpanded) { setExpandedIds(new Set()); return; }
+                            setExpandedIds(new Set(expandableIds));
+                            expandableIds.forEach(id => { if (!breakdownCache[id]) handleRowClick(id); });
+                          };
+                          return (
+                            <button
+                              onClick={handleExpandAll}
+                              className="text-xs font-semibold text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
+                            >
+                              {allExpanded ? "Collapse all" : "Expand all"}
+                            </button>
+                          );
+                        })()}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(isProcessing ? completedResults : data.results).map((result, index) => {
                     const id = result.candidate_id;
                     const isExpanded = id !== null && expandedIds.has(id);
                     const breakdown = id ? breakdownCache[id] : undefined;
@@ -841,27 +845,56 @@ export default function EvaluationPage() {
                       </React.Fragment>
                     );
                   })}
+
+                  {/* Skeleton rows for candidates still being processed */}
+                  {isProcessing && data.results
+                    .filter(r => r.final_score === null)
+                    .map((result, i) => (
+                      <TableRow key={`pending-${result.filename}-${i}`} className="opacity-50">
+                        <TableCell className="text-center">
+                          <div className="h-4 w-4 rounded bg-zinc-200 animate-pulse mx-auto" />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Loader2 className="w-5 h-5 text-zinc-300 animate-spin shrink-0" />
+                            <div className="space-y-1.5">
+                              <div className="h-3.5 w-40 rounded bg-zinc-200 animate-pulse" />
+                              <div className="h-2.5 w-28 rounded bg-zinc-100 animate-pulse" />
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="h-3.5 w-10 rounded bg-zinc-200 animate-pulse mx-auto" />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="h-6 w-24 rounded-full bg-zinc-100 animate-pulse mx-auto" />
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
+                    ))
+                  }
                 </TableBody>
               </Table>
             </div>
           )}
+          </>
+        )}
 
-          <div className="space-y-6 pt-2">
-            <AddCandidatesPanel
-              token={token}
-              onSuccess={() => fetchStatus(token)}
-            />
-            <div className="flex justify-center pt-4">
-              <Link href="/">
-                <Button variant="outline" className="gap-2">
-                  <ChevronLeft className="w-4 h-4" />
-                  Submit Another Batch
-                </Button>
-              </Link>
-            </div>
+        <div className="space-y-6 pt-2">
+          <AddCandidatesPanel
+            token={token}
+            onSuccess={() => fetchStatus(token)}
+          />
+          <div className="flex justify-center pt-4">
+            <Link href="/">
+              <Button variant="outline" className="gap-2">
+                <ChevronLeft className="w-4 h-4" />
+                Submit Another Batch
+              </Button>
+            </Link>
           </div>
         </div>
-      )}
+      </div>
 
     </main>
   );
