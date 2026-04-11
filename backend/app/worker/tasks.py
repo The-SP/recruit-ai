@@ -2,6 +2,7 @@ import os
 from uuid import UUID
 
 from celery import chord, group
+from celery.exceptions import SoftTimeLimitExceeded
 from redis import Redis
 
 from app.config import Config
@@ -142,9 +143,11 @@ def process_evaluation_run(self, run_id: str) -> str:
         db.close()
 
     # Dispatch chord: group of evaluate tasks -> finalize callback
+    callback = finalize_evaluation_run.s(run_id)
+    callback.link_error(on_chord_error.s(run_id))
     workflow = chord(
         group(evaluate_resume.s(item_id, jd_dict) for item_id in item_ids),
-        finalize_evaluation_run.s(run_id),
+        callback,
     )
 
     try:
@@ -245,6 +248,21 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
 
         return {"status": "completed", "item_id": item_id}
 
+    except SoftTimeLimitExceeded:
+        logger.error(f"✗ Timeout on item={item_id} (soft time limit exceeded)")
+
+        try:
+            item_repo = EvaluationRunItemRepository(db)
+            item = item_repo.get_by_id(UUID(item_id))
+            if item:
+                item_repo.mark_failed(item.id, "Task timed out (soft limit)")
+                run_id = str(item.evaluation_run_id)
+                redis_client.incr(get_failed_key(run_id))
+        except Exception as inner_e:
+            logger.error(f"Failed to mark timed-out item as failed: {inner_e}")
+
+        return {"status": "failed", "item_id": item_id, "error": "Task timed out"}
+
     except Exception as e:
         if run_id and is_rate_limit_error(e):
             handle_rate_limit_failure(UUID(item_id), UUID(run_id), e, db)
@@ -310,15 +328,22 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
             # Accumulate onto existing counts (handles re-open case; for first run these are 0)
             total_processed = (run.processed_count or 0) + wave_processed
             total_failed = (run.failed_count or 0) + wave_failed
-            run_repo.mark_completed(
-                run_id=UUID(run_id),
-                processed_count=total_processed,
-                failed_count=total_failed,
-            )
 
-            # Send completion email
-            if run.email and run.access_token:
-                send_batch_completed(run.email, run.access_token)
+            if total_processed == 0 and total_failed > 0:
+                run_repo.mark_failed(
+                    UUID(run_id),
+                    f"All {total_failed} items failed",
+                )
+                if run.email and run.access_token:
+                    send_batch_failed(run.email, run.access_token)
+            else:
+                run_repo.mark_completed(
+                    run_id=UUID(run_id),
+                    processed_count=total_processed,
+                    failed_count=total_failed,
+                )
+                if run.email and run.access_token:
+                    send_batch_completed(run.email, run.access_token)
         else:
             logger.info("Run already marked as failed, skipping completion")
 
@@ -329,12 +354,32 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     redis_client.delete(get_progress_key(run_id))
     redis_client.delete(get_failed_key(run_id))
 
+    final_status = (
+        "failed" if total_processed == 0 and total_failed > 0 else "completed"
+    )
     summary = {
         "run_id": run_id,
-        "status": "completed",
+        "status": final_status,
         "processed_count": total_processed,
         "failed_count": total_failed,
     }
 
     logger.info(f"✓ Finalized run={run_id}: {summary}")
     return summary
+
+
+@celery_app.task(name="on_chord_error")
+def on_chord_error(request, exc, traceback, run_id: str) -> None:
+    """Error callback when a chord fails due to a hard task failure."""
+    logger.error(f"Chord failed for run={run_id}: {exc}")
+
+    db = create_session()
+    try:
+        run_repo = EvaluationRunRepository(db)
+        run = run_repo.get_by_id(UUID(run_id))
+        if run and run.status != RunStatus.FAILED.value:
+            run_repo.mark_failed(UUID(run_id), f"Chord failure: {str(exc)[:500]}")
+    finally:
+        db.close()
+
+    _send_failure_email(UUID(run_id))

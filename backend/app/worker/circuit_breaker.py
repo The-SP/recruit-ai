@@ -23,8 +23,9 @@ logger = init_logger(__name__)
 
 redis_client = Redis.from_url(Config.REDIS_URL)
 
-# Global circuit breaker key (no expiration - must be manually reset)
+# Global circuit breaker key
 CIRCUIT_BREAKER_KEY = "rate_limit_circuit_breaker"
+CIRCUIT_BREAKER_TTL = 86400  # 24 hours
 
 
 def is_rate_limit_error(error: Exception | str) -> bool:
@@ -46,17 +47,19 @@ def activate_circuit_breaker() -> bool:
     """
     Activate the circuit breaker to block all tasks.
 
-    Sets a Redis flag with no expiration if not already set.
+    Sets a Redis flag with a 24-hour TTL if not already set.
 
     Returns:
         True if this call successfully activated the breaker (first one),
         False if it was already active.
     """
     # nx=True ensures we only set it if it doesn't exist
-    was_set = redis_client.set(CIRCUIT_BREAKER_KEY, "1", nx=True)
+    was_set = redis_client.set(
+        CIRCUIT_BREAKER_KEY, "1", nx=True, ex=CIRCUIT_BREAKER_TTL
+    )
     if was_set:
         logger.error(
-            "🚨 Circuit breaker activated - all tasks blocked until manual reset"
+            "🚨 Circuit breaker activated - tasks blocked for 24h or until manual reset"
         )
     return bool(was_set)
 
