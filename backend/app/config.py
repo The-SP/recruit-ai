@@ -21,8 +21,8 @@ class Config:
 
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-    # Email Provider: "gmail" or "resend"
-    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "gmail")
+    # Email Provider: "gmail", "resend", or "console"
+    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "console")
 
     # Gmail SMTP Configuration
     MAIL_FROM: str = os.getenv("MAIL_FROM", "")

@@ -44,6 +44,19 @@ class EmailProvider(ABC):
         pass
 
 
+class ConsoleProvider(EmailProvider):
+    """No-op email provider for local development; logs instead of sending."""
+
+    @property
+    def name(self) -> str:
+        return "console"
+
+    def send(self, to: str, subject: str, html: str) -> None:
+        logger.info(
+            f"[console email] to={to} subject={subject!r} html_length={len(html)}"
+        )
+
+
 class GmailProvider(EmailProvider):
     """Gmail SMTP email provider."""
 
@@ -129,22 +142,25 @@ class EmailService:
 
 
 def _create_provider() -> EmailProvider:
-    if Config.EMAIL_PROVIDER.lower() == "resend":
+    provider = Config.EMAIL_PROVIDER.lower()
+    if provider == "gmail":
+        return GmailProvider(
+            GmailCredentials(
+                email=Config.MAIL_FROM,
+                password=Config.MAIL_PASSWORD,
+                from_name=Config.MAIL_FROM_NAME,
+                server=Config.MAIL_SERVER,
+                port=Config.MAIL_PORT,
+            )
+        )
+    if provider == "resend":
         return ResendProvider(
             ResendCredentials(
                 api_key=Config.RESEND_API_KEY,
                 from_email=Config.RESEND_FROM_EMAIL,
             )
         )
-    return GmailProvider(
-        GmailCredentials(
-            email=Config.MAIL_FROM,
-            password=Config.MAIL_PASSWORD,
-            from_name=Config.MAIL_FROM_NAME,
-            server=Config.MAIL_SERVER,
-            port=Config.MAIL_PORT,
-        )
-    )
+    return ConsoleProvider()
 
 
 _service: EmailService | None = None
