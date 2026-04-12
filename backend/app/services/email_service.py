@@ -122,22 +122,26 @@ class EmailService:
 
     def send_batch_completed(self, email: str, token: str) -> None:
         results_url = f"{self._frontend_url}/evaluation?token={token}"
+        base_url = f"{self._frontend_url}/evaluation"
         self._send(
             to=email,
             subject="Your Candidate Evaluations Are Ready",
             template="batch_completed.html",
             results_url=results_url,
             token=token,
+            base_url=base_url,
         )
 
     def send_batch_failed(self, email: str, token: str) -> None:
         results_url = f"{self._frontend_url}/evaluation?token={token}"
+        base_url = f"{self._frontend_url}/evaluation"
         self._send(
             to=email,
             subject="Your candidate evaluations encountered an error",
             template="batch_failed.html",
             results_url=results_url,
             token=token,
+            base_url=base_url,
         )
 
 

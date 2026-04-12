@@ -12,7 +12,7 @@ const steps = [
   {
     number: 3,
     title: "View Results",
-    description: "Receive an email when processing is complete.See ranked candidates with match scores",
+    description: "Receive an email when processing is complete. See ranked candidates with match scores",
   },
 ];
 
