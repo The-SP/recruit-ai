@@ -7,6 +7,9 @@ load_dotenv()
 
 
 class Config:
+    # Authentication
+    API_KEY: str = os.getenv("API_KEY", "")
+
     # Model Configuration
     MODEL_NAME: str = os.getenv("MODEL_NAME", "google_genai:gemini-2.5-flash-lite")
     LOG_LEVEL: int = getattr(
