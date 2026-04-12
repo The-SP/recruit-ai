@@ -84,11 +84,14 @@ def process_evaluation_run(self, run_id: str) -> str:
     logger.info(f"Processing evaluation run: {run_id}")
 
     if is_circuit_breaker_active():
-        error_msg = (
-            "Cannot process run - rate limit circuit breaker is active. "
-            "Run 'make circuit-reset' to clear."
-        )
+        error_msg = "Cannot process run - rate limit circuit breaker is active."
         logger.error(error_msg)
+        db = create_session()
+        try:
+            run_repo = EvaluationRunRepository(db)
+            run_repo.mark_failed(UUID(run_id), error_msg)
+        finally:
+            db.close()
         _send_failure_email(UUID(run_id))
         raise ValueError(error_msg)
 
