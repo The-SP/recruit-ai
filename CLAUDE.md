@@ -13,6 +13,22 @@ Recruit AI is an AI-powered resume screening system. Users upload PDF resumes an
 - **Infrastructure:** PostgreSQL 16, Redis 7, Docker Compose
 - **Package managers:** `uv` (backend), `pnpm` (frontend)
 
+## Setup
+
+```bash
+# Backend (from backend/)
+uv sync                # Install Python dependencies
+cp .env.example .env   # Configure env vars (at minimum: GOOGLE_API_KEY)
+docker compose up -d   # Start PostgreSQL (5433) and Redis (6380)
+make migrate           # Run database migrations
+
+# Frontend (from frontend/)
+pnpm install
+# Create .env.local with NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+**Port gotcha:** Docker maps PostgreSQL to **5433** and Redis to **6380** on the host. When running locally against Docker services, use `DATABASE_URL=postgresql://postgres:postgres@localhost:5433/recruit-ai` and `REDIS_URL=redis://localhost:6380/0` (not the default ports in `.env.example`).
+
 ## Common Commands
 
 ### Backend (run from `backend/`)
@@ -35,7 +51,7 @@ All Python commands use `uv run` (e.g., `uv run ruff check .`).
 ### Frontend (run from `frontend/`)
 
 ```bash
-pnpm dev              # Start Next.js dev server
+pnpm dev              # Start Next.js dev server (port 3000)
 pnpm build            # Production build
 pnpm lint             # Run ESLint
 ```
@@ -46,7 +62,9 @@ pnpm lint             # Run ESLint
 docker compose up     # Start PostgreSQL (5433), Redis (6380), API (8000), Worker
 ```
 
-Note: Docker maps PostgreSQL to port 5433 and Redis to 6380 on the host.
+### Testing
+
+There is no test suite yet. The project uses `pre-commit` hooks (in dev dependencies).
 
 ## Architecture
 
@@ -54,43 +72,38 @@ Note: Docker maps PostgreSQL to port 5433 and Redis to 6380 on the host.
 
 The backend follows a layered architecture: **routes → services/scorers → repositories → models**.
 
-- **`api/`** — FastAPI routes (`routes/`) and Pydantic request/response schemas (`schemas/`). Route files:
-  - `batch.py` — Public batch API: `POST /batch/submit`, `GET /batch/status/{token}`, `POST /batch/status/{token}/add-candidates`, `GET /batch/status/{token}/candidate/{candidate_id}`, `GET /batch/history`. Also internal multi-step draft API (`POST /batch`, file upload/listing/deletion, `POST /batch/{run_id}/start`, `GET /batch/{run_id}/results`).
-  - `candidates.py` — `POST /candidates`, `GET /candidates/{id}`, `GET /candidates`
-  - `jobs.py` — `POST /jobs`, `GET /jobs/{id}`, `GET /jobs`, `GET /jobs/{id}/rankings`
-  - `evaluations.py` — `POST /evaluations`, `GET /evaluations/{id}`
-  - `health.py` — `GET /health`, `GET /health/detailed` (checks DB, Redis, Celery, LLM)
+- **`api/`** — FastAPI routes (`routes/`) and Pydantic request/response schemas (`schemas/`). Entry point is `api/main.py` which creates the app via `create_app()`. Route files: `batch.py`, `candidates.py`, `jobs.py`, `evaluations.py`, `health.py`. Custom exception handlers in `api/exceptions.py`.
 
 - **`core/`** — Business logic: `resume_parser.py` (PDF → markdown + structured data via Gemini), `job_description_parser.py` (text → structured requirements via Gemini, validates input is a real JD), `file_upload.py` (PDF validation), `file_storage.py` (local storage for batch uploads), `logger.py` (console + optional file logging).
 
 - **`evaluation/`** — Three-component scoring engine orchestrated by `composite_scorer.py`:
   - `skill_scorer.py` (45% weight) — LangChain agent evaluates skill matches. Match types: Exact (1.0), Equivalent (0.85), Transferable (0.65), Foundational (0.40), None (0.0). Skill tiers: Critical (dealbreaker), Required (85% weight), Preferred (15% weight).
-  - `experience_scorer.py` (40% weight) — Evaluates work history relevance and years. Relevance levels: High (1.0), Medium (0.6), Low (0.25), None (0.0).
+  - `experience_scorer.py` (40% weight) — Evaluates work history relevance and years.
   - `education_scorer.py` (15% weight) — Evaluates degree level and field match. More lenient for tech roles.
-  - Weights redistribute dynamically when requirements are missing. Hire signal thresholds: Strong Match (≥0.85), Good Match (0.70–0.84), Partial Match (0.55–0.69), Weak Match (0.40–0.54), No Match (<0.40).
+  - Weights redistribute dynamically when requirements are missing. Hire signal thresholds: Strong Match (>=0.85), Good Match (0.70-0.84), Partial Match (0.55-0.69), Weak Match (0.40-0.54), No Match (<0.40).
 
 - **`models/`** — SQLAlchemy ORM models. Core tables: `candidates`, `jobs`, `job_requirements`, `candidate_evaluations`, `evaluation_runs`, `evaluation_run_items`. `candidate_evaluations` has a unique constraint on `(candidate_id, job_id)` to support upsert re-evaluation.
 
-- **`repositories/`** — Data access layer: `candidate_repository.py`, `job_repository.py`, `evaluation_repository.py`, `evaluation_run_repository.py` (also manages `evaluation_run_items` and status transitions: draft → pending → processing → completed/failed).
+- **`repositories/`** — Data access layer. `evaluation_run_repository.py` manages status transitions: draft → pending → processing → completed/failed.
 
-- **`worker/`** — Celery tasks using chord pattern: `process_evaluation_run` (orchestrator) → `evaluate_resume` (parallel per-resume) → `finalize_evaluation_run` (callback, sends email). Includes `circuit_breaker.py` for Gemini rate limit protection — detects quota errors, sets a Redis flag to block new tasks, and requires manual reset via `make circuit-reset`.
+- **`worker/`** — Celery tasks using chord pattern: `process_evaluation_run` (orchestrator) → `evaluate_resume` (parallel per-resume) → `finalize_evaluation_run` (callback, sends email). Includes `circuit_breaker.py` for Gemini rate limit protection — detects quota errors, sets a Redis flag to block new tasks, requires manual reset via `make circuit-reset`.
 
-- **`services/`** — `email_service.py` with pluggable providers: `GmailProvider` (SMTP, requires app password) and `ResendProvider` (Resend API for custom domains). Sends batch completion/failure notifications with result links.
+- **`services/`** — `email_service.py` with pluggable providers: `ConsoleProvider` (local dev, logs to stdout), `GmailProvider` (SMTP), `ResendProvider` (API). Set via `EMAIL_PROVIDER` env var (`console`|`gmail`|`resend`).
 
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` env var (default: `google_genai:gemini-2.5-flash-lite`).
 
 ### Frontend (`frontend/`)
 
 Next.js App Router structure. Pages:
-- `app/page.tsx` — Landing page with hero, how-it-works, and upload form (`components/submit-form.tsx`). Submits to `POST /batch/submit`, redirects to `/evaluation?token=<token>`.
-- `app/evaluation/page.tsx` — Results dashboard: batch status polling, candidate list with expandable score breakdowns, add-more-candidates feature, CSV export.
-- `app/history/page.tsx` — Lists past evaluation runs from `GET /batch/history`.
+- `app/page.tsx` — Landing page with upload form (`components/submit-form.tsx`). Submits to `POST /batch/submit`, redirects to `/evaluation?token=<token>`.
+- `app/evaluation/page.tsx` — Results dashboard: batch status polling, candidate list with expandable score breakdowns, add-more-candidates, CSV export.
+- `app/history/page.tsx` — Lists past evaluation runs.
 
 API calls are in `services/batch.ts` (batch endpoints) and `services/api.ts` (generic request wrapper).
 
 ## Configuration
 
-Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `EMAIL_PROVIDER` (gmail|resend), `MODEL_NAME`, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`.
+Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `EMAIL_PROVIDER` (console|gmail|resend), `MODEL_NAME`, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`.
 
 Frontend uses `NEXT_PUBLIC_API_URL` (default: `http://localhost:8000`).
 
