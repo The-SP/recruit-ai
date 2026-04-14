@@ -146,7 +146,6 @@ class EvaluationRunRepository:
             run.status = RunStatus.PENDING.value
             run.completed_at = None  # cleared so mark_completed can compute wave delta
             run.started_at = None  # cleared so wave duration is measured from new start
-            run.processed_count = 0  # will be recomputed from item statuses at finalize
             run.failed_count = 0
             self.db.commit()
             logger.info(f"Reopened evaluation run: id={run_id}")
@@ -158,14 +157,15 @@ class EvaluationRunRepository:
             run.started_at = datetime.now()
             self.db.commit()
 
-    def mark_completed(
-        self, run_id: UUID, processed_count: int, failed_count: int
-    ) -> None:
+    def mark_completed(self, run_id: UUID) -> None:
         run = self.get_by_id(run_id)
         if run:
+            item_repo = EvaluationRunItemRepository(self.db)
+            run.processed_count = item_repo.count_by_status(
+                run_id, ItemStatus.COMPLETED
+            )
+            run.failed_count = item_repo.count_by_status(run_id, ItemStatus.FAILED)
             run.status = RunStatus.COMPLETED.value
-            run.processed_count = processed_count
-            run.failed_count = failed_count
             run.completed_at = datetime.now()
             if run.started_at:
                 current_wave = (run.completed_at - run.started_at).total_seconds()
@@ -178,6 +178,11 @@ class EvaluationRunRepository:
     def mark_failed(self, run_id: UUID, error: str) -> None:
         run = self.get_by_id(run_id)
         if run:
+            item_repo = EvaluationRunItemRepository(self.db)
+            run.processed_count = item_repo.count_by_status(
+                run_id, ItemStatus.COMPLETED
+            )
+            run.failed_count = item_repo.count_by_status(run_id, ItemStatus.FAILED)
             run.status = RunStatus.FAILED.value
             run.completed_at = datetime.now()
             self.db.commit()

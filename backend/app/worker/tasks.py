@@ -301,13 +301,13 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
         run_repo = EvaluationRunRepository(db)
         run = run_repo.get_by_id(UUID(run_id))
 
+        # Derive counts from actual item statuses — correct across retries and reopens
+        item_repo = EvaluationRunItemRepository(db)
+        total_processed = item_repo.count_by_status(UUID(run_id), ItemStatus.COMPLETED)
+        total_failed = item_repo.count_by_status(UUID(run_id), ItemStatus.FAILED)
+
         # Only mark as completed if not already marked as failed
         if run and run.status != "failed":
-            # Derive counts from actual item statuses — correct across retries and reopens
-            item_repo = EvaluationRunItemRepository(db)
-            total_processed = item_repo.count_by_status(run.id, ItemStatus.COMPLETED)
-            total_failed = item_repo.count_by_status(run.id, ItemStatus.FAILED)
-
             if total_processed == 0 and total_failed > 0:
                 run_repo.mark_failed(
                     UUID(run_id),
@@ -316,11 +316,7 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
                 if run.email and run.access_token:
                     send_batch_failed(run.email, run.access_token)
             else:
-                run_repo.mark_completed(
-                    run_id=UUID(run_id),
-                    processed_count=total_processed,
-                    failed_count=total_failed,
-                )
+                run_repo.mark_completed(UUID(run_id))
                 if run.email and run.access_token:
                     send_batch_completed(run.email, run.access_token)
         else:

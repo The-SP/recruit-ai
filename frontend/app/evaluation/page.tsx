@@ -346,6 +346,7 @@ function AddCandidatesPanel({
       setFiles([]);
       setIsOpen(false);
       onSuccess();
+      setTimeout(() => setResult(null), 5000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
