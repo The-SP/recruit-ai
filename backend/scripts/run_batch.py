@@ -65,11 +65,11 @@ def create_batch_from_folder(job_id: str, folder_path: str) -> str:
 
             # Create item record
             item_repo.create_uploaded(run.id, filename, file_size)
-            run_repo.increment_total_count(run.id)
+            run_repo.adjust_total_count(run.id)
             print(f"  + Added: {filename} ({file_size} KB)")
 
         # Transition to pending
-        item_repo.mark_all_pending(run.id)
+        item_repo.mark_uploaded_as_pending(run.id)
         run_repo.mark_pending(run.id)
         print(f"✓ Batch ready with {run.total_count} files")
 

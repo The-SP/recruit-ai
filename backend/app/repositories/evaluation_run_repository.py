@@ -110,18 +110,24 @@ class EvaluationRunRepository:
 
         return self.db.scalars(stmt).first()
 
-    def increment_total_count(self, run_id: UUID) -> None:
-        """Increment total_count when a file is added."""
+    def get_by_token_for_update(self, token: str) -> EvaluationRun | None:
+        """Fetch run by token with a row-level lock (SELECT FOR UPDATE).
+
+        Use when you need to check-then-modify status atomically. The lock
+        is released on the next db.commit() or when the session closes.
+        """
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.access_token == token)
+            .with_for_update()
+        )
+        return self.db.scalars(stmt).first()
+
+    def adjust_total_count(self, run_id: UUID, delta: int = 1) -> None:
+        """Adjust total_count by delta (positive to add, negative to remove)."""
         run = self.get_by_id(run_id)
         if run:
-            run.total_count += 1
-            self.db.commit()
-
-    def decrement_total_count(self, run_id: UUID) -> None:
-        """Decrement total_count when a file is removed."""
-        run = self.get_by_id(run_id)
-        if run and run.total_count > 0:
-            run.total_count -= 1
+            run.total_count += delta
             self.db.commit()
 
     def mark_pending(self, run_id: UUID) -> None:
@@ -260,8 +266,8 @@ class EvaluationRunItemRepository:
         )
         return list(self.db.scalars(stmt).all())
 
-    def mark_all_pending(self, run_id: UUID):
-        """Bulk update all 'uploaded' items to 'pending'. Returns count updated."""
+    def mark_uploaded_as_pending(self, run_id: UUID):
+        """Bulk update all 'uploaded' items to 'pending'."""
         stmt = (
             update(EvaluationRunItem)
             .where(EvaluationRunItem.evaluation_run_id == run_id)

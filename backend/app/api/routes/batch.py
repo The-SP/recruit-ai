@@ -108,7 +108,7 @@ async def submit_batch(
             content, file_size = await read_pdf_content(file)
             save_uploaded_file(run.folder_path, filename, content)
             item_repo.create_uploaded(run.id, filename, file_size)
-            run_repo.increment_total_count(run.id)
+            run_repo.adjust_total_count(run.id)
             uploaded += 1
 
         except ValidationError as e:
@@ -130,7 +130,7 @@ async def submit_batch(
         )
 
     # Transition items and run to pending
-    item_repo.mark_all_pending(run.id)
+    item_repo.mark_uploaded_as_pending(run.id)
     run_repo.mark_pending(run.id)
 
     # Dispatch Celery task
@@ -244,7 +244,7 @@ async def add_candidates_to_batch(
         raise ValidationError("At least one PDF file is required")
 
     run_repo = EvaluationRunRepository(db)
-    run = run_repo.get_by_token(token)
+    run = run_repo.get_by_token_for_update(token)
     if not run:
         raise NotFoundError("Batch", token)
 
@@ -256,7 +256,7 @@ async def add_candidates_to_batch(
         )
 
     item_repo = EvaluationRunItemRepository(db)
-    uploaded = 0
+    uploaded_items: list[tuple[str, UUID]] = []  # (filename, item_id)
     failed = 0
     errors: list[str] = []
     duplicate_files: list[str] = []
@@ -272,9 +272,8 @@ async def add_candidates_to_batch(
 
             content, file_size = await read_pdf_content(file)
             save_uploaded_file(run.folder_path, filename, content)
-            item_repo.create_uploaded(run.id, filename, file_size)
-            run_repo.increment_total_count(run.id)
-            uploaded += 1
+            item = item_repo.create_uploaded(run.id, filename, file_size)
+            uploaded_items.append((filename, item.id))
 
         except ValidationError as e:
             errors.append(f"{file.filename or 'unknown'}: {e.message}")
@@ -282,6 +281,8 @@ async def add_candidates_to_batch(
         except Exception as e:
             errors.append(f"{file.filename or 'unknown'}: {str(e)[:100]}")
             failed += 1
+
+    uploaded = len(uploaded_items)
 
     if duplicate_files:
         errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
@@ -291,22 +292,25 @@ async def add_candidates_to_batch(
             f"No valid PDF files uploaded. Errors: {'; '.join(errors)}"
         )
 
-    item_repo.mark_all_pending(run.id)
-    run_repo.mark_reopened(run.id)
+    run_repo.adjust_total_count(run.id, uploaded)
+    item_repo.mark_uploaded_as_pending(run.id)
+    run_repo.mark_reopened(run.id)  # commits, releasing the FOR UPDATE lock
 
     try:
         process_evaluation_run.delay(str(run.id))
     except Exception as e:
         run_repo.mark_failed(run.id, str(e))
+        for filename, item_id in uploaded_items:
+            delete_file(run.id, filename)
+            item_repo.delete_item(item_id)
+        run_repo.adjust_total_count(run.id, -uploaded)
         raise ValidationError(f"Failed to start batch processing: {e}")
-
-    db.refresh(run)
 
     return AddCandidatesResponse(
         uploaded=uploaded,
         failed=failed,
         errors=errors,
-        run_status=run.status,
+        run_status=RunStatus.PENDING.value,
     )
 
 
@@ -470,7 +474,7 @@ async def upload_files(
             content, file_size = await read_pdf_content(file)
             save_uploaded_file(run.folder_path, filename, content)
             item = item_repo.create_uploaded(run_id, filename, file_size)
-            run_repo.increment_total_count(run_id)
+            run_repo.adjust_total_count(run_id)
 
             results.append(
                 BatchFileUploadResult(filename=filename, success=True, file_id=item.id)
@@ -545,7 +549,7 @@ def delete_batch_file(
 
     delete_file(run_id, item.pdf_filename)
     item_repo.delete_item(item_id)
-    run_repo.decrement_total_count(run_id)
+    run_repo.adjust_total_count(run_id, delta=-1)
 
 
 @router.post("/{run_id}/start", response_model=BatchRunResponse)
@@ -566,7 +570,7 @@ def start_batch(run_id: UUID, db: Session = Depends(get_db)) -> BatchRunResponse
         raise ValidationError("Cannot start batch with no files")
 
     item_repo = EvaluationRunItemRepository(db)
-    item_repo.mark_all_pending(run_id)
+    item_repo.mark_uploaded_as_pending(run_id)
     run_repo.mark_pending(run_id)
 
     try:
