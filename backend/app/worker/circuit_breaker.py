@@ -12,12 +12,10 @@ from sqlalchemy.orm import Session
 from app.config import Config
 from app.core.logger import init_logger
 from app.models.database import create_session
-from app.models.evaluation_run import RunStatus
 from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
     EvaluationRunRepository,
 )
-from app.worker.celery_app import get_failed_key
 
 logger = init_logger(__name__)
 
@@ -111,7 +109,6 @@ def handle_rate_limit_failure(
     try:
         item_repo = EvaluationRunItemRepository(db)
         item_repo.mark_failed(item_id, f"Rate limit exceeded: {str(error)[:200]}")
-        redis_client.incr(get_failed_key(str(run_id)))
     except Exception as e:
         logger.error(f"Failed to mark item as failed: {e}")
 
@@ -136,7 +133,6 @@ def handle_circuit_breaker_skip(item_id: UUID) -> None:
             item_repo.mark_failed(
                 item.id, "Skipped - rate limit circuit breaker active"
             )
-            redis_client.incr(get_failed_key(str(item.evaluation_run_id)))
     except Exception as e:
         logger.error(f"Failed to mark item as skipped: {e}")
     finally:

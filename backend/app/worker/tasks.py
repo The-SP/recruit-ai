@@ -3,9 +3,7 @@ from uuid import UUID
 
 from celery import chord, group
 from celery.exceptions import SoftTimeLimitExceeded
-from redis import Redis
 
-from app.config import Config
 from app.core.logger import init_logger
 from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
@@ -21,7 +19,7 @@ from app.repositories.job_repository import JobRepository
 from app.schemas.job_description import JobDescriptionResponse
 from app.schemas.job_utils import build_job_requirements_schema
 from app.services.email_service import send_batch_completed, send_batch_failed
-from app.worker.celery_app import celery_app, get_failed_key, get_progress_key
+from app.worker.celery_app import celery_app
 from app.worker.circuit_breaker import (
     handle_circuit_breaker_skip,
     handle_rate_limit_failure,
@@ -30,11 +28,6 @@ from app.worker.circuit_breaker import (
 )
 
 logger = init_logger(__name__)
-
-redis_client = Redis.from_url(Config.REDIS_URL)
-
-# Key expiration (24 hours)
-KEY_EXPIRATION = 86400
 
 
 def _job_model_to_response(job) -> JobDescriptionResponse:
@@ -133,10 +126,6 @@ def process_evaluation_run(self, run_id: str) -> str:
             raise ValueError(f"No pending items found for run: {run_id}")
 
         logger.info(f"Found {len(item_ids)} pending items for run={run_id}")
-
-        # Initialize Redis counters
-        redis_client.set(get_progress_key(run_id), 0, ex=KEY_EXPIRATION)
-        redis_client.set(get_failed_key(run_id), 0, ex=KEY_EXPIRATION)
 
         # Mark run as processing
         run_repo.mark_started(UUID(run_id))
@@ -244,9 +233,6 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
             evaluation_id=evaluation.id,
         )
 
-        # Increment success counter
-        redis_client.incr(get_progress_key(run_id))
-
         logger.info(
             f"✓ Completed item={item_id}: candidate={candidate.id}, score={result.final_score}"
         )
@@ -261,8 +247,6 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
             item = item_repo.get_by_id(UUID(item_id))
             if item:
                 item_repo.mark_failed(item.id, "Task timed out (soft limit)")
-                run_id = str(item.evaluation_run_id)
-                redis_client.incr(get_failed_key(run_id))
         except Exception as inner_e:
             logger.error(f"Failed to mark timed-out item as failed: {inner_e}")
 
@@ -286,8 +270,6 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
             item = item_repo.get_by_id(UUID(item_id))
             if item:
                 item_repo.mark_failed(item.id, error_str[:500])
-                run_id = str(item.evaluation_run_id)
-                redis_client.incr(get_failed_key(run_id))
         except Exception as inner_e:
             logger.error(f"Failed to mark item as failed: {inner_e}")
 
@@ -346,10 +328,6 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
 
     finally:
         db.close()
-
-    # Clean up Redis keys
-    redis_client.delete(get_progress_key(run_id))
-    redis_client.delete(get_failed_key(run_id))
 
     final_status = (
         "failed" if total_processed == 0 and total_failed > 0 else "completed"

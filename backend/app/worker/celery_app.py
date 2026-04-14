@@ -28,12 +28,3 @@ celery_app.conf.update(
     # Result expiration (24 hours)
     result_expires=86400,
 )
-
-
-# Redis key helpers for progress tracking
-def get_progress_key(run_id: str) -> str:
-    return f"evaluation_run:{run_id}:processed"
-
-
-def get_failed_key(run_id: str) -> str:
-    return f"evaluation_run:{run_id}:failed"
