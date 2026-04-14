@@ -26,6 +26,7 @@ from app.api.schemas.public import (
     HistoryListResponse,
     JobSummary,
     ProgressInfo,
+    RetryFailedResponse,
 )
 from app.core.file_storage import delete_file, save_uploaded_file
 from app.core.file_upload import read_pdf_content, validate_pdf_filename
@@ -201,6 +202,7 @@ def get_batch_status_by_token(
 
             results.append(
                 CandidateResult(
+                    item_id=item.id,
                     candidate_id=item.candidate_id,
                     candidate_name=candidate_name,
                     filename=item.pdf_filename,
@@ -310,6 +312,107 @@ async def add_candidates_to_batch(
         uploaded=uploaded,
         failed=failed,
         errors=errors,
+        run_status=RunStatus.PENDING.value,
+    )
+
+
+@router.post(
+    "/status/{token}/retry-failed",
+    response_model=RetryFailedResponse,
+)
+def retry_all_failed(
+    token: str,
+    db: Session = Depends(get_db),
+) -> RetryFailedResponse:
+    """
+    Retry all failed items in a completed or failed batch run.
+
+    Re-queues every item with status 'failed' for re-evaluation against the
+    same job description. The PDF files must still be present on disk (they
+    are never deleted after upload). Returns 400 if the run is currently
+    pending or processing, or if there are no failed items to retry.
+    """
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_token_for_update(token)
+    if not run:
+        raise NotFoundError("Batch", token)
+
+    allowed_statuses = {RunStatus.COMPLETED.value, RunStatus.FAILED.value}
+    if run.status not in allowed_statuses:
+        raise ValidationError(
+            f"Cannot retry items in a run with status '{run.status}'. "
+            "The run must be completed or failed."
+        )
+
+    item_repo = EvaluationRunItemRepository(db)
+    failed_items = item_repo.get_failed_items(run.id)
+    if not failed_items:
+        raise ValidationError("No failed items to retry in this batch.")
+
+    failed_item_ids = [item.id for item in failed_items]
+    item_repo.mark_items_as_pending(failed_item_ids)
+    run_repo.mark_reopened(run.id)
+
+    try:
+        process_evaluation_run.delay(str(run.id))
+    except Exception as e:
+        run_repo.mark_failed(run.id, str(e))
+        raise ValidationError(f"Failed to start batch processing: {e}")
+
+    return RetryFailedResponse(
+        retried=len(failed_item_ids),
+        run_status=RunStatus.PENDING.value,
+    )
+
+
+@router.post(
+    "/status/{token}/retry-failed/{item_id}",
+    response_model=RetryFailedResponse,
+)
+def retry_single_failed(
+    token: str,
+    item_id: UUID,
+    db: Session = Depends(get_db),
+) -> RetryFailedResponse:
+    """
+    Retry a single failed item in a completed or failed batch run.
+
+    Re-queues the specified item for re-evaluation. Returns 404 if the item
+    does not belong to this run or is not in a failed state.
+    """
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_token_for_update(token)
+    if not run:
+        raise NotFoundError("Batch", token)
+
+    allowed_statuses = {RunStatus.COMPLETED.value, RunStatus.FAILED.value}
+    if run.status not in allowed_statuses:
+        raise ValidationError(
+            f"Cannot retry items in a run with status '{run.status}'. "
+            "The run must be completed or failed."
+        )
+
+    item_repo = EvaluationRunItemRepository(db)
+    item = item_repo.get_by_id(item_id)
+    if not item or item.evaluation_run_id != run.id:
+        raise NotFoundError("Item", str(item_id))
+
+    if item.status != "failed":
+        raise ValidationError(
+            f"Item is not in a failed state (current status: '{item.status}')."
+        )
+
+    item_repo.mark_items_as_pending([item_id])
+    run_repo.mark_reopened(run.id)
+
+    try:
+        process_evaluation_run.delay(str(run.id))
+    except Exception as e:
+        run_repo.mark_failed(run.id, str(e))
+        raise ValidationError(f"Failed to start batch processing: {e}")
+
+    return RetryFailedResponse(
+        retried=1,
         run_status=RunStatus.PENDING.value,
     )
 

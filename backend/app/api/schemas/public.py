@@ -36,6 +36,7 @@ class JobSummary(BaseModel):
 class CandidateResult(BaseModel):
     """Individual candidate result."""
 
+    item_id: UUID
     candidate_id: UUID | None = None
     candidate_name: str | None = None
     filename: str
@@ -91,6 +92,13 @@ class AddCandidatesResponse(BaseModel):
         default_factory=list, description="Error messages for failed uploads"
     )
     run_status: str = Field(..., description="New run status after adding candidates")
+
+
+class RetryFailedResponse(BaseModel):
+    """Response after retrying failed items in a batch."""
+
+    retried: int = Field(..., description="Number of items queued for retry")
+    run_status: str = Field(..., description="New run status after retry")
 
 
 class CandidateBreakdownResponse(BaseModel):

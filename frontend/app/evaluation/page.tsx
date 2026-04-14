@@ -2,7 +2,7 @@
 
 import {
     BookOpen, Briefcase, CheckCircle, ChevronDown, ChevronLeft, ChevronUp, Clock, Download,
-    FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, Sparkles, Users, X, Zap
+    FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, RotateCcw, Sparkles, Users, X, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -23,7 +23,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ApiError } from '@/services/api';
 import {
     AddCandidatesResponse, BatchStatus, CandidateBreakdown,
-    addCandidatesToBatch, getCandidateBreakdown, getBatchStatus
+    addCandidatesToBatch, getCandidateBreakdown, getBatchStatus,
+    retryAllFailed, retrySingleFailed
 } from '@/services/batch';
 
 const signalStyles: Record<string, string> = {
@@ -434,6 +435,8 @@ export default function EvaluationPage() {
   const [breakdownCache, setBreakdownCache] = useState<
     Record<string, CandidateBreakdown | "loading" | "error">
   >({});
+  const [isRetryingAll, setIsRetryingAll] = useState(false);
+  const [retryingItemIds, setRetryingItemIds] = useState<Set<string>>(new Set());
 
   const fetchStatus = async (t: string, isRefresh = false) => {
     if (isRefresh) {
@@ -478,6 +481,34 @@ export default function EvaluationPage() {
     e.preventDefault();
     if (tokenInput.trim()) {
       router.push(`/evaluation?token=${tokenInput.trim()}`);
+    }
+  };
+
+  const anyRetrying = isRetryingAll || retryingItemIds.size > 0;
+
+  const handleRetryAll = async () => {
+    if (!token) return;
+    setIsRetryingAll(true);
+    try {
+      await retryAllFailed(token);
+      await fetchStatus(token);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to retry");
+    } finally {
+      setIsRetryingAll(false);
+    }
+  };
+
+  const handleRetrySingle = async (itemId: string) => {
+    if (!token) return;
+    setRetryingItemIds(prev => new Set(prev).add(itemId));
+    try {
+      await retrySingleFailed(token, itemId);
+      await fetchStatus(token);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to retry");
+    } finally {
+      setRetryingItemIds(prev => { const next = new Set(prev); next.delete(itemId); return next; });
     }
   };
 
@@ -631,6 +662,23 @@ export default function EvaluationPage() {
               {isProcessing ? "Processing" : "Completed"}
             </Badge>
           </div>
+          {!isProcessing && data.progress.failed > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetryAll}
+              disabled={anyRetrying}
+              className="h-10 px-4 rounded-xl border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+              title="Re-queue all failed candidates for evaluation"
+            >
+              {isRetryingAll ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
+              Retry Failed ({data.progress.failed})
+            </Button>
+          )}
           {!isProcessing && data.results.length > 0 && (
             <Button
               variant="outline"
@@ -718,7 +766,12 @@ export default function EvaluationPage() {
               />
             </div>
             <div className="flex items-center justify-between text-xs text-zinc-400 font-medium pt-0.5">
-              <span>{data.progress.processed} of {data.progress.total} candidates completed</span>
+              <span>
+                {data.progress.processed} of {data.progress.total} candidates completed
+                {data.progress.failed > 0 && (
+                  <span className="text-red-400 ml-1">({data.progress.failed} failed)</span>
+                )}
+              </span>
               <span className="flex items-center gap-1.5">
                 <RefreshCw className="w-3 h-3" />
                 Auto-refreshing every 10s
@@ -789,53 +842,75 @@ export default function EvaluationPage() {
 
                     return (
                       <React.Fragment key={result.candidate_id ?? index}>
-                        <TableRow
-                          onClick={() => handleRowClick(result.candidate_id)}
-                          className={cn(
-                            "cursor-pointer select-none",
-                            isExpanded && "bg-zinc-50"
-                          )}
-                        >
-                          <TableCell className="text-center font-bold">{index + 1}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <FileText className="w-5 h-5 text-zinc-400 shrink-0" />
-                              <div>
-                                <span className="font-medium truncate">
-                                  {result.candidate_name ?? result.filename}
-                                </span>
-                                {result.candidate_name && (
-                                  <p className="text-xs text-zinc-400">{result.filename}</p>
+                        {(() => {
+                          const isFailed = result.status === "failed";
+                          const isRetryingThis = retryingItemIds.has(result.item_id);
+                          return (
+                            <TableRow
+                              onClick={() => !isFailed && handleRowClick(result.candidate_id)}
+                              className={cn(
+                                "select-none",
+                                isFailed ? "opacity-60" : "cursor-pointer",
+                                isExpanded && "bg-zinc-50"
+                              )}
+                            >
+                              <TableCell className="text-center font-bold">{index + 1}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <FileText className={cn("w-5 h-5 shrink-0", isFailed ? "text-red-300" : "text-zinc-400")} />
+                                  <div>
+                                    <span className="font-medium truncate">
+                                      {result.candidate_name ?? result.filename}
+                                    </span>
+                                    {result.candidate_name && (
+                                      <p className="text-xs text-zinc-400">{result.filename}</p>
+                                    )}
+                                    {isFailed && (
+                                      <p className="text-xs text-red-500 font-medium mt-0.5">Evaluation failed</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {scorePct != null ? (
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className="font-bold">{scorePct}%</span>
+                                    <Progress
+                                      value={scorePct}
+                                      className={cn("h-1 w-16", scoreBarColor(result.final_score!))}
+                                    />
+                                  </div>
+                                ) : "—"}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {result.hire_signal ? (
+                                  <Badge variant="outline" className={signalStyles[result.hire_signal]}>
+                                    {signalLabels[result.hire_signal] || result.hire_signal}
+                                  </Badge>
+                                ) : "—"}
+                              </TableCell>
+                              <TableCell className="text-center w-10">
+                                {isFailed && !isProcessing ? (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleRetrySingle(result.item_id); }}
+                                    disabled={anyRetrying}
+                                    className="p-1.5 rounded-lg text-zinc-400 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer mx-auto block"
+                                    title="Re-queue this candidate for evaluation"
+                                  >
+                                    {isRetryingThis
+                                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                                      : <RotateCcw className="w-4 h-4" />
+                                    }
+                                  </button>
+                                ) : id && (
+                                  isExpanded
+                                    ? <ChevronUp className="w-4 h-4 text-zinc-400 mx-auto" />
+                                    : <ChevronDown className="w-4 h-4 text-zinc-400 mx-auto" />
                                 )}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {scorePct != null ? (
-                              <div className="flex flex-col items-center gap-1.5">
-                                <span className="font-bold">{scorePct}%</span>
-                                <Progress
-                                  value={scorePct}
-                                  className={cn("h-1 w-16", scoreBarColor(result.final_score!))}
-                                />
-                              </div>
-                            ) : "—"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {result.hire_signal ? (
-                              <Badge variant="outline" className={signalStyles[result.hire_signal]}>
-                                {signalLabels[result.hire_signal] || result.hire_signal}
-                              </Badge>
-                            ) : "—"}
-                          </TableCell>
-                          <TableCell className="text-center w-10">
-                            {id && (
-                              isExpanded
-                                ? <ChevronUp className="w-4 h-4 text-zinc-400 mx-auto" />
-                                : <ChevronDown className="w-4 h-4 text-zinc-400 mx-auto" />
-                            )}
-                          </TableCell>
-                        </TableRow>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()}
 
                         <TableRow className="hover:bg-transparent">
                           <TableCell colSpan={5} className="p-0 border-b-0 whitespace-normal">

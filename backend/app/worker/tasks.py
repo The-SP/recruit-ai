@@ -90,6 +90,8 @@ def process_evaluation_run(self, run_id: str) -> str:
         try:
             run_repo = EvaluationRunRepository(db)
             run_repo.mark_failed(UUID(run_id), error_msg)
+            item_repo = EvaluationRunItemRepository(db)
+            item_repo.mark_pending_items_as_failed(UUID(run_id), error_msg)
         finally:
             db.close()
         _send_failure_email(UUID(run_id))
@@ -309,18 +311,9 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
     """
     logger.info(f"Finalizing run={run_id}")
 
-    # Get final counts from Redis
-    processed_raw = redis_client.get(get_progress_key(run_id))
-    failed_raw = redis_client.get(get_failed_key(run_id))
-
-    wave_processed = (
-        int(processed_raw) if isinstance(processed_raw, (int, bytes, str)) else 0
-    )
-    wave_failed = int(failed_raw) if isinstance(failed_raw, (int, bytes, str)) else 0
-
     db = create_session()
-    total_processed = wave_processed
-    total_failed = wave_failed
+    total_processed = 0
+    total_failed = 0
 
     try:
         run_repo = EvaluationRunRepository(db)
@@ -328,9 +321,10 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
 
         # Only mark as completed if not already marked as failed
         if run and run.status != "failed":
-            # Accumulate onto existing counts (handles re-open case; for first run these are 0)
-            total_processed = (run.processed_count or 0) + wave_processed
-            total_failed = (run.failed_count or 0) + wave_failed
+            # Derive counts from actual item statuses — correct across retries and reopens
+            item_repo = EvaluationRunItemRepository(db)
+            total_processed = item_repo.count_by_status(run.id, ItemStatus.COMPLETED)
+            total_failed = item_repo.count_by_status(run.id, ItemStatus.FAILED)
 
             if total_processed == 0 and total_failed > 0:
                 run_repo.mark_failed(

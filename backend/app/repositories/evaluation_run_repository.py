@@ -1,8 +1,10 @@
 import secrets
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.file_storage import delete_batch_folder, ensure_folder, get_batch_folder
@@ -144,6 +146,8 @@ class EvaluationRunRepository:
             run.status = RunStatus.PENDING.value
             run.completed_at = None  # cleared so mark_completed can compute wave delta
             run.started_at = None  # cleared so wave duration is measured from new start
+            run.processed_count = 0  # will be recomputed from item statuses at finalize
+            run.failed_count = 0
             self.db.commit()
             logger.info(f"Reopened evaluation run: id={run_id}")
 
@@ -329,3 +333,57 @@ class EvaluationRunItemRepository:
                     item.completed_at - item.started_at
                 ).total_seconds()
             self.db.commit()
+
+    def get_failed_items(self, run_id: UUID) -> list[EvaluationRunItem]:
+        """Get items with 'failed' status for a run."""
+        stmt = (
+            select(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.status == ItemStatus.FAILED.value)
+            .order_by(EvaluationRunItem.created_at)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def count_by_status(self, run_id: UUID, status: ItemStatus) -> int:
+        """Count items in a given status for a run."""
+        stmt = (
+            select(func.count())
+            .select_from(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.status == status.value)
+        )
+        return self.db.scalar(stmt) or 0
+
+    def mark_pending_items_as_failed(self, run_id: UUID, error_message: str) -> int:
+        """Bulk mark all pending items in a run as failed."""
+        now = datetime.now()
+        stmt = (
+            update(EvaluationRunItem)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.status == ItemStatus.PENDING.value)
+            .values(
+                status=ItemStatus.FAILED.value,
+                error_message=error_message,
+                completed_at=now,
+            )
+        )
+        result = cast(CursorResult[Any], self.db.execute(stmt))
+        self.db.commit()
+        return result.rowcount
+
+    def mark_items_as_pending(self, item_ids: list[UUID]) -> int:
+        """Bulk reset specific items to pending status, clearing error state."""
+        stmt = (
+            update(EvaluationRunItem)
+            .where(EvaluationRunItem.id.in_(item_ids))
+            .values(
+                status=ItemStatus.PENDING.value,
+                error_message=None,
+                started_at=None,
+                completed_at=None,
+                processing_time_seconds=None,
+            )
+        )
+        result = cast(CursorResult[Any], self.db.execute(stmt))
+        self.db.commit()
+        return result.rowcount

@@ -26,6 +26,7 @@ export interface BatchStatus {
 }
 
 export interface CandidateResult {
+  item_id: string;
   candidate_id: string | null;
   candidate_name: string | null;
   filename: string;
@@ -122,6 +123,11 @@ export interface AddCandidatesResponse {
   run_status: string;
 }
 
+export interface RetryFailedResponse {
+  retried: number;
+  run_status: string;
+}
+
 // API functions
 export async function submitBatch(
   jobText: string,
@@ -165,5 +171,22 @@ export async function addCandidatesToBatch(
   return apiRequest<AddCandidatesResponse>(
     `/batch/status/${token}/add-candidates`,
     { method: "POST", body: formData }
+  );
+}
+
+export async function retryAllFailed(token: string): Promise<RetryFailedResponse> {
+  return apiRequest<RetryFailedResponse>(
+    `/batch/status/${token}/retry-failed`,
+    { method: "POST" }
+  );
+}
+
+export async function retrySingleFailed(
+  token: string,
+  itemId: string
+): Promise<RetryFailedResponse> {
+  return apiRequest<RetryFailedResponse>(
+    `/batch/status/${token}/retry-failed/${itemId}`,
+    { method: "POST" }
   );
 }
