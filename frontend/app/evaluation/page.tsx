@@ -1,8 +1,9 @@
 "use client";
 
 import {
-    BookOpen, Briefcase, CheckCircle, ChevronDown, ChevronLeft, ChevronUp, Clock, Download,
-    FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, RotateCcw, Sparkles, Users, X, Zap
+    ArrowDown, ArrowUp, BookOpen, Briefcase, CheckCircle, ChevronDown, ChevronLeft, ChevronUp,
+    Clock, Download, FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, RotateCcw,
+    Search, Sparkles, Users, X, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -19,6 +20,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiError } from '@/services/api';
 import {
@@ -78,6 +80,7 @@ const tierSectionStyles: Record<string, { label: string; headerClass: string }> 
 };
 
 type BreakdownSection = "skills" | "experience" | "education";
+type SortBy = "score_desc" | "name_asc" | "name_desc";
 
 function CandidateBreakdownPanel({
   breakdown,
@@ -438,6 +441,9 @@ export default function EvaluationPage() {
   >({});
   const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [retryingItemIds, setRetryingItemIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterSignal, setFilterSignal] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("score_desc");
 
   const fetchStatus = async (t: string, isRefresh = false) => {
     if (isRefresh) {
@@ -473,6 +479,13 @@ export default function EvaluationPage() {
     const interval = setInterval(() => fetchStatus(token, true), 10000);
     return () => clearInterval(interval);
   }, [token, isProcessing]);
+
+  // Reset controls when a new batch is loaded
+  useEffect(() => {
+    setSearchQuery("");
+    setFilterSignal("all");
+    setSortBy("score_desc");
+  }, [data?.run_id]);
 
   const handleRefresh = () => {
     if (token) fetchStatus(token, true);
@@ -642,6 +655,36 @@ export default function EvaluationPage() {
     r => r.hire_signal === "strong_match" || r.hire_signal === "good_match"
   ).length;
 
+  const sourceResults = isProcessing ? completedResults : data.results;
+  const needsFilter = searchQuery !== "" || filterSignal !== "all";
+  const needsSort = sortBy !== "score_desc";
+
+  const displayResults = (() => {
+    let results = sourceResults;
+
+    if (needsFilter) {
+      const q = searchQuery.toLowerCase();
+      results = results.filter(r => {
+        if (filterSignal !== "all" && r.hire_signal !== filterSignal) return false;
+        if (q === "") return true;
+        return (r.candidate_name?.toLowerCase().includes(q) ?? false) || r.filename.toLowerCase().includes(q);
+      });
+    }
+
+    if (needsSort) {
+      results = [...results].sort((a, b) => {
+        const nameA = (a.candidate_name ?? a.filename).toLowerCase();
+        const nameB = (b.candidate_name ?? b.filename).toLowerCase();
+        const cmp = nameA.localeCompare(nameB);
+        return sortBy === "name_asc" ? cmp : -cmp;
+      });
+    }
+
+    return results;
+  })();
+
+  const isFiltered = needsFilter;
+
   return (
     <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
       {/* Header Info */}
@@ -669,7 +712,7 @@ export default function EvaluationPage() {
               size="sm"
               onClick={handleRetryAll}
               disabled={anyRetrying}
-              className="h-10 px-4 rounded-xl border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+              className="h-10 px-4 border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
               title="Re-queue all failed candidates for evaluation"
             >
               {isRetryingAll ? (
@@ -685,7 +728,7 @@ export default function EvaluationPage() {
               variant="outline"
               size="sm"
               onClick={exportToCSV}
-              className="h-10 px-4 rounded-xl border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+              className="h-10 px-4 border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
             >
               <Download className="w-4 h-4" />
               Export CSV
@@ -696,7 +739,7 @@ export default function EvaluationPage() {
             size="icon"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="w-10 h-10 rounded-xl border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-all active:rotate-180 duration-500 cursor-pointer"
+            className="w-10 h-10 border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-all active:rotate-180 duration-500 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
           </Button>
@@ -740,7 +783,7 @@ export default function EvaluationPage() {
                 <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
                 Top Matches
               </div>
-              <div className="text-3xl font-black text-zinc-900">{topMatchCount}</div>
+              <div className="text-3xl font-black text-zinc-900">{topMatchCount > 0 ? topMatchCount : "-"}</div>
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -783,6 +826,39 @@ export default function EvaluationPage() {
       )}
 
       <div className="space-y-8">
+        {/* Search / filter controls */}
+        {data.results.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+              <Input
+                placeholder="Search by name or file…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 rounded-xl border-zinc-200 text-sm"
+              />
+            </div>
+            <Select value={filterSignal} onValueChange={setFilterSignal}>
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Signals</SelectItem>
+                <SelectItem value="strong_match">Strong Match</SelectItem>
+                <SelectItem value="good_match">Good Match</SelectItem>
+                <SelectItem value="partial_match">Partial Match</SelectItem>
+                <SelectItem value="weak_match">Weak Match</SelectItem>
+                <SelectItem value="no_match">No Match</SelectItem>
+              </SelectContent>
+            </Select>
+            {isFiltered && (
+              <span className="text-xs font-medium text-zinc-400 ml-1">
+                {displayResults.length} of {sourceResults.length}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Results table — shown when completed, or when partial results exist during processing */}
         {(!isProcessing || completedResults.length > 0) && (
           <>
@@ -807,12 +883,25 @@ export default function EvaluationPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-20 text-center">Rank</TableHead>
-                      <TableHead>Resume</TableHead>
-                      <TableHead className="w-32 text-center">Score</TableHead>
+                      <TableHead>
+                        <button
+                          onClick={() => setSortBy(prev => prev === "name_asc" ? "name_desc" : prev === "name_desc" ? "score_desc" : "name_asc")}
+                          className="flex items-center gap-1 font-semibold hover:text-zinc-700 transition-colors cursor-pointer"
+                        >
+                          Resume
+                          {sortBy === "name_asc" && <ArrowUp className="w-3 h-3 text-primary" />}
+                          {sortBy === "name_desc" && <ArrowDown className="w-3 h-3 text-primary" />}
+                        </button>
+                      </TableHead>
+                      <TableHead className="w-32 text-center">
+                        <span className="flex items-center justify-center gap-1 font-semibold">
+                          Score
+                          <ArrowDown className={cn("w-3 h-3", sortBy === "score_desc" ? "text-primary" : "text-transparent")} />
+                        </span>
+                      </TableHead>
                       <TableHead className="w-40 text-center">Hire Signal</TableHead>
                       <TableHead className="w-24 text-right pr-4">
                         {(() => {
-                          const displayResults = isProcessing ? completedResults : data.results;
                           const expandableIds = displayResults
                             .map(r => r.candidate_id)
                             .filter(Boolean) as string[];
@@ -835,7 +924,20 @@ export default function EvaluationPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(isProcessing ? completedResults : data.results).map((result, index) => {
+                    {displayResults.length === 0 && (needsFilter) ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-16 text-center">
+                          <p className="text-zinc-500 font-medium text-sm">No candidates match your filters.</p>
+                          <button
+                            onClick={() => { setSearchQuery(""); setFilterSignal("all"); }}
+                            className="mt-2 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                          >
+                            Clear filters
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                    {displayResults.map((result, index) => {
                     const id = result.candidate_id;
                     const isExpanded = id !== null && expandedIds.has(id);
                     const breakdown = id ? breakdownCache[id] : undefined;
