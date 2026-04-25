@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Briefcase } from "lucide-react";
+import { ModeToggle } from "@/components/mode-toggle";
 
 export function Header() {
   return (
@@ -11,12 +12,15 @@ export function Header() {
           </div>
           <span className="text-xl font-bold text-primary">Recruit AI</span>
         </Link>
-        <Link
-          href="/evaluation"
-          className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors bg-muted/50 hover:bg-primary/5 px-4 py-2 rounded-full border hover:border-primary/20"
-        >
-          View Results
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/evaluation"
+            className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors bg-muted/50 hover:bg-primary/5 px-4 py-2 rounded-full border hover:border-primary/20"
+          >
+            View Results
+          </Link>
+          <ModeToggle />
+        </div>
       </div>
     </header>
   );

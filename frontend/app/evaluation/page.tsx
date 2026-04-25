@@ -30,11 +30,11 @@ import {
 } from '@/services/batch';
 
 const signalStyles: Record<string, string> = {
-  strong_match: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  good_match: "bg-blue-100 text-blue-700 border-blue-200",
-  partial_match: "bg-amber-100 text-amber-700 border-amber-200",
-  weak_match: "bg-orange-100 text-orange-700 border-orange-200",
-  no_match: "bg-red-100 text-red-700 border-red-200",
+  strong_match: "bg-success text-success-foreground border-success-edge",
+  good_match: "bg-info text-info-foreground border-info-edge",
+  partial_match: "bg-warning text-warning-foreground border-warning-edge",
+  weak_match: "bg-warning text-warning-foreground border-warning-edge",
+  no_match: "bg-error text-error-foreground border-error-edge",
 };
 
 const signalLabels: Record<string, string> = {
@@ -46,9 +46,9 @@ const signalLabels: Record<string, string> = {
 };
 
 const matchTypeStyles: Record<string, string> = {
-  exact: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  partial: "bg-amber-100 text-amber-700 border-amber-200",
-  none: "bg-zinc-100 text-zinc-500 border-zinc-200",
+  exact: "bg-success text-success-foreground border-success-edge",
+  partial: "bg-warning text-warning-foreground border-warning-edge",
+  none: "bg-muted text-muted-foreground border-border",
 };
 
 const matchTypeLabels: Record<string, string> = {
@@ -59,24 +59,24 @@ const matchTypeLabels: Record<string, string> = {
 
 
 const relevanceStyles: Record<string, string> = {
-  high: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  medium: "bg-amber-100 text-amber-700 border-amber-200",
-  low: "bg-orange-100 text-orange-700 border-orange-200",
-  none: "bg-zinc-100 text-zinc-500 border-zinc-200",
+  high: "bg-success text-success-foreground border-success-edge",
+  medium: "bg-warning text-warning-foreground border-warning-edge",
+  low: "bg-warning text-warning-foreground border-warning-edge",
+  none: "bg-muted text-muted-foreground border-border",
 };
 
 function scoreBarColor(value: number): string {
-  if (value >= 0.7) return "[&>div]:bg-emerald-500";
-  if (value >= 0.5) return "[&>div]:bg-amber-500";
-  return "[&>div]:bg-red-500";
+  if (value >= 0.7) return "[&>div]:bg-success-foreground";
+  if (value >= 0.5) return "[&>div]:bg-warning-foreground";
+  return "[&>div]:bg-error-foreground";
 }
 
 const SKILL_TIERS = ["critical", "required", "preferred"] as const;
 
 const tierSectionStyles: Record<string, { label: string; headerClass: string }> = {
-  critical: { label: "Critical", headerClass: "text-red-500" },
-  required: { label: "Required", headerClass: "text-blue-500" },
-  preferred: { label: "Preferred", headerClass: "text-zinc-400" },
+  critical: { label: "Critical", headerClass: "text-error-foreground" },
+  required: { label: "Required", headerClass: "text-info-foreground" },
+  preferred: { label: "Preferred", headerClass: "text-muted-foreground" },
 };
 
 type BreakdownSection = "skills" | "experience" | "education";
@@ -102,16 +102,16 @@ function CandidateBreakdownPanel({
         isExpanded ? "max-h-[3000px] opacity-100" : "max-h-0 opacity-0"
       )}
     >
-      <div className="px-6 py-6 bg-zinc-50/70 border-t border-zinc-100 space-y-6 overflow-hidden w-full">
+      <div className="px-6 py-6 bg-muted/50 border-t border-border space-y-6 overflow-hidden w-full">
         {breakdown === "loading" && (
-          <div className="flex items-center gap-3 py-4 text-zinc-500">
+          <div className="flex items-center gap-3 py-4 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
             <span className="text-sm font-medium">Loading breakdown...</span>
           </div>
         )}
 
         {breakdown === "error" && (
-          <div className="flex items-center gap-2 text-red-500 py-2">
+          <div className="flex items-center gap-2 text-error-foreground py-2">
             <X className="w-4 h-4" />
             <span className="text-sm">Failed to load breakdown details.</span>
           </div>
@@ -120,7 +120,7 @@ function CandidateBreakdownPanel({
         {breakdown && breakdown !== "loading" && breakdown !== "error" && (
           <>
             {breakdown.summary && (
-              <p className="text-sm text-zinc-600 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 {breakdown.summary}
               </p>
             )}
@@ -140,16 +140,16 @@ function CandidateBreakdownPanel({
                     className={cn(
                       "text-left rounded-xl p-3 space-y-1.5 border transition-all cursor-pointer select-none",
                       isActive
-                        ? "bg-white border-zinc-300 shadow-sm"
-                        : "bg-white/50 border-zinc-200 hover:border-zinc-300 hover:bg-white hover:shadow-sm"
+                        ? "bg-card border-border shadow-sm"
+                        : "bg-card/50 border-border/60 hover:border-border hover:bg-card hover:shadow-sm"
                     )}
                   >
                     <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className={cn("flex items-center gap-1.5", isActive ? "text-zinc-800" : "text-zinc-500")}>
+                      <span className={cn("flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground")}>
                         {icon}
                         {label}
                       </span>
-                      <span className={isActive ? "text-zinc-900" : "text-zinc-600"}>
+                      <span className={isActive ? "text-foreground" : "text-muted-foreground"}>
                         {value != null ? `${Math.round(value * 100)}%` : "N/A"}
                       </span>
                     </div>
@@ -165,13 +165,13 @@ function CandidateBreakdownPanel({
             {/* Skills section */}
             {activeSection === "skills" && breakdown.skills && (
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-600 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                   <Zap className="w-3.5 h-3.5" />
                   Skill Evaluation
                 </h3>
 
                 {breakdown.skills.critical_gaps.length > 0 && (
-                  <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  <div className="text-xs text-error-foreground bg-error border border-error-edge rounded-lg px-3 py-2">
                     <span className="font-bold">Critical gaps: </span>
                     {breakdown.skills.critical_gaps.join(", ")}
                   </div>
@@ -190,9 +190,9 @@ function CandidateBreakdownPanel({
                       </p>
                       <div className="space-y-2">
                         {evsForTier.map((ev, i) => (
-                          <div key={i} className="bg-white border border-zinc-100 rounded-xl p-3 space-y-1.5 overflow-hidden">
+                          <div key={i} className="bg-card border border-border rounded-xl p-3 space-y-1.5 overflow-hidden">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-medium text-sm text-zinc-800 break-words">
+                              <span className="font-medium text-sm text-foreground break-words">
                                 {ev.skill_options.join(" / ")}
                               </span>
                               <Badge variant="outline" className={matchTypeStyles[ev.match_type]}>
@@ -200,15 +200,15 @@ function CandidateBreakdownPanel({
                               </Badge>
                             </div>
                             {ev.matched_by && (
-                              <p className="text-xs text-zinc-500 break-words">
+                              <p className="text-xs text-muted-foreground break-words">
                                 Matched by: <span className="font-medium">{ev.matched_by}</span>
                               </p>
                             )}
-                            <p className="text-xs text-zinc-500 break-words">
+                            <p className="text-xs text-muted-foreground break-words">
                               <span className="font-semibold not-italic">Evidence: </span>
                               <span className="italic">{ev.evidence}</span>
                             </p>
-                            <p className="text-xs text-zinc-600 break-words">
+                            <p className="text-xs text-muted-foreground break-words">
                               <span className="font-semibold">Reasoning: </span>
                               {ev.reasoning}
                             </p>
@@ -220,7 +220,7 @@ function CandidateBreakdownPanel({
                 })}
 
                 {breakdown.skills.llm_response.strengths.length > 0 && (
-                  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                  <div className="text-xs text-success-foreground bg-success border border-success-edge rounded-lg px-3 py-2">
                     <span className="font-bold">Strengths: </span>
                     {breakdown.skills.llm_response.strengths.join(", ")}
                   </div>
@@ -231,10 +231,10 @@ function CandidateBreakdownPanel({
             {/* Experience section */}
             {activeSection === "experience" && breakdown.experience && (
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-600 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                   <Briefcase className="w-3.5 h-3.5" />
                   Experience Evaluation
-                  <span className="ml-auto text-zinc-500 normal-case font-medium">
+                  <span className="ml-auto text-muted-foreground normal-case font-medium">
                     {breakdown.experience.effective_years.toFixed(1)} yrs effective
                     {" / "}
                     {breakdown.experience.required_years.toFixed(1)} yrs required
@@ -252,10 +252,10 @@ function CandidateBreakdownPanel({
                       className={cn(
                         "h-1.5",
                         breakdown.experience.effective_years >= breakdown.experience.required_years
-                          ? "[&>div]:bg-emerald-500"
+                          ? "[&>div]:bg-success-foreground"
                           : breakdown.experience.effective_years >= breakdown.experience.required_years * 0.7
-                          ? "[&>div]:bg-amber-500"
-                          : "[&>div]:bg-red-500"
+                          ? "[&>div]:bg-warning-foreground"
+                          : "[&>div]:bg-error-foreground"
                       )}
                     />
                   </div>
@@ -263,22 +263,22 @@ function CandidateBreakdownPanel({
 
                 <div className="space-y-2">
                   {breakdown.experience.llm_response.evaluations.map((job, i) => (
-                    <div key={i} className="bg-white border border-zinc-100 rounded-xl p-3 space-y-1 overflow-hidden">
+                    <div key={i} className="bg-card border border-border rounded-xl p-3 space-y-1 overflow-hidden">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <span className="font-medium text-sm text-zinc-800 break-words">{job.job_title}</span>
+                          <span className="font-medium text-sm text-foreground break-words">{job.job_title}</span>
                           {job.company && (
-                            <span className="text-xs text-zinc-400 ml-2">@ {job.company}</span>
+                            <span className="text-xs text-muted-foreground ml-2">@ {job.company}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs text-zinc-400">{job.duration_months} mo</span>
+                          <span className="text-xs text-muted-foreground">{job.duration_months} mo</span>
                           <Badge variant="outline" className={relevanceStyles[job.relevance]}>
                             {job.relevance} relevance
                           </Badge>
                         </div>
                       </div>
-                      <p className="text-xs text-zinc-500 italic break-words">{job.evidence}</p>
+                      <p className="text-xs text-muted-foreground italic break-words">{job.evidence}</p>
                     </div>
                   ))}
                 </div>
@@ -288,22 +288,22 @@ function CandidateBreakdownPanel({
             {/* Education section */}
             {activeSection === "education" && breakdown.education && (
               <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-600 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                   <BookOpen className="w-3.5 h-3.5" />
                   Education
                 </h3>
-                <div className="bg-white border border-zinc-100 rounded-xl p-3 space-y-1">
+                <div className="bg-card border border-border rounded-xl p-3 space-y-1">
                   {breakdown.education.candidate_degree && (
-                    <p className="text-sm font-medium text-zinc-800">
+                    <p className="text-sm font-medium text-foreground">
                       {breakdown.education.candidate_degree}
                       {breakdown.education.field_of_study && (
-                        <span className="text-zinc-500 font-normal">
+                        <span className="text-muted-foreground font-normal">
                           {" — "}{breakdown.education.field_of_study}
                         </span>
                       )}
                     </p>
                   )}
-                  <p className="text-xs text-zinc-500">{breakdown.education.summary}</p>
+                  <p className="text-xs text-muted-foreground">{breakdown.education.summary}</p>
                 </div>
               </div>
             )}
@@ -360,11 +360,11 @@ function AddCandidatesPanel({
   return (
     <div className="space-y-3">
       {result && (
-        <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2 font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+        <div className="bg-success border border-success-edge text-success-foreground text-sm px-4 py-3 rounded-xl flex items-center gap-2 font-medium">
+          <span className="w-2 h-2 rounded-full bg-success-foreground shrink-0" />
           Added {result.uploaded} candidate{result.uploaded !== 1 ? "s" : ""} — evaluating now...
           {result.errors.length > 0 && (
-            <span className="text-amber-600 ml-2">({result.errors.length} skipped)</span>
+            <span className="text-warning-foreground ml-2">({result.errors.length} skipped)</span>
           )}
         </div>
       )}
@@ -383,14 +383,14 @@ function AddCandidatesPanel({
             <h3 className="font-bold text-primary text-base">Add More Candidates</h3>
             <button
               onClick={() => { setIsOpen(false); setFiles([]); setError(null); setFilesError(null); }}
-              className="p-1 text-zinc-400 hover:text-zinc-600 rounded-lg transition-colors"
+              className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
               <X className="w-4 h-4 shrink-0 mt-0.5" />
               <p className="font-medium">{error}</p>
             </div>
@@ -570,30 +570,30 @@ export default function EvaluationPage() {
   // No token or error - show entry form
   if (!token || error) {
     return (
-      <main className="px-6 py-20 min-h-[calc(100vh-80px)] bg-zinc-50/50">
+      <main className="px-6 py-20 min-h-[calc(100vh-80px)] bg-muted/30">
         <div className="max-w-xl mx-auto space-y-8">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white shadow-sm border border-zinc-200 mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-card shadow-sm border border-border mb-4">
               <KeyRound className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-extrabold text-zinc-900 tracking-tight">
+            <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
               View Results
             </h1>
-            <p className="text-zinc-500 font-medium">
+            <p className="text-muted-foreground font-medium">
               Enter your access token to view evaluation details
             </p>
           </div>
 
-          <Card className="p-8 shadow-xl border-zinc-200/60 rounded-3xl bg-white">
+          <Card className="p-8 shadow-xl border-border/60 rounded-3xl">
             {error && (
-              <div className="mb-6 bg-red-50 border border-red-100 text-red-600 text-sm p-4 rounded-xl flex items-start gap-3">
+              <div className="mb-6 bg-error border border-error-edge text-error-foreground text-sm p-4 rounded-xl flex items-start gap-3">
                 <X className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <p className="font-medium">{error}</p>
               </div>
             )}
             <form onSubmit={handleTokenSubmit} className="space-y-6">
               <div className="space-y-3">
-                <Label htmlFor="token" className="text-sm font-semibold text-zinc-700">
+                <Label htmlFor="token" className="text-sm font-semibold text-foreground">
                   Access Token
                 </Label>
                 <div className="relative">
@@ -603,7 +603,7 @@ export default function EvaluationPage() {
                     value={tokenInput}
                     onChange={(e) => setTokenInput(e.target.value)}
                     required
-                    className="h-14 pl-4 bg-zinc-50/50 border-zinc-200 focus:ring-primary focus:border-primary rounded-xl"
+                    className="h-14 pl-4 bg-muted/30 border-border focus:ring-primary focus:border-primary rounded-xl"
                   />
                 </div>
               </div>
@@ -614,7 +614,7 @@ export default function EvaluationPage() {
           </Card>
 
           <div className="text-center">
-            <Link href="/" className="text-sm font-semibold text-zinc-500 hover:text-primary transition-colors inline-flex items-center gap-1.5">
+            <Link href="/" className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5">
               <ChevronLeft className="w-4 h-4" />
               Back to Home
             </Link>
@@ -632,8 +632,8 @@ export default function EvaluationPage() {
           <div className="w-16 h-16 rounded-full border-4 border-primary/10 animate-pulse" />
           <Loader2 className="absolute top-0 left-0 w-16 h-16 animate-spin text-primary border-4 border-transparent border-t-primary rounded-full" />
         </div>
-        <p className="mt-6 text-zinc-900 font-bold text-lg">Fetching your results...</p>
-        <p className="text-zinc-500 text-sm mt-1">This will only take a moment</p>
+        <p className="mt-6 text-foreground font-bold text-lg">Fetching your results...</p>
+        <p className="text-muted-foreground text-sm mt-1">This will only take a moment</p>
       </main>
     );
   }
@@ -688,21 +688,21 @@ export default function EvaluationPage() {
   return (
     <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
       {/* Header Info */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b border-zinc-100">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b border-border">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-primary font-bold text-sm uppercase tracking-wider mb-1">
             <LayoutDashboard className="w-4 h-4" />
             <span>Batch Details</span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-black text-zinc-900 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight">
             {jobTitle}
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest leading-none mb-1">Status</p>
-            <Badge variant="outline" className={`${isProcessing ? "bg-primary/10 text-primary border-primary/20" : "bg-emerald-50 text-emerald-700 border-emerald-100"} font-bold px-3 py-1 rounded-lg`}>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1">Status</p>
+            <Badge variant="outline" className={`${isProcessing ? "bg-primary/10 text-primary border-primary/20" : "bg-primary/10 text-primary border-primary/20"} font-bold px-3 py-1 rounded-lg`}>
               {isProcessing ? "Processing" : "Completed"}
             </Badge>
           </div>
@@ -712,7 +712,7 @@ export default function EvaluationPage() {
               size="sm"
               onClick={handleRetryAll}
               disabled={anyRetrying}
-              className="h-10 px-4 border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+              className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
               title="Re-queue all failed candidates for evaluation"
             >
               {isRetryingAll ? (
@@ -728,7 +728,7 @@ export default function EvaluationPage() {
               variant="outline"
               size="sm"
               onClick={exportToCSV}
-              className="h-10 px-4 border-zinc-200 text-zinc-500 hover:bg-zinc-50 font-semibold gap-2 cursor-pointer"
+              className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
             >
               <Download className="w-4 h-4" />
               Export CSV
@@ -739,7 +739,7 @@ export default function EvaluationPage() {
             size="icon"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="w-10 h-10 border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-all active:rotate-180 duration-500 cursor-pointer"
+            className="w-10 h-10 border-border text-muted-foreground hover:bg-muted transition-all active:rotate-180 duration-500 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
           </Button>
@@ -748,42 +748,42 @@ export default function EvaluationPage() {
 
       {/* Stats Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-        <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
+        <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-2 text-xs font-semibold">
             <Users className="w-3.5 h-3.5 text-primary" />
             Candidates
           </div>
-          <div className="text-3xl font-black text-zinc-900">{data.results.length}</div>
+          <div className="text-3xl font-black text-foreground">{data.results.length}</div>
         </div>
         {!isProcessing && (
-          <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
-            <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
-              <Clock className="w-3.5 h-3.5 text-amber-500" />
+          <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
+              <Clock className="w-3.5 h-3.5 text-warning-foreground" />
               Proc. Time
             </div>
-            <div className="text-3xl font-black text-zinc-900">
+            <div className="text-3xl font-black text-foreground">
               {data.processing_time_seconds ? Math.round(data.processing_time_seconds) : "—"}
-              <span className="text-xs font-bold text-zinc-400 ml-1 uppercase">s</span>
+              <span className="text-xs font-bold text-muted-foreground ml-1 uppercase">s</span>
             </div>
           </div>
         )}
-        <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+        <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-2 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
             Best Score
           </div>
-          <div className="text-3xl font-black text-zinc-900">
+          <div className="text-3xl font-black text-foreground">
             {bestScore != null ? `${bestScore}%` : "—"}
           </div>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="bg-white border border-zinc-100 p-5 rounded-2xl shadow-sm cursor-default">
-              <div className="flex items-center gap-2 text-zinc-500 mb-2 text-xs font-semibold">
-                <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
+            <div className="bg-white dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700 p-5 rounded-2xl shadow-sm cursor-default">
+              <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
+                <CheckCircle className="w-3.5 h-3.5 text-info-foreground" />
                 Top Matches
               </div>
-              <div className="text-3xl font-black text-zinc-900">{topMatchCount > 0 ? topMatchCount : "-"}</div>
+              <div className="text-3xl font-black text-foreground">{topMatchCount > 0 ? topMatchCount : "-"}</div>
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -794,26 +794,26 @@ export default function EvaluationPage() {
 
       {/* Progress Card */}
       {isProcessing && (
-        <Card className="p-8 shadow-xl border-zinc-200/60 rounded-3xl bg-white mb-8">
+        <Card className="p-8 shadow-xl border-border rounded-3xl bg-card mb-8">
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-4 text-sm font-black text-zinc-900 uppercase tracking-widest">
+            <div className="flex items-center justify-between gap-4 text-sm font-black text-foreground uppercase tracking-widest">
               <span className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 Analyzing Resumes
               </span>
               <span className="tabular-nums">{Math.round(progressPercent)}%</span>
             </div>
-            <div className="relative h-3 w-full bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
+            <div className="relative h-3 w-full bg-muted rounded-full overflow-hidden border border-border/50">
               <div
                 className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 rounded-full shadow-[0_0_10px_theme(colors.primary/30%)]"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-xs text-zinc-400 font-medium pt-0.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-medium pt-0.5">
               <span>
                 {data.progress.processed} of {data.progress.total} candidates completed
                 {data.progress.failed > 0 && (
-                  <span className="text-red-400 ml-1">({data.progress.failed} failed)</span>
+                  <span className="text-error-foreground ml-1">({data.progress.failed} failed)</span>
                 )}
               </span>
               <span className="flex items-center gap-1.5">
@@ -852,7 +852,7 @@ export default function EvaluationPage() {
               </SelectContent>
             </Select>
             {isFiltered && (
-              <span className="text-xs font-medium text-zinc-400 ml-1">
+              <span className="text-xs font-medium text-muted-foreground ml-1">
                 {displayResults.length} of {sourceResults.length}
               </span>
             )}
@@ -863,19 +863,19 @@ export default function EvaluationPage() {
         {(!isProcessing || completedResults.length > 0) && (
           <>
             {isProcessing && (
-              <div className="flex items-center gap-2 text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
                 Results So Far
               </div>
             )}
 
             {!isProcessing && data.results.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mb-4">
-                  <Users className="w-7 h-7 text-zinc-400" />
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  <Users className="w-7 h-7 text-muted-foreground" />
                 </div>
-                <p className="text-zinc-900 font-bold text-lg">No candidates yet</p>
-                <p className="text-zinc-500 text-sm mt-1">Add resumes below to start evaluating candidates.</p>
+                <p className="text-foreground font-bold text-lg">No candidates yet</p>
+                <p className="text-muted-foreground text-sm mt-1">Add resumes below to start evaluating candidates.</p>
               </div>
             ) : (
               <div className="border rounded-lg overflow-hidden">
@@ -886,7 +886,7 @@ export default function EvaluationPage() {
                       <TableHead>
                         <button
                           onClick={() => setSortBy(prev => prev === "name_asc" ? "name_desc" : prev === "name_desc" ? "score_desc" : "name_asc")}
-                          className="flex items-center gap-1 font-semibold hover:text-zinc-700 transition-colors cursor-pointer"
+                          className="flex items-center gap-1 font-semibold hover:text-foreground transition-colors cursor-pointer"
                         >
                           Resume
                           {sortBy === "name_asc" && <ArrowUp className="w-3 h-3 text-primary" />}
@@ -914,7 +914,7 @@ export default function EvaluationPage() {
                           return (
                             <button
                               onClick={handleExpandAll}
-                              className="text-xs font-semibold text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
+                              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                             >
                               {allExpanded ? "Collapse all" : "Expand all"}
                             </button>
@@ -927,7 +927,7 @@ export default function EvaluationPage() {
                     {displayResults.length === 0 && (needsFilter) ? (
                       <TableRow>
                         <TableCell colSpan={5} className="py-16 text-center">
-                          <p className="text-zinc-500 font-medium text-sm">No candidates match your filters.</p>
+                          <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm">No candidates match your filters.</p>
                           <button
                             onClick={() => { setSearchQuery(""); setFilterSignal("all"); }}
                             className="mt-2 text-xs font-semibold text-primary hover:underline cursor-pointer"
@@ -954,22 +954,22 @@ export default function EvaluationPage() {
                               className={cn(
                                 "select-none",
                                 isFailed ? "opacity-60" : "cursor-pointer",
-                                isExpanded && "bg-zinc-50"
+                                isExpanded && "bg-muted/50"
                               )}
                             >
                               <TableCell className="text-center font-bold">{index + 1}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-3">
-                                  <FileText className={cn("w-5 h-5 shrink-0", isFailed ? "text-red-300" : "text-zinc-400")} />
+                                  <FileText className={cn("w-5 h-5 shrink-0", isFailed ? "text-error-border" : "text-muted-foreground")} />
                                   <div>
                                     <span className="font-medium truncate">
                                       {result.candidate_name ?? result.filename}
                                     </span>
                                     {result.candidate_name && (
-                                      <p className="text-xs text-zinc-400">{result.filename}</p>
+                                      <p className="text-xs text-muted-foreground">{result.filename}</p>
                                     )}
                                     {isFailed && (
-                                      <p className="text-xs text-red-500 font-medium mt-0.5">Evaluation failed</p>
+                                      <p className="text-xs text-error-foreground font-medium mt-0.5">Evaluation failed</p>
                                     )}
                                   </div>
                                 </div>
@@ -997,7 +997,7 @@ export default function EvaluationPage() {
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleRetrySingle(result.item_id); }}
                                     disabled={anyRetrying}
-                                    className="p-1.5 rounded-lg text-zinc-400 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer mx-auto block"
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer mx-auto block"
                                     title="Re-queue this candidate for evaluation"
                                   >
                                     {isRetryingThis
@@ -1007,8 +1007,8 @@ export default function EvaluationPage() {
                                   </button>
                                 ) : id && (
                                   isExpanded
-                                    ? <ChevronUp className="w-4 h-4 text-zinc-400 mx-auto" />
-                                    : <ChevronDown className="w-4 h-4 text-zinc-400 mx-auto" />
+                                    ? <ChevronUp className="w-4 h-4 text-muted-foreground mx-auto" />
+                                    : <ChevronDown className="w-4 h-4 text-muted-foreground mx-auto" />
                                 )}
                               </TableCell>
                             </TableRow>
@@ -1030,22 +1030,22 @@ export default function EvaluationPage() {
                     .map((result, i) => (
                       <TableRow key={`pending-${result.filename}-${i}`} className="opacity-50">
                         <TableCell className="text-center">
-                          <div className="h-4 w-4 rounded bg-zinc-200 animate-pulse mx-auto" />
+                          <div className="h-4 w-4 rounded bg-muted animate-pulse mx-auto" />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <Loader2 className="w-5 h-5 text-zinc-300 animate-spin shrink-0" />
+                            <Loader2 className="w-5 h-5 text-muted-foreground/40 animate-spin shrink-0" />
                             <div className="space-y-1.5">
-                              <div className="h-3.5 w-40 rounded bg-zinc-200 animate-pulse" />
-                              <div className="h-2.5 w-28 rounded bg-zinc-100 animate-pulse" />
+                              <div className="h-3.5 w-40 rounded bg-muted animate-pulse" />
+                              <div className="h-2.5 w-28 rounded bg-muted/50 animate-pulse" />
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="h-3.5 w-10 rounded bg-zinc-200 animate-pulse mx-auto" />
+                          <div className="h-3.5 w-10 rounded bg-muted animate-pulse mx-auto" />
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="h-6 w-24 rounded-full bg-zinc-100 animate-pulse mx-auto" />
+                          <div className="h-6 w-24 rounded-full bg-muted/50 animate-pulse mx-auto" />
                         </TableCell>
                         <TableCell />
                       </TableRow>

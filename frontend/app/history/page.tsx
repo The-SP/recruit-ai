@@ -19,10 +19,10 @@ import { ApiError } from "@/services/api";
 import { HistoryItem, getHistory } from "@/services/batch";
 
 const statusStyles: Record<string, string> = {
-  completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  processing: "bg-blue-100 text-blue-700 border-blue-200",
-  pending: "bg-amber-100 text-amber-700 border-amber-200",
-  failed: "bg-red-100 text-red-700 border-red-200",
+  completed: "bg-success text-success-foreground border-success-edge",
+  processing: "bg-info text-info-foreground border-info-edge",
+  pending: "bg-warning text-warning-foreground border-warning-edge",
+  failed: "bg-error text-error-foreground border-error-edge",
 };
 
 const statusLabels: Record<string, string> = {
@@ -131,7 +131,7 @@ export default function HistoryPage() {
                     <Badge
                       className={
                         statusStyles[item.status] ??
-                        "bg-zinc-100 text-zinc-500 border-zinc-200"
+                        "bg-muted text-muted-foreground border-border"
                       }
                       variant="outline"
                     >
