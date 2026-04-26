@@ -58,18 +58,21 @@
   --spacing: 0.25rem;
 
   /* Semantic status colors */
-  --success: oklch(0.94 0.05 148);
-  --success-foreground: oklch(0.32 0.10 148);
-  --success-edge: oklch(0.86 0.08 148);
-  --warning: oklch(0.97 0.06 85);
-  --warning-foreground: oklch(0.44 0.13 75);
-  --warning-edge: oklch(0.88 0.09 85);
-  --info: oklch(0.93 0.04 230);
-  --info-foreground: oklch(0.36 0.11 230);
-  --info-edge: oklch(0.84 0.07 230);
-  --error: oklch(0.96 0.03 25);
-  --error-foreground: oklch(0.40 0.14 25);
-  --error-edge: oklch(0.88 0.06 25);
+  --success: oklch(0.50 0.10 148);
+  --success-foreground: oklch(0.92 0.10 148);
+  --success-edge: oklch(0.60 0.12 148);
+  --success-bar: oklch(0.50 0.18 148);
+  --warning: oklch(0.52 0.10 75);
+  --warning-foreground: oklch(0.95 0.10 85);
+  --warning-edge: oklch(0.62 0.11 75);
+  --warning-bar: oklch(0.75 0.15 80);
+  --info: oklch(0.50 0.09 230);
+  --info-foreground: oklch(0.92 0.08 230);
+  --info-edge: oklch(0.60 0.10 230);
+  --error: oklch(0.50 0.10 25);
+  --error-foreground: oklch(0.95 0.08 25);
+  --error-edge: oklch(0.60 0.11 25);
+  --error-bar: oklch(0.65 0.20 25);
 }
 
 .dark {
@@ -128,15 +131,18 @@
   --success: oklch(0.22 0.05 148);
   --success-foreground: oklch(0.78 0.14 148);
   --success-edge: oklch(0.32 0.08 148);
+  --success-bar: oklch(0.78 0.14 148);
   --warning: oklch(0.24 0.04 75);
   --warning-foreground: oklch(0.80 0.13 85);
   --warning-edge: oklch(0.35 0.07 75);
+  --warning-bar: oklch(0.80 0.13 85);
   --info: oklch(0.22 0.04 230);
   --info-foreground: oklch(0.74 0.10 230);
   --info-edge: oklch(0.32 0.06 230);
   --error: oklch(0.22 0.04 25);
   --error-foreground: oklch(0.74 0.13 25);
   --error-edge: oklch(0.32 0.07 25);
+  --error-bar: oklch(0.74 0.13 25);
 }
 
 @theme inline {
@@ -176,16 +182,18 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-success-edge: var(--success-edge);
+  --color-success-bar: var(--success-bar);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-edge: var(--warning-edge);
-  --color-info: var(--info);
+  --color-warning-bar: var(--warning-bar);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-info-edge: var(--info-edge);
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-error-edge: var(--error-edge);
+  --color-error-bar: var(--error-bar);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);

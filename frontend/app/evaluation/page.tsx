@@ -68,9 +68,9 @@ const relevanceStyles: Record<string, string> = {
 };
 
 function scoreBarColor(value: number): string {
-  if (value >= 0.7) return "[&>div]:bg-success-foreground";
-  if (value >= 0.5) return "[&>div]:bg-warning-foreground";
-  return "[&>div]:bg-error-foreground";
+  if (value >= 0.7) return "[&>div]:bg-success-bar";
+  if (value >= 0.5) return "[&>div]:bg-warning-bar";
+  return "[&>div]:bg-error-bar";
 }
 
 const SKILL_TIERS = ["critical", "required", "preferred"] as const;
@@ -254,10 +254,10 @@ function CandidateBreakdownPanel({
                       className={cn(
                         "h-1.5",
                         breakdown.experience.effective_years >= breakdown.experience.required_years
-                          ? "[&>div]:bg-success-foreground"
+                          ? "[&>div]:bg-success-bar"
                           : breakdown.experience.effective_years >= breakdown.experience.required_years * 0.7
-                          ? "[&>div]:bg-warning-foreground"
-                          : "[&>div]:bg-error-foreground"
+                          ? "[&>div]:bg-warning-bar"
+                          : "[&>div]:bg-error-bar"
                       )}
                     />
                   </div>
