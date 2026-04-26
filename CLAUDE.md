@@ -9,7 +9,7 @@ Recruit AI is an AI-powered resume screening system. Users upload PDF resumes an
 ## Tech Stack
 
 - **Backend:** Python 3.13+, FastAPI, SQLAlchemy, Celery (Redis broker), Alembic, LangChain + Gemini
-- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Radix UI
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Radix UI, Shadcn UI
 - **Infrastructure:** PostgreSQL 16, Redis 7, Docker Compose
 - **Package managers:** `uv` (backend), `pnpm` (frontend)
 
@@ -93,6 +93,8 @@ The backend follows a layered architecture: **routes → services/scorers → re
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` env var (default: `google_genai:gemini-2.5-flash-lite`).
 
 ### Frontend (`frontend/`)
+
+**UI components:** Prefer Shadcn UI components when building or modifying UI. Use `pnpm dlx shadcn@latest add <component>` to add new components (they land in `components/ui/`). Fall back to raw Radix UI primitives or Tailwind only when Shadcn doesn't cover the use case.
 
 Next.js App Router structure. Pages:
 - `app/page.tsx` — Landing page with upload form (`components/submit-form.tsx`). Submits to `POST /batch/submit`, redirects to `/evaluation?token=<token>`.

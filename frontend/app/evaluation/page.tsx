@@ -8,6 +8,7 @@ import {
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 import { ResumeFileUpload } from '@/components/resume-file-upload';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +17,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
@@ -24,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiError } from '@/services/api';
 import {
-    AddCandidatesResponse, BatchStatus, CandidateBreakdown,
+    AddCandidatesResponse, BatchStatus, CandidateBreakdown, CandidateResult,
     addCandidatesToBatch, getCandidateBreakdown, getBatchStatus,
     retryAllFailed, retrySingleFailed
 } from '@/services/batch';
@@ -444,6 +446,11 @@ export default function EvaluationPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSignal, setFilterSignal] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortBy>("score_desc");
+  const [resumePanel, setResumePanel] = useState<{
+    name: string | null;
+    filename: string;
+    markdown: string;
+  } | null>(null);
 
   const fetchStatus = async (t: string, isRefresh = false) => {
     if (isRefresh) {
@@ -523,6 +530,24 @@ export default function EvaluationPage() {
       setError(err instanceof ApiError ? err.message : "Failed to retry");
     } finally {
       setRetryingItemIds(prev => { const next = new Set(prev); next.delete(itemId); return next; });
+    }
+  };
+
+  const handleViewResume = async (e: React.MouseEvent, result: CandidateResult) => {
+    e.stopPropagation();
+    if (!result.candidate_id || !token) return;
+    const cached = breakdownCache[result.candidate_id];
+    if (cached && cached !== "loading" && cached !== "error" && cached.resume_markdown) {
+      setResumePanel({ name: result.candidate_name ?? null, filename: result.filename, markdown: cached.resume_markdown });
+      return;
+    }
+    setBreakdownCache(prev => ({ ...prev, [result.candidate_id!]: "loading" }));
+    try {
+      const bd = await getCandidateBreakdown(token, result.candidate_id);
+      setBreakdownCache(prev => ({ ...prev, [result.candidate_id!]: bd }));
+      setResumePanel({ name: result.candidate_name ?? null, filename: result.filename, markdown: bd.resume_markdown ?? "" });
+    } catch {
+      setBreakdownCache(prev => ({ ...prev, [result.candidate_id!]: "error" }));
     }
   };
 
@@ -686,6 +711,7 @@ export default function EvaluationPage() {
   const isFiltered = needsFilter;
 
   return (
+    <>
     <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
       {/* Header Info */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b border-border">
@@ -992,24 +1018,35 @@ export default function EvaluationPage() {
                                   </Badge>
                                 ) : "—"}
                               </TableCell>
-                              <TableCell className="text-center w-10">
-                                {isFailed && !isProcessing ? (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleRetrySingle(result.item_id); }}
-                                    disabled={anyRetrying}
-                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer mx-auto block"
-                                    title="Re-queue this candidate for evaluation"
-                                  >
-                                    {isRetryingThis
-                                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                                      : <RotateCcw className="w-4 h-4" />
-                                    }
-                                  </button>
-                                ) : id && (
-                                  isExpanded
-                                    ? <ChevronUp className="w-4 h-4 text-muted-foreground mx-auto" />
-                                    : <ChevronDown className="w-4 h-4 text-muted-foreground mx-auto" />
-                                )}
+                              <TableCell className="text-right pr-3 w-24">
+                                <div className="flex items-center justify-end gap-1">
+                                  {!isFailed && id && (
+                                    <button
+                                      onClick={(e) => handleViewResume(e, result)}
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                                      title="View resume"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {isFailed && !isProcessing ? (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleRetrySingle(result.item_id); }}
+                                      disabled={anyRetrying}
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                      title="Re-queue this candidate for evaluation"
+                                    >
+                                      {isRetryingThis
+                                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                                        : <RotateCcw className="w-4 h-4" />
+                                      }
+                                    </button>
+                                  ) : id && (
+                                    isExpanded
+                                      ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                      : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -1075,5 +1112,28 @@ export default function EvaluationPage() {
       </div>
 
     </main>
+
+    <Sheet open={resumePanel !== null} onOpenChange={open => { if (!open) setResumePanel(null); }}>
+      <SheetContent side="right" className="w-[480px] sm:w-[540px] sm:max-w-none flex flex-col p-0">
+        <SheetHeader className="px-6 py-5 border-b border-border shrink-0">
+          <SheetTitle className="text-base font-bold leading-tight">
+            {resumePanel?.name ?? resumePanel?.filename}
+          </SheetTitle>
+          {resumePanel?.name && (
+            <p className="text-xs text-muted-foreground mt-0.5">{resumePanel.filename}</p>
+          )}
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {resumePanel?.markdown ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
+              <ReactMarkdown>{resumePanel.markdown}</ReactMarkdown>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No resume content available.</p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+    </>
   );
 }

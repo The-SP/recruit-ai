@@ -116,3 +116,4 @@ class CandidateBreakdownResponse(BaseModel):
     skills: SkillScoreResult | None = None
     experience: ExperienceScoreResult | None = None
     education: EducationScoreResult | None = None
+    resume_markdown: str | None = None

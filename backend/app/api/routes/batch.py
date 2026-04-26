@@ -469,6 +469,7 @@ def get_candidate_breakdown(
     return CandidateBreakdownResponse(
         candidate_id=candidate_id,
         candidate_name=candidate.name if candidate else None,
+        resume_markdown=candidate.resume_markdown if candidate else None,
         filename=matching_item.pdf_filename,
         final_score=evaluation.final_score,
         hire_signal=evaluation.hire_signal,

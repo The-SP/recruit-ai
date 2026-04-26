@@ -100,6 +100,7 @@ export interface CandidateBreakdown {
   skills: SkillBreakdown | null;
   experience: ExperienceBreakdown | null;
   education: EducationBreakdown | null;
+  resume_markdown?: string | null;
 }
 
 export interface HistoryItem {
