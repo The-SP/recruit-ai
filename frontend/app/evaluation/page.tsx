@@ -784,7 +784,7 @@ export default function EvaluationPage() {
         {!isProcessing && (
           <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
             <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
-              <Clock className="w-3.5 h-3.5 text-warning-foreground" />
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
               Proc. Time
             </div>
             <div className="text-3xl font-black text-foreground">
@@ -795,7 +795,7 @@ export default function EvaluationPage() {
         )}
         <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-2 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
+            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
             Best Score
           </div>
           <div className="text-3xl font-black text-foreground">
@@ -806,7 +806,7 @@ export default function EvaluationPage() {
           <TooltipTrigger asChild>
             <div className="bg-white dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700 p-5 rounded-2xl shadow-sm cursor-default">
               <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
-                <CheckCircle className="w-3.5 h-3.5 text-info-foreground" />
+                <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
                 Top Matches
               </div>
               <div className="text-3xl font-black text-foreground">{topMatchCount > 0 ? topMatchCount : "-"}</div>
@@ -1100,11 +1100,11 @@ export default function EvaluationPage() {
             token={token}
             onSuccess={() => fetchStatus(token)}
           />
-          <div className="flex justify-center pt-4">
+          <div className="flex justify-center pt-6 border-t border-border">
             <Link href="/">
-              <Button variant="outline" className="gap-2">
-                <ChevronLeft className="w-4 h-4" />
-                Submit Another Batch
+              <Button variant="outline" className="gap-2 cursor-pointer">
+                <LayoutDashboard className="w-4 h-4" />
+                New Batch
               </Button>
             </Link>
           </div>
