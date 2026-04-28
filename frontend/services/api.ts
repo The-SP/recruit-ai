@@ -1,3 +1,5 @@
+import { getToken } from "@/services/auth";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
@@ -20,7 +22,11 @@ export async function apiRequest<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { body, headers = {}, ...rest } = options;
-  const authHeaders: Record<string, string> = API_KEY ? { "X-API-Key": API_KEY } : {};
+  const jwtToken = getToken();
+  const authHeaders: Record<string, string> = {
+    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+    ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+  };
 
   const config: RequestInit = { ...rest };
 

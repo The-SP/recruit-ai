@@ -3,6 +3,7 @@
 import { Clock, ExternalLink, History, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { ApiError } from "@/services/api";
 import { HistoryItem, getHistory } from "@/services/batch";
+import { useAuth } from "@/contexts/auth-context";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-success text-success-foreground border-success-edge",
@@ -33,11 +35,18 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function HistoryPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
     getHistory()
       .then((res) => setItems(res.items))
       .catch((err) => {
@@ -48,7 +57,15 @@ export default function HistoryPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [authLoading, user]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center text-muted-foreground gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
