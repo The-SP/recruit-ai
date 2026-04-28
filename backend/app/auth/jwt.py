@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from joserfc import jwt
 from joserfc.jwk import OctKey
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from app.models.database import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/google")
+http_bearer = HTTPBearer()
 
 _key = OctKey.import_key(Config.SECRET_KEY.encode())
 
@@ -29,7 +29,8 @@ def create_access_token(
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Security(http_bearer),
+    db: Session = Depends(get_db),
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,7 +38,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        decoded = jwt.decode(token, _key)
+        decoded = jwt.decode(credentials.credentials, _key)
         google_id: str | None = decoded.claims.get("sub")
         if google_id is None:
             raise credentials_exception
