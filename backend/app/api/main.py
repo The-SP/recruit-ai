@@ -2,10 +2,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.dependencies import verify_api_key
 from app.api.exceptions import register_exception_handlers
-from app.api.routes import batch, candidates, evaluations, health, jobs
+from app.api.routes import auth, batch, candidates, evaluations, health, jobs
 from app.config import Config
 from app.core.logger import init_logger
 
@@ -27,6 +28,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Session middleware (required for OAuth state handling)
+    app.add_middleware(SessionMiddleware, secret_key=Config.SECRET_KEY)
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -40,12 +44,13 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # Routes
-    auth = [Depends(verify_api_key)]
+    api_key_auth = [Depends(verify_api_key)]
     app.include_router(health.router)
-    app.include_router(jobs.router, dependencies=auth)
-    app.include_router(candidates.router, dependencies=auth)
-    app.include_router(evaluations.router, dependencies=auth)
-    app.include_router(batch.router, dependencies=auth)
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(jobs.router, dependencies=api_key_auth)
+    app.include_router(candidates.router, dependencies=api_key_auth)
+    app.include_router(evaluations.router, dependencies=api_key_auth)
+    app.include_router(batch.router, dependencies=api_key_auth)
 
     return app
 

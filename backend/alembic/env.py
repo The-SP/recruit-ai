@@ -6,7 +6,7 @@ from alembic import context
 from app.config import Config
 
 # Import all models so they're registered with Base.metadata
-from app.models import candidate, evaluation, evaluation_run, job  # noqa
+from app.models import candidate, evaluation, evaluation_run, job, user  # noqa
 from app.models.base import Base
 
 config = context.config
