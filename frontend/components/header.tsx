@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Briefcase, LogOut } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
+
+const AUTH_PREFIXES = ["/dashboard", "/history", "/profile", "/evaluation/"];
 
 function UserAvatar({ name, avatarUrl }: { name: string | null; avatarUrl: string | null }) {
   if (avatarUrl) {
@@ -32,6 +35,9 @@ function UserAvatar({ name, avatarUrl }: { name: string | null; avatarUrl: strin
 
 export function Header() {
   const { user, isLoading, logout } = useAuth();
+  const pathname = usePathname();
+
+  if (AUTH_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
@@ -45,10 +51,10 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/evaluation"
+            href="/demo"
             className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors bg-muted/50 hover:bg-primary/5 px-4 py-2 rounded-full border hover:border-primary/20"
           >
-            View Results
+            Try Demo
           </Link>
 
           {!isLoading && (

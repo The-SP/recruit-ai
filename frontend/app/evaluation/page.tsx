@@ -22,6 +22,16 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import {
+  SKILL_TIERS,
+  matchTypeLabels,
+  matchTypeStyles,
+  relevanceStyles,
+  scoreBarColor,
+  signalLabels,
+  signalStyles,
+  tierSectionStyles,
+} from '@/lib/evaluation-styles';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiError } from '@/services/api';
@@ -30,56 +40,6 @@ import {
     addCandidatesToBatch, getCandidateBreakdown, getBatchStatus,
     retryAllFailed, retrySingleFailed
 } from '@/services/batch';
-
-const signalStyles: Record<string, string> = {
-  strong_match: "bg-success text-success-foreground border-success-edge",
-  good_match: "bg-info text-info-foreground border-info-edge",
-  partial_match: "bg-warning text-warning-foreground border-warning-edge",
-  weak_match: "bg-warning text-warning-foreground border-warning-edge",
-  no_match: "bg-error text-error-foreground border-error-edge",
-};
-
-const signalLabels: Record<string, string> = {
-  strong_match: "Strong Match",
-  good_match: "Good Match",
-  partial_match: "Partial Match",
-  weak_match: "Weak Match",
-  no_match: "No Match",
-};
-
-const matchTypeStyles: Record<string, string> = {
-  exact: "bg-success text-success-foreground border-success-edge",
-  partial: "bg-warning text-warning-foreground border-warning-edge",
-  none: "bg-muted text-muted-foreground border-border",
-};
-
-const matchTypeLabels: Record<string, string> = {
-  exact: "Exact Match",
-  partial: "Partial Match",
-  none: "No Match",
-};
-
-
-const relevanceStyles: Record<string, string> = {
-  high: "bg-success text-success-foreground border-success-edge",
-  medium: "bg-warning text-warning-foreground border-warning-edge",
-  low: "bg-warning text-warning-foreground border-warning-edge",
-  none: "bg-muted text-muted-foreground border-border",
-};
-
-function scoreBarColor(value: number): string {
-  if (value >= 0.7) return "[&>div]:bg-success-bar";
-  if (value >= 0.5) return "[&>div]:bg-warning-bar";
-  return "[&>div]:bg-error-bar";
-}
-
-const SKILL_TIERS = ["critical", "required", "preferred"] as const;
-
-const tierSectionStyles: Record<string, { label: string; headerClass: string }> = {
-  critical: { label: "Critical", headerClass: "text-error-foreground" },
-  required: { label: "Required", headerClass: "text-info-foreground" },
-  preferred: { label: "Preferred", headerClass: "text-muted-foreground" },
-};
 
 type BreakdownSection = "skills" | "experience" | "education";
 type SortBy = "score_desc" | "name_asc" | "name_desc";
@@ -427,7 +387,7 @@ function AddCandidatesPanel({
   );
 }
 
-export default function EvaluationPage() {
+function EvaluationPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
@@ -1135,5 +1095,13 @@ export default function EvaluationPage() {
       </SheetContent>
     </Sheet>
     </>
+  );
+}
+
+export default function EvaluationPage() {
+  return (
+    <React.Suspense>
+      <EvaluationPageInner />
+    </React.Suspense>
   );
 }

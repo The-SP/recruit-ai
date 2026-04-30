@@ -1,9 +1,8 @@
 "use client";
 
-import { Clock, ExternalLink, History, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Clock, ExternalLink, History, Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,66 +16,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/services/api";
-import { HistoryItem, getHistory } from "@/services/batch";
-import { useAuth } from "@/contexts/auth-context";
-
-const statusStyles: Record<string, string> = {
-  completed: "bg-success text-success-foreground border-success-edge",
-  processing: "bg-info text-info-foreground border-info-edge",
-  pending: "bg-warning text-warning-foreground border-warning-edge",
-  failed: "bg-error text-error-foreground border-error-edge",
-};
-
-const statusLabels: Record<string, string> = {
-  completed: "Completed",
-  processing: "Processing",
-  pending: "Pending",
-  failed: "Failed",
-};
+import { listEvaluationRuns, type EvaluationRunSummary } from "@/services/runs";
+import { statusLabels, statusStyles } from "@/lib/evaluation-styles";
 
 export default function HistoryPage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const router = useRouter();
-  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [items, setItems] = useState<EvaluationRunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace("/login");
-  }, [authLoading, user, router]);
-
-  useEffect(() => {
-    if (authLoading || !user) return;
-    getHistory()
+    listEvaluationRuns(100)
       .then((res) => setItems(res.items))
       .catch((err) => {
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else {
-          setError("Failed to load history.");
-        }
+        setError(err instanceof ApiError ? err.message : "Failed to load history.");
       })
       .finally(() => setLoading(false));
-  }, [authLoading, user]);
-
-  if (authLoading || !user) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center text-muted-foreground gap-2">
-        <Loader2 className="w-5 h-5 animate-spin" />
-      </div>
-    );
-  }
+  }, []);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <div className="flex items-center gap-3 mb-8">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
         <div className="bg-primary/10 p-2 rounded-xl">
           <History className="w-6 h-6 text-primary" />
         </div>
         <div>
           <h1 className="text-2xl font-bold">Evaluation History</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Past evaluation runs — click View Results to revisit any batch.
+            All your past evaluation runs — click View to see results.
           </p>
         </div>
       </div>
@@ -99,11 +65,10 @@ export default function HistoryPage() {
           <Clock className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
           <p className="font-semibold text-muted-foreground">No runs yet</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Submit a batch on the{" "}
-            <Link href="/" className="text-primary hover:underline">
-              home page
+            <Link href="/dashboard/new" className="text-primary hover:underline">
+              Start your first evaluation
             </Link>{" "}
-            to get started.
+            to see results here.
           </p>
         </Card>
       )}
@@ -117,13 +82,14 @@ export default function HistoryPage() {
                 <TableHead>Job Title</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead className="text-center">Candidates</TableHead>
+                <TableHead className="text-center">Time</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
-                <TableRow key={item.token}>
+                <TableRow key={item.id}>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                     {new Date(item.created_at).toLocaleDateString("en-US", {
                       year: "numeric",
@@ -133,16 +99,19 @@ export default function HistoryPage() {
                   </TableCell>
                   <TableCell className="font-medium">
                     {item.job_title ?? (
-                      <span className="text-muted-foreground italic">
-                        Unknown
-                      </span>
+                      <span className="text-muted-foreground italic">Untitled</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {item.company_name ?? "—"}
+                    {item.company_name && item.company_name !== "null" ? item.company_name : "-"}
                   </TableCell>
                   <TableCell className="text-center text-sm">
-                    {item.candidate_count}
+                    {item.total_count}
+                  </TableCell>
+                  <TableCell className="text-center text-sm text-muted-foreground">
+                    {item.processing_time_seconds != null
+                      ? `${item.processing_time_seconds.toFixed(0)}s`
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -157,9 +126,9 @@ export default function HistoryPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Button asChild size="sm" variant="outline">
-                      <Link href={`/evaluation?token=${item.token}`}>
+                      <Link href={`/evaluation/${item.id}`}>
                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        View Results
+                        View
                       </Link>
                     </Button>
                   </TableCell>
