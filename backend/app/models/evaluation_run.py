@@ -11,6 +11,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.evaluation import CandidateEvaluation
     from app.models.job import Job
+    from app.models.user import User
 
 
 class RunStatus(str, Enum):
@@ -40,6 +41,10 @@ class EvaluationRun(Base):
     folder_path: Mapped[str] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(20), default=RunStatus.DRAFT.value)
 
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+
     # Public access
     access_token: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True, default=None
@@ -60,6 +65,7 @@ class EvaluationRun(Base):
 
     # Relationships
     job: Mapped["Job"] = relationship()
+    user: Mapped["User | None"] = relationship()
     items: Mapped[list["EvaluationRunItem"]] = relationship(
         back_populates="evaluation_run", cascade="all, delete-orphan"
     )

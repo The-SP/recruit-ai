@@ -4,6 +4,7 @@ Common utilities for file uploads.
 
 import math
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import UploadFile
 
@@ -64,3 +65,60 @@ async def read_pdf_content(file: UploadFile) -> tuple[bytes, int]:
 def _bytes_to_kb(size_bytes: int) -> int:
     """Convert bytes to KB, rounding up."""
     return math.ceil(size_bytes / 1024)
+
+
+async def process_uploaded_files(
+    run_id: UUID,
+    run_folder_path: str,
+    files: list[UploadFile],
+    item_repo: "EvaluationRunItemRepository",
+    run_repo: "EvaluationRunRepository",
+) -> tuple[int, int, list[str]]:
+    """
+    Validate, save, and register uploaded PDF files for a batch run.
+
+    Returns (uploaded_count, failed_count, error_messages).
+    """
+    from app.core.file_storage import save_uploaded_file
+
+    uploaded = 0
+    failed = 0
+    errors: list[str] = []
+    duplicate_files: list[str] = []
+
+    for file in files:
+        try:
+            filename = validate_pdf_filename(file.filename)
+
+            if item_repo.filename_exists(run_id, filename):
+                duplicate_files.append(filename)
+                failed += 1
+                continue
+
+            content, file_size = await read_pdf_content(file)
+            save_uploaded_file(run_folder_path, filename, content)
+            item_repo.create_uploaded(run_id, filename, file_size)
+            run_repo.adjust_total_count(run_id)
+            uploaded += 1
+
+        except ValidationError as e:
+            errors.append(f"{file.filename or 'unknown'}: {e.message}")
+            failed += 1
+        except Exception as e:
+            errors.append(f"{file.filename or 'unknown'}: {str(e)[:100]}")
+            failed += 1
+
+    if duplicate_files:
+        errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
+
+    return uploaded, failed, errors
+
+
+# Avoid circular imports — these are only used in type hints within the function body
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.repositories.evaluation_run_repository import (
+        EvaluationRunItemRepository,
+        EvaluationRunRepository,
+    )

@@ -10,12 +10,16 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.evaluation import CandidateEvaluation
+    from app.models.user import User
 
 
 class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
     raw_text: Mapped[str] = mapped_column(Text)
 
     # Parsing status
@@ -33,6 +37,7 @@ class Job(Base):
     )
 
     # Relationships
+    user: Mapped["User | None"] = relationship()
     requirements: Mapped["JobRequirements | None"] = relationship(
         back_populates="job", uselist=False, cascade="all, delete-orphan"
     )

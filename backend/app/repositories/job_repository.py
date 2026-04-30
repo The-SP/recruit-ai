@@ -33,7 +33,9 @@ class JobRepository:
             else [],
         }
 
-    def create(self, jd: JobDescriptionResponse, raw_text: str) -> Job:
+    def create(
+        self, jd: JobDescriptionResponse, raw_text: str, user_id: UUID | None = None
+    ) -> Job:
         """
         Store a parsed job description to the database.
 
@@ -51,8 +53,11 @@ class JobRepository:
             is_valid_jd=jd.is_job_description,
             document_type=jd.document_type,
             title=jd.job_title,
-            company_name=jd.company_name,
+            company_name=jd.company_name
+            if jd.company_name and jd.company_name.lower() != "null"
+            else None,
             summary=jd.summary,
+            user_id=user_id,
         )
 
         self.db.add(job)

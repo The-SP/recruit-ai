@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.file_storage import delete_batch_folder, ensure_folder, get_batch_folder
 from app.core.logger import init_logger
+from app.models.evaluation import CandidateEvaluation
 from app.models.evaluation_run import (
     EvaluationRun,
     EvaluationRunItem,
@@ -23,26 +24,34 @@ class EvaluationRunRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_draft(self, job_id: UUID) -> EvaluationRun:
-        """Create a draft evaluation run for file uploads."""
+    def _create_draft_internal(
+        self, job_id: UUID, user_id: UUID | None = None
+    ) -> EvaluationRun:
         run = EvaluationRun(
             job_id=job_id,
-            folder_path="",  # Will be set after we have the ID
+            folder_path="",
             status=RunStatus.DRAFT.value,
             total_count=0,
+            user_id=user_id,
         )
         self.db.add(run)
         self.db.flush()
-
-        # Set folder path using the generated ID
         run.folder_path = str(get_batch_folder(run.id))
         self.db.commit()
         self.db.refresh(run)
-
-        # Create the folder on disk
         ensure_folder(run.folder_path)
+        return run
 
+    def create_draft(self, job_id: UUID) -> EvaluationRun:
+        """Create a draft evaluation run for file uploads."""
+        run = self._create_draft_internal(job_id)
         logger.info(f"Created draft evaluation run: id={run.id}")
+        return run
+
+    def create_for_user(self, job_id: UUID, user_id: UUID) -> EvaluationRun:
+        """Create a draft evaluation run tied to an authenticated user."""
+        run = self._create_draft_internal(job_id, user_id=user_id)
+        logger.info(f"Created evaluation run for user={user_id}: id={run.id}")
         return run
 
     def create_with_token(self, job_id: UUID, email: str) -> tuple[EvaluationRun, str]:
@@ -199,6 +208,89 @@ class EvaluationRunRepository:
             .offset(offset)
         )
         return list(self.db.scalars(stmt).unique().all())
+
+    def get_by_user(
+        self,
+        user_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        with_job: bool = True,
+    ) -> list[EvaluationRun]:
+        """List non-draft runs for a user, newest first."""
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .order_by(EvaluationRun.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if with_job:
+            stmt = stmt.options(joinedload(EvaluationRun.job))
+        return list(self.db.scalars(stmt).unique().all())
+
+    def get_by_id_for_user(
+        self,
+        run_id: UUID,
+        user_id: UUID,
+        with_items: bool = False,
+        with_job: bool = False,
+    ) -> EvaluationRun | None:
+        """Get a run by ID, enforcing ownership by user_id."""
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.id == run_id)
+            .where(EvaluationRun.user_id == user_id)
+        )
+        if with_items:
+            stmt = stmt.options(
+                joinedload(EvaluationRun.items).joinedload(EvaluationRunItem.evaluation)
+            )
+        if with_job:
+            stmt = stmt.options(joinedload(EvaluationRun.job))
+        return self.db.scalars(stmt).first()
+
+    def get_by_id_for_user_for_update(
+        self, run_id: UUID, user_id: UUID
+    ) -> EvaluationRun | None:
+        """Get a run with a row-level lock, enforcing ownership."""
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.id == run_id)
+            .where(EvaluationRun.user_id == user_id)
+            .with_for_update()
+        )
+        return self.db.scalars(stmt).first()
+
+    def count_by_user(self, user_id: UUID) -> int:
+        """Count non-draft runs for a user."""
+        stmt = (
+            select(func.count())
+            .select_from(EvaluationRun)
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+        )
+        return self.db.scalar(stmt) or 0
+
+    def sum_candidates_by_user(self, user_id: UUID) -> int:
+        """Sum total_count across all non-draft runs for a user."""
+        stmt = (
+            select(func.coalesce(func.sum(EvaluationRun.total_count), 0))
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+        )
+        return self.db.scalar(stmt) or 0
+
+    def last_active_by_user(self, user_id: UUID) -> datetime | None:
+        """Return created_at of the most recent completed run for a user."""
+        stmt = (
+            select(EvaluationRun.created_at)
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status == RunStatus.COMPLETED.value)
+            .order_by(EvaluationRun.created_at.desc())
+            .limit(1)
+        )
+        return self.db.scalar(stmt)
 
     def get_by_job(self, job_id: UUID, limit: int = 10) -> list[EvaluationRun]:
         stmt = (
