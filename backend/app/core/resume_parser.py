@@ -5,6 +5,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
 from app.config import Config
+from app.core.file_storage import get_file_content
 from app.core.logger import init_logger
 from app.schemas.resume import ResumeResponse
 
@@ -67,20 +68,18 @@ MARKDOWN CONTENT FORMAT:
 Respond with valid JSON matching the ResumeResponse schema."""
 
 
-def encode_pdf_to_base64(pdf_path: str) -> str:
-    """Encode PDF file to base64"""
+def encode_pdf_to_base64(file_path: str) -> str:
+    """Encode PDF file to base64 using storage backend"""
     try:
-        with open(pdf_path, "rb") as pdf_file:
-            return base64.b64encode(pdf_file.read()).decode("utf-8")
-    except FileNotFoundError:
-        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+        content = get_file_content(file_path)
+        return base64.b64encode(content).decode("utf-8")
     except Exception as e:
-        raise IOError(f"Failed to read PDF file: {e}")
+        raise IOError(f"Failed to read PDF file from storage: {e}")
 
 
-def parse_resume(pdf_path: str) -> ResumeResponse:
+def parse_resume(file_path: str) -> ResumeResponse:
     """Parse a resume PDF and return markdown content for scoring"""
-    pdf_base64 = encode_pdf_to_base64(pdf_path)
+    pdf_base64 = encode_pdf_to_base64(file_path)
 
     agent = create_agent(
         model=Config.MODEL_NAME,

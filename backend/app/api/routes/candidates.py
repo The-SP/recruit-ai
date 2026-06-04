@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.candidates import CandidateListResponse, CandidateResponse
-from app.core.file_storage import save_uploaded_file
+from app.core.file_storage import delete_file, save_uploaded_file
 from app.core.file_upload import read_pdf_content, validate_pdf_filename
 from app.core.resume_parser import parse_resume
 from app.repositories.candidate_repository import CandidateRepository
@@ -26,16 +26,16 @@ async def create_candidate(
 
     # Save uploaded file
     unique_filename = f"{uuid4()}_{filename}"
-    filepath = save_uploaded_file(STANDALONE_UPLOAD_DIR, unique_filename, content)
+    file_path = save_uploaded_file(STANDALONE_UPLOAD_DIR, unique_filename, content)
 
     try:
-        resume = parse_resume(str(filepath))
+        resume = parse_resume(file_path)
     except Exception as e:
-        filepath.unlink(missing_ok=True)
+        delete_file(file_path)
         raise ValidationError(f"Failed to parse resume: {e}")
 
     if not resume.is_resume:
-        filepath.unlink(missing_ok=True)
+        delete_file(file_path)
         raise ValidationError(
             f"Document is not a valid resume. Detected: {resume.document_type}"
         )
@@ -45,7 +45,7 @@ async def create_candidate(
     candidate = repo.create(
         resume=resume,
         filename=filename,
-        filepath=str(filepath),
+        filepath=file_path,
     )
 
     return CandidateResponse.model_validate(candidate)

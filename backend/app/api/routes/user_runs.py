@@ -18,7 +18,7 @@ from app.api.schemas.runs import (
     RunItemSummary,
 )
 from app.auth.jwt import get_current_active_user
-from app.core.file_storage import delete_file, save_uploaded_file
+from app.core.file_storage import delete_file, resolve_file_path, save_uploaded_file
 from app.core.file_upload import (
     process_uploaded_files,
     read_pdf_content,
@@ -246,7 +246,8 @@ async def add_candidates(
     except Exception as e:
         run_repo.mark_failed(run.id, str(e))
         for filename, item_id in uploaded_items:
-            delete_file(run.id, filename)
+            file_path = resolve_file_path(run.folder_path, filename)
+            delete_file(file_path)
             item_repo.delete_item(item_id)
         run_repo.adjust_total_count(run.id, -uploaded)
         raise ValidationError(f"Failed to start evaluation: {e}")

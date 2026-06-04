@@ -2,73 +2,94 @@
 File storage utilities for batch uploads.
 """
 
-import shutil
 from pathlib import Path
 from uuid import UUID
 
-UPLOAD_BASE = Path("data/uploads")
+from app.config import Config
+from app.core.storage.local import LocalStorage
+from app.core.storage.s3 import S3Storage
+
+UPLOAD_BASE = Path("resumes")
 
 
-def ensure_folder(folder_path: str) -> Path:
-    """Create folder if it doesn't exist, return path."""
-    folder = Path(folder_path)
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
+def get_storage():
+    """Get the configured storage backend."""
+    if Config.USE_S3:
+        return S3Storage(
+            bucket_name=Config.S3_BUCKET_NAME,
+            region_name=Config.S3_REGION,
+            aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
+        )
+    return LocalStorage(base_path=".")
 
 
-def resolve_safe_path(folder: Path, filename: str) -> Path:
+def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> str:
     """
-    Resolve filename relative to folder, rejecting any path traversal.
-
-    Raises:
-        ValueError: If the resolved path escapes the folder.
-    """
-    resolved = (folder / Path(filename).name).resolve()
-    if not resolved.is_relative_to(folder.resolve()):
-        raise ValueError("Invalid filename: path traversal detected")
-    return resolved
-
-
-def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> Path:
-    """
-    Save uploaded file to specified folder.
-
-    Args:
-        folder_path: Target folder path
-        filename: Filename to save as
-        content: File content bytes
+    Save uploaded file to specified folder using the configured backend.
 
     Returns:
-        Path to saved file
-
-    Raises:
-        ValueError: If resolved path escapes the target folder
+        Reference string to the saved file (path or key).
     """
-    folder = ensure_folder(folder_path)
-    file_path = resolve_safe_path(folder, filename)
-    file_path.write_bytes(content)
-    return file_path
+    storage = get_storage()
+    return storage.save(folder_path, filename, content)
 
 
-def get_batch_folder(run_id: UUID) -> Path:
-    """Get the folder path for a batch run."""
-    return UPLOAD_BASE / str(run_id)
+def get_file_content(file_path: str) -> bytes:
+    """Retrieve file content from the configured backend."""
+    storage = get_storage()
+    return storage.get(file_path)
 
 
-def delete_file(run_id: UUID, filename: str) -> bool:
-    """Delete a file from batch folder. Returns True if deleted."""
-    folder = get_batch_folder(run_id)
-    file_path = resolve_safe_path(folder, filename)
-    if file_path.exists():
-        file_path.unlink()
-        return True
-    return False
+def delete_file(file_path: str) -> bool:
+    """Delete a file from the configured backend."""
+    storage = get_storage()
+    return storage.delete(file_path)
+
+
+def ensure_folder(folder_path: str) -> None:
+    """Ensure a local folder exists. S3 prefixes are created when files are uploaded."""
+    if Config.USE_S3:
+        return
+
+    Path(folder_path).mkdir(parents=True, exist_ok=True)
 
 
 def delete_batch_folder(run_id: UUID) -> bool:
-    """Delete entire batch folder. Returns True if deleted."""
-    folder = get_batch_folder(run_id)
-    if folder.exists():
-        shutil.rmtree(folder)
-        return True
-    return False
+    """Delete all stored files for an evaluation run."""
+    storage = get_storage()
+    folder_path = get_batch_folder(run_id)
+
+    if not Config.USE_S3:
+        return storage.delete(folder_path)
+
+    prefix = folder_path.strip("/")
+    if prefix:
+        prefix = f"{prefix}/"
+
+    paginator = storage.s3.get_paginator("list_objects_v2")
+    deleted_any = False
+
+    for page in paginator.paginate(Bucket=storage.bucket_name, Prefix=prefix):
+        objects = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+        if not objects:
+            continue
+
+        storage.s3.delete_objects(
+            Bucket=storage.bucket_name,
+            Delete={"Objects": objects},
+        )
+        deleted_any = True
+
+    return deleted_any
+
+
+def get_batch_folder(run_id: UUID) -> str:
+    """Get the folder path for a batch run."""
+    return str(UPLOAD_BASE / str(run_id))
+
+
+def resolve_file_path(folder_path: str, filename: str) -> str:
+    """Resolve a folder path and filename into a storage path."""
+    clean_folder = folder_path.strip("/")
+    return f"{clean_folder}/{filename}"

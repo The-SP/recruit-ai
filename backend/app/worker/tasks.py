@@ -4,6 +4,7 @@ from uuid import UUID
 from celery import chord, group
 from celery.exceptions import SoftTimeLimitExceeded
 
+from app.core.file_storage import resolve_file_path
 from app.core.logger import init_logger
 from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
@@ -195,12 +196,12 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         # Mark item as processing
         item_repo.mark_started(item.id)
 
-        # Build full PDF path
-        pdf_path = os.path.join(run.folder_path, item.pdf_filename)
+        # Resolve storage reference
+        file_path = resolve_file_path(run.folder_path, item.pdf_filename)
 
         # Parse resume
-        logger.info(f"Parsing resume: {pdf_path}")
-        resume = parse_resume(pdf_path)
+        logger.info(f"Parsing resume: {file_path}")
+        resume = parse_resume(file_path)
 
         if not resume.is_resume or not resume.markdown_content:
             raise ValueError(f"Invalid resume or parsing failed: {item.pdf_filename}")
@@ -210,7 +211,7 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
         candidate = candidate_repo.create(
             resume=resume,
             filename=item.pdf_filename,
-            filepath=pdf_path,
+            filepath=file_path,
         )
 
         # Deserialize job description

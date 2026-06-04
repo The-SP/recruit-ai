@@ -28,7 +28,11 @@ from app.api.schemas.public import (
     ProgressInfo,
     RetryFailedResponse,
 )
-from app.core.file_storage import delete_file, save_uploaded_file
+from app.core.file_storage import (
+    delete_file,
+    resolve_file_path,
+    save_uploaded_file,
+)
 from app.core.file_upload import read_pdf_content, validate_pdf_filename
 from app.core.job_description_parser import parse_job_description
 from app.models.evaluation_run import RunStatus
@@ -303,7 +307,8 @@ async def add_candidates_to_batch(
     except Exception as e:
         run_repo.mark_failed(run.id, str(e))
         for filename, item_id in uploaded_items:
-            delete_file(run.id, filename)
+            file_path = resolve_file_path(run.folder_path, filename)
+            delete_file(file_path)
             item_repo.delete_item(item_id)
         run_repo.adjust_total_count(run.id, -uploaded)
         raise ValidationError(f"Failed to start batch processing: {e}")
@@ -651,7 +656,8 @@ def delete_batch_file(
     if item.evaluation_run_id != run_id:
         raise NotFoundError("File", str(item_id))
 
-    delete_file(run_id, item.pdf_filename)
+    file_path = resolve_file_path(run.folder_path, item.pdf_filename)
+    delete_file(file_path)
     item_repo.delete_item(item_id)
     run_repo.adjust_total_count(run_id, delta=-1)
 
