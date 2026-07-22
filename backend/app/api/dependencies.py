@@ -6,6 +6,8 @@ from app.config import Config
 # Re-export database dependency
 from app.models.database import get_db
 
+__all__ = ["get_db", "verify_api_key"]
+
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
@@ -37,9 +37,9 @@ class CandidateEvaluation(Base):
     hire_signal: Mapped[str | None] = mapped_column(String(50))
 
     # Detailed results
-    skill_result: Mapped[dict | None] = mapped_column(JSONB)
-    experience_result: Mapped[dict | None] = mapped_column(JSONB)
-    education_result: Mapped[dict | None] = mapped_column(JSONB)
+    skill_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    experience_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    education_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     summary: Mapped[str | None] = mapped_column(Text)
 

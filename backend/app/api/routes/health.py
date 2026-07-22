@@ -18,13 +18,13 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 class DetailedHealthResponse(BaseModel):
     status: str
-    database: dict
-    redis: dict
-    celery: dict
-    llm: dict
+    database: dict[str, Any]
+    redis: dict[str, Any]
+    celery: dict[str, Any]
+    llm: dict[str, Any]
 
 
-def _check_database() -> dict:
+def _check_database() -> dict[str, Any]:
     """Test database connectivity."""
     try:
         with engine.connect() as conn:
@@ -35,7 +35,7 @@ def _check_database() -> dict:
         return {"status": "error", "message": str(e)[:100]}
 
 
-def _check_redis() -> dict:
+def _check_redis() -> dict[str, Any]:
     """Test Redis connectivity."""
     try:
         redis_client = Redis.from_url(Config.REDIS_URL)
@@ -46,7 +46,7 @@ def _check_redis() -> dict:
         return {"status": "error", "message": str(e)[:100]}
 
 
-def _check_celery() -> dict:
+def _check_celery() -> dict[str, Any]:
     """Test Celery worker availability."""
     try:
         # Check if any workers are active
@@ -64,7 +64,7 @@ def _check_celery() -> dict:
         return {"status": "error", "message": str(e)[:100]}
 
 
-def _check_llm() -> dict:
+def _check_llm() -> dict[str, Any]:
     """Test LLM connectivity with minimal prompt."""
     try:
         agent: Any = create_agent(model=Config.MODEL_NAME)
@@ -81,7 +81,7 @@ def _check_llm() -> dict:
 
 
 @router.get("")
-def health_check():
+def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 

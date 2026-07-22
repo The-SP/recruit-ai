@@ -1,3 +1,5 @@
+from typing import Any
+
 from app.schemas.job_description import (
     EducationRequirement,
     ExperienceRequirement,
@@ -7,13 +9,13 @@ from app.schemas.job_description import (
 )
 
 
-def build_job_requirements_schema(job_requirements) -> JobRequirementsSchema:
+def build_job_requirements_schema(job_requirements: Any) -> JobRequirementsSchema:
     """Builds a JobRequirementsSchema from job requirements model."""
     if not job_requirements:
         return JobRequirementsSchema(skills=SkillRequirements())
 
     req = job_requirements
-    skills = None
+    skills = SkillRequirements()
     if req.skills:
         skills = SkillRequirements(
             critical=[SkillGroup(**g) for g in req.skills.get("critical", [])],

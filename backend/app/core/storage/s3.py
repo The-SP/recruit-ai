@@ -35,7 +35,8 @@ class S3Storage(BaseStorage):
 
     def get(self, file_path: str) -> bytes:
         response = self.s3.get_object(Bucket=self.bucket_name, Key=file_path)
-        return response["Body"].read()
+        data: bytes = response["Body"].read()
+        return data
 
     def delete(self, file_path: str) -> bool:
         try:

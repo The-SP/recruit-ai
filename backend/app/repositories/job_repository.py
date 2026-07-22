@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -15,7 +16,7 @@ class JobRepository:
         self.db = db
 
     @staticmethod
-    def _build_skills_jsonb(jd: JobDescriptionResponse) -> dict | None:
+    def _build_skills_jsonb(jd: JobDescriptionResponse) -> dict[str, Any] | None:
         """Convert SkillRequirements to JSONB-compatible dict"""
         if not jd.requirements or not jd.requirements.skills:
             return None

@@ -10,6 +10,7 @@ from app.api.schemas.evaluations import (
     EvaluationResponse,
 )
 from app.evaluation.composite_scorer import calculate_composite_score
+from app.models.job import Job
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.job_repository import JobRepository
@@ -19,7 +20,7 @@ from app.schemas.job_utils import build_job_requirements_schema
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
 
-def _job_to_jd_response(job) -> JobDescriptionResponse:
+def _job_to_jd_response(job: Job) -> JobDescriptionResponse:
     """Convert Job model to JobDescriptionResponse for scoring."""
     return JobDescriptionResponse(
         is_job_description=job.is_valid_jd or False,

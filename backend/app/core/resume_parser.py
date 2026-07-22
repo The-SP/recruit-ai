@@ -1,5 +1,5 @@
 import base64
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
@@ -113,4 +113,4 @@ def parse_resume(file_path: str) -> ResumeResponse:
     else:
         logger.warning(f"Document is not a resume - Type: {response.document_type}")
 
-    return response
+    return cast(ResumeResponse, response)

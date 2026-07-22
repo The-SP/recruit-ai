@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from uuid import UUID
 
 from celery import chord, group
@@ -10,6 +11,7 @@ from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
 from app.models.database import create_session
 from app.models.evaluation_run import ItemStatus, RunStatus
+from app.models.job import Job
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
@@ -31,7 +33,7 @@ from app.worker.circuit_breaker import (
 logger = init_logger(__name__)
 
 
-def _job_model_to_response(job) -> JobDescriptionResponse:
+def _job_model_to_response(job: Job) -> JobDescriptionResponse:
     """Convert Job model to JobDescriptionResponse schema."""
     requirements = build_job_requirements_schema(job.requirements)
 
@@ -60,7 +62,7 @@ def _send_failure_email(run_id: UUID) -> None:
 
 
 @celery_app.task(bind=True, name="process_evaluation_run")
-def process_evaluation_run(self, run_id: str) -> str:
+def process_evaluation_run(self: Any, run_id: str) -> str:
     """
     Orchestrator task: Dispatches worker tasks for an existing evaluation run.
 
@@ -163,7 +165,7 @@ def process_evaluation_run(self, run_id: str) -> str:
 
 
 @celery_app.task(bind=True, name="evaluate_resume")
-def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
+def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Worker task: Process a single resume.
 
@@ -281,7 +283,9 @@ def evaluate_resume(self, item_id: str, jd_dict: dict) -> dict:
 
 
 @celery_app.task(bind=True, name="finalize_evaluation_run")
-def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
+def finalize_evaluation_run(
+    self: Any, results: list[dict[str, Any]], run_id: str
+) -> dict[str, Any]:
     """
     Callback task: Finalize the evaluation run after all items complete.
 
@@ -341,7 +345,7 @@ def finalize_evaluation_run(self, results: list[dict], run_id: str) -> dict:
 
 
 @celery_app.task(name="on_chord_error")
-def on_chord_error(request, exc, traceback, run_id: str) -> None:
+def on_chord_error(request: Any, exc: Any, traceback: Any, run_id: str) -> None:
     """Error callback when a chord fails due to a hard task failure."""
     logger.error(f"Chord failed for run={run_id}: {exc}")
 

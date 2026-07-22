@@ -8,6 +8,7 @@ from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.evaluations import RankingItem, RankingsResponse
 from app.api.schemas.jobs import JobCreateRequest, JobListResponse, JobResponse
 from app.core.job_description_parser import parse_job_description
+from app.models.job import Job
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.job_repository import JobRepository
@@ -16,7 +17,7 @@ from app.schemas.job_utils import build_job_requirements_schema
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-def _model_to_response(job) -> JobResponse:
+def _model_to_response(job: Job) -> JobResponse:
     """Convert Job model to JobResponse."""
     requirements = build_job_requirements_schema(job.requirements)
 

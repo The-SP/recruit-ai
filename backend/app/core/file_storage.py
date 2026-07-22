@@ -6,13 +6,14 @@ from pathlib import Path
 from uuid import UUID
 
 from app.config import Config
+from app.core.storage.base import BaseStorage
 from app.core.storage.local import LocalStorage
 from app.core.storage.s3 import S3Storage
 
 UPLOAD_BASE = Path("resumes")
 
 
-def get_storage():
+def get_storage() -> BaseStorage:
     """Get the configured storage backend."""
     if Config.USE_S3:
         return S3Storage(
@@ -62,6 +63,8 @@ def delete_batch_folder(run_id: UUID) -> bool:
 
     if not Config.USE_S3:
         return storage.delete(folder_path)
+
+    assert isinstance(storage, S3Storage)
 
     prefix = folder_path.strip("/")
     if prefix:

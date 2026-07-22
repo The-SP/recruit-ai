@@ -16,14 +16,14 @@ router = APIRouter()
 @router.get("/google")
 async def login_with_google(request: Request) -> object:
     redirect_uri = f"{Config.BASE_URL}/auth/google/callback"
-    return await google.authorize_redirect(request, redirect_uri)
+    return await google.authorize_redirect(request, redirect_uri)  # type: ignore[no-untyped-call]
 
 
 @router.get("/google/callback")
 async def google_callback(
     request: Request, db: Session = Depends(get_db)
 ) -> RedirectResponse:
-    token = await google.authorize_access_token(request)
+    token = await google.authorize_access_token(request)  # type: ignore[no-untyped-call]
     userinfo = token.get("userinfo") or await google.userinfo(token=token)
     user = UserRepository(db).get_or_create(dict(userinfo))
     access_token = create_access_token({"sub": user.google_id})

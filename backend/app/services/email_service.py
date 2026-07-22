@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from typing import Any
 
 import resend
 from jinja2 import Environment, FileSystemLoader
@@ -109,10 +110,10 @@ class EmailService:
         self._provider = provider
         self._frontend_url = frontend_url
 
-    def _render(self, template_name: str, **kwargs) -> str:
+    def _render(self, template_name: str, **kwargs: Any) -> str:
         return _template_env.get_template(template_name).render(**kwargs)
 
-    def _send(self, to: str, subject: str, template: str, **context) -> None:
+    def _send(self, to: str, subject: str, template: str, **context: Any) -> None:
         try:
             html = self._render(template, **context)
             self._provider.send(to, subject, html)

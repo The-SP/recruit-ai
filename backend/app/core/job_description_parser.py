@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
@@ -165,4 +165,4 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
             f"Document is not a job description - Type: {response.document_type}"
         )
 
-    return response
+    return cast(JobDescriptionResponse, response)

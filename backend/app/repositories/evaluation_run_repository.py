@@ -367,7 +367,7 @@ class EvaluationRunItemRepository:
         )
         return list(self.db.scalars(stmt).all())
 
-    def mark_uploaded_as_pending(self, run_id: UUID):
+    def mark_uploaded_as_pending(self, run_id: UUID) -> None:
         """Bulk update all 'uploaded' items to 'pending'."""
         stmt = (
             update(EvaluationRunItem)

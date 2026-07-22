@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import ARRAY, ForeignKey, String, Text, func
@@ -70,7 +70,7 @@ class JobRequirements(Base):
     edu_required: Mapped[bool] = mapped_column(default=False)
 
     # Skills (nested structure)
-    skills: Mapped[dict | None] = mapped_column(JSONB)
+    skills: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
