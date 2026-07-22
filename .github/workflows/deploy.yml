@@ -1,0 +1,110 @@
+name: Deploy to EC2
+
+# Manual-only: this workflow never runs on push/PR. Trigger it from the
+# Actions tab ("Run workflow") or via `gh workflow run deploy.yml`.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git branch/tag the host should deploy"
+        required: false
+        default: main
+
+permissions:
+  id-token: write # required for AWS OIDC
+  contents: read
+
+# Never let two production deploys overlap.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  INSTANCE_ID: i-09f5974c17c5142dd
+  DEPLOY_PATH: /home/ssm-user/r.ai/backend
+  HEALTH_URL: https://api.recruitai.qzz.io/health
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy on EC2 via SSM
+        env:
+          DEPLOY_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+
+          # The deploy logic lives in the tracked deploy/deploy.sh on the host
+          # (already present via the previous deploy's git checkout). We just
+          # invoke it as ssm-user (SSM runs commands as root); the script does
+          # its own git fetch/checkout of the requested ref.
+          REMOTE="sudo -iu ssm-user bash ${DEPLOY_PATH}/deploy/deploy.sh $(printf '%q' "${DEPLOY_REF}")"
+
+          # Pass the command as JSON via jq so quoting survives intact.
+          PARAMS=$(jq -n --arg cmd "$REMOTE" '{commands: [$cmd]}')
+
+          echo "Dispatching SSM command to ${INSTANCE_ID} (ref: ${DEPLOY_REF})..."
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions deploy (${DEPLOY_REF})" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" \
+            --output text)
+          echo "CommandId: ${CMD_ID}"
+
+          # send-command is async — poll the invocation to real completion.
+          echo "Waiting for command to finish..."
+          while true; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${CMD_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut)
+                break
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "----- Remote stdout -----"
+          aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --query "StandardOutputContent" --output text || true
+          echo "----- Remote stderr -----"
+          aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --query "StandardErrorContent" --output text || true
+
+          echo "Final status: ${STATUS}"
+          if [ "${STATUS}" != "Success" ]; then
+            echo "::error::Deploy command ended with status ${STATUS}"
+            exit 1
+          fi
+
+      - name: Health check
+        run: |
+          set -euo pipefail
+          echo "Probing ${HEALTH_URL}..."
+          for i in $(seq 1 5); do
+            if curl -fsS "${HEALTH_URL}"; then
+              echo ""
+              echo "Health check passed."
+              exit 0
+            fi
+            echo "Attempt $i failed; retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Health check failed after retries"
+          exit 1
