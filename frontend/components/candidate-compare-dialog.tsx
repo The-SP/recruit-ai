@@ -21,6 +21,7 @@ import {
   tierSectionStyles,
 } from "@/lib/evaluation-styles";
 import { cn } from "@/lib/utils";
+import type { EvaluationItem } from "@/lib/evaluation-types";
 import { CandidateBreakdown, SkillGroupDetail } from "@/services/batch";
 
 type CachedBreakdown = CandidateBreakdown | "loading" | "error" | undefined;
@@ -34,15 +35,12 @@ const tierBadgeStyles: Record<string, string> = {
   preferred: "bg-muted text-muted-foreground border-border",
 };
 
-// Structural subset shared by CandidateResult (public page) and
-// RunItemSummary (dashboard page).
-export interface CompareCandidate {
-  candidate_id: string | null;
-  candidate_name: string | null;
-  filename: string;
-  final_score: number | null;
-  hire_signal: string | null;
-}
+// The dialog only needs these fields; both page item types (via EvaluationItem)
+// satisfy it.
+export type CompareCandidate = Pick<
+  EvaluationItem,
+  "candidate_id" | "candidate_name" | "filename" | "final_score" | "hire_signal"
+>;
 
 interface CandidateCompareDialogProps {
   open: boolean;

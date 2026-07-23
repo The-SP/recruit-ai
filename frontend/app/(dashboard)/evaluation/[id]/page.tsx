@@ -1,68 +1,31 @@
 "use client";
 
 import {
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
-  BookOpen,
-  Briefcase,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Columns2,
   Download,
-  FileText,
   Loader2,
   Plus,
   RefreshCw,
   RotateCcw,
-  Search,
   Sparkles,
   Users,
   X,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 
 import { CandidateCompareDialog } from "@/components/candidate-compare-dialog";
+import { CompareBar } from "@/components/evaluation/compare-bar";
+import { FilterControls } from "@/components/evaluation/filter-controls";
+import { ProcessingProgress } from "@/components/evaluation/processing-progress";
+import { ResultsTable } from "@/components/evaluation/results-table";
+import { ResumeSheet } from "@/components/evaluation/resume-sheet";
+import { StatsSummary } from "@/components/evaluation/stats-summary";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import {
-  SKILL_TIERS,
-  matchTypeLabels,
-  matchTypeStyles,
-  relevanceStyles,
-  scoreBarColor,
-  signalLabels,
-  signalStyles,
-  tierSectionStyles,
-} from "@/lib/evaluation-styles";
+import { MAX_COMPARE, type ResumePanelState, type SortBy } from "@/lib/evaluation-types";
 import { ApiError } from "@/services/api";
 import { type CandidateBreakdown } from "@/services/batch";
 import {
@@ -73,238 +36,6 @@ import {
   type EvaluationRunDetail,
   type RunItemSummary,
 } from "@/services/runs";
-
-type BreakdownSection = "skills" | "experience" | "education";
-type SortBy = "score_desc" | "name_asc" | "name_desc";
-
-const MAX_COMPARE = 4;
-
-function CandidateBreakdownPanel({
-  breakdown,
-  isExpanded,
-}: {
-  breakdown: CandidateBreakdown | "loading" | "error" | undefined;
-  isExpanded: boolean;
-}) {
-  const [activeSection, setActiveSection] = useState<BreakdownSection | null>(null);
-
-  const handleBarClick = (section: BreakdownSection) => {
-    setActiveSection(prev => prev === section ? null : section);
-  };
-
-  return (
-    <div
-      className={cn(
-        "overflow-hidden transition-all duration-300",
-        isExpanded ? "max-h-[3000px] opacity-100" : "max-h-0 opacity-0"
-      )}
-    >
-      <div className="px-6 py-6 bg-muted/50 border-t border-border space-y-6 overflow-hidden w-full">
-        {breakdown === "loading" && (
-          <div className="flex items-center gap-3 py-4 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-sm font-medium">Loading breakdown...</span>
-          </div>
-        )}
-
-        {breakdown === "error" && (
-          <div className="flex items-center gap-2 text-error-foreground py-2">
-            <X className="w-4 h-4" />
-            <span className="text-sm">Failed to load breakdown details.</span>
-          </div>
-        )}
-
-        {breakdown && breakdown !== "loading" && breakdown !== "error" && (
-          <>
-            {breakdown.summary && (
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {breakdown.summary}
-              </p>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {([
-                { key: "skills" as BreakdownSection, label: "Skills", value: breakdown.skill_score, icon: <Zap className="w-4 h-4" /> },
-                { key: "experience" as BreakdownSection, label: "Experience", value: breakdown.experience_score, icon: <Briefcase className="w-4 h-4" /> },
-                { key: "education" as BreakdownSection, label: "Education", value: breakdown.education_score, icon: <BookOpen className="w-4 h-4" /> },
-              ]).map(({ key, label, value, icon }) => {
-                const isActive = activeSection === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => handleBarClick(key)}
-                    className={cn(
-                      "text-left rounded-xl p-3 space-y-1.5 border transition-all cursor-pointer select-none",
-                      isActive
-                        ? "bg-card border-border shadow-sm"
-                        : "bg-card/50 border-border/60 hover:border-border hover:bg-card hover:shadow-sm"
-                    )}
-                  >
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className={cn("flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground")}>
-                        {icon}
-                        {label}
-                      </span>
-                      <span className={isActive ? "text-foreground" : "text-muted-foreground"}>
-                        {value != null ? `${Math.round(value * 100)}%` : "N/A"}
-                      </span>
-                    </div>
-                    <Progress
-                      value={value != null ? Math.round(value * 100) : 0}
-                      className={cn("h-2", value != null && scoreBarColor(value))}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            {activeSection === "skills" && breakdown.skills && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                  <Zap className="w-3.5 h-3.5" />
-                  Skill Evaluation
-                </h3>
-
-                {breakdown.skills.critical_gaps.length > 0 && (
-                  <div className="text-xs text-error-foreground bg-error border border-error-edge rounded-lg px-3 py-2">
-                    <span className="font-bold">Critical gaps: </span>
-                    {breakdown.skills.critical_gaps.join(", ")}
-                  </div>
-                )}
-
-                {SKILL_TIERS.map((tier) => {
-                  const evsForTier = breakdown.skills!.llm_response.evaluations.filter(
-                    (ev) => ev.tier === tier
-                  );
-                  if (evsForTier.length === 0) return null;
-                  const { label, headerClass } = tierSectionStyles[tier];
-                  return (
-                    <div key={tier} className="space-y-1.5">
-                      <p className={cn("text-[10px] font-bold uppercase tracking-widest", headerClass)}>
-                        {label}
-                      </p>
-                      <div className="space-y-2">
-                        {evsForTier.map((ev, i) => (
-                          <div key={i} className="bg-card border border-border rounded-xl p-3 space-y-1.5 overflow-hidden">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-medium text-sm text-foreground break-words">
-                                {ev.skill_options.join(" / ")}
-                              </span>
-                              <Badge variant="outline" className={matchTypeStyles[ev.match_type]}>
-                                {matchTypeLabels[ev.match_type] || ev.match_type}
-                              </Badge>
-                            </div>
-                            {ev.matched_by && (
-                              <p className="text-xs text-muted-foreground break-words">
-                                Matched by: <span className="font-medium">{ev.matched_by}</span>
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground break-words">
-                              <span className="font-semibold not-italic">Evidence: </span>
-                              <span className="italic">{ev.evidence}</span>
-                            </p>
-                            <p className="text-xs text-muted-foreground break-words">
-                              <span className="font-semibold">Reasoning: </span>
-                              {ev.reasoning}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {breakdown.skills.llm_response.strengths.length > 0 && (
-                  <div className="text-xs text-success-foreground bg-success border border-success-edge rounded-lg px-3 py-2">
-                    <span className="font-bold">Strengths: </span>
-                    {breakdown.skills.llm_response.strengths.join(", ")}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeSection === "experience" && breakdown.experience && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                  <Briefcase className="w-3.5 h-3.5" />
-                  Experience Evaluation
-                  <span className="ml-auto text-muted-foreground normal-case font-medium">
-                    {breakdown.experience.effective_years.toFixed(1)} yrs effective
-                    {" / "}
-                    {breakdown.experience.required_years.toFixed(1)} yrs required
-                  </span>
-                </h3>
-
-                {breakdown.experience.required_years > 0 && (
-                  <div className="space-y-1">
-                    <Progress
-                      value={Math.min(
-                        (breakdown.experience.effective_years / breakdown.experience.required_years) * 100,
-                        100
-                      )}
-                      className={cn(
-                        "h-1.5",
-                        breakdown.experience.effective_years >= breakdown.experience.required_years
-                          ? "[&>div]:bg-success-bar"
-                          : breakdown.experience.effective_years >= breakdown.experience.required_years * 0.7
-                          ? "[&>div]:bg-warning-bar"
-                          : "[&>div]:bg-error-bar"
-                      )}
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  {breakdown.experience.llm_response.evaluations.map((job, i) => (
-                    <div key={i} className="bg-card border border-border rounded-xl p-3 space-y-1 overflow-hidden">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="font-medium text-sm text-foreground break-words">{job.job_title}</span>
-                          {job.company && (
-                            <span className="text-xs text-muted-foreground ml-2">@ {job.company}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs text-muted-foreground">{job.duration_months} mo</span>
-                          <Badge variant="outline" className={relevanceStyles[job.relevance]}>
-                            {job.relevance} relevance
-                          </Badge>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground italic break-words">{job.evidence}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeSection === "education" && breakdown.education && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                  <BookOpen className="w-3.5 h-3.5" />
-                  Education
-                </h3>
-                <div className="bg-card border border-border rounded-xl p-3 space-y-1">
-                  {breakdown.education.candidate_degree && (
-                    <p className="text-sm font-medium text-foreground">
-                      {breakdown.education.candidate_degree}
-                      {breakdown.education.field_of_study && (
-                        <span className="text-muted-foreground font-normal">
-                          {" — "}{breakdown.education.field_of_study}
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">{breakdown.education.summary}</p>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function RunDetailPage({
   params,
@@ -325,11 +56,7 @@ export default function RunDetailPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSignal, setFilterSignal] = useState("all");
   const [sortBy, setSortBy] = useState<SortBy>("score_desc");
-  const [resumePanel, setResumePanel] = useState<{
-    name: string | null;
-    filename: string;
-    markdown: string;
-  } | null>(null);
+  const [resumePanel, setResumePanel] = useState<ResumePanelState | null>(null);
   const [compareItemIds, setCompareItemIds] = useState<Set<string>>(new Set());
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -668,116 +395,36 @@ export default function RunDetailPage({
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-          <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
-            <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-2 text-xs font-semibold">
-              <Users className="w-3.5 h-3.5 text-primary" />
-              Candidates
-            </div>
-            <div className="text-3xl font-black text-foreground">{data.total_count}</div>
-          </div>
-          {!isActive && (
-            <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
-                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                Proc. Time
-              </div>
-              <div className="text-3xl font-black text-foreground">
-                {data.processing_time_seconds ? Math.round(data.processing_time_seconds) : "—"}
-                <span className="text-xs font-bold text-muted-foreground ml-1 uppercase">s</span>
-              </div>
-            </div>
-          )}
-          <div className="bg-card border border-border p-5 rounded-2xl shadow-sm">
-            <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 mb-2 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-              Best Score
-            </div>
-            <div className="text-3xl font-black text-foreground">
-              {bestScore != null ? `${bestScore}%` : "—"}
-            </div>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="bg-white dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700 p-5 rounded-2xl shadow-sm cursor-default">
-                <div className="flex items-center gap-2 text-muted-foreground mb-2 text-xs font-semibold">
-                  <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
-                  Top Matches
-                </div>
-                <div className="text-3xl font-black text-foreground">{topMatchCount > 0 ? topMatchCount : "—"}</div>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Candidates with a Strong Match or Good Match hire signal (≥ 70%)</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <StatsSummary
+          candidateCount={data.total_count}
+          processingTimeSeconds={data.processing_time_seconds}
+          bestScore={bestScore}
+          topMatchCount={topMatchCount}
+          isProcessing={isActive}
+        />
 
         {/* Progress Card */}
         {isActive && (
-          <Card className="p-8 shadow-xl border-border rounded-3xl bg-card mb-8">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4 text-sm font-black text-foreground uppercase tracking-widest">
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  Analyzing Resumes
-                </span>
-                <span className="tabular-nums">{progressPercent}%</span>
-              </div>
-              <div className="relative h-3 w-full bg-muted rounded-full overflow-hidden border border-border/50">
-                <div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 rounded-full shadow-[0_0_10px_theme(colors.primary/30%)]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-xs text-muted-foreground font-medium pt-0.5">
-                <span>
-                  {data.processed_count} of {data.total_count} candidates completed
-                  {failedCount > 0 && (
-                    <span className="text-error-foreground ml-1">({failedCount} failed)</span>
-                  )}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <RefreshCw className="w-3 h-3" />
-                  Auto-refreshing every 10s
-                </span>
-              </div>
-            </div>
-          </Card>
+          <ProcessingProgress
+            processed={data.processed_count}
+            total={data.total_count}
+            failed={failedCount}
+            percent={progressPercent}
+          />
         )}
 
         <div className="space-y-8">
           {/* Search / filter controls */}
           {data.items.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative w-56">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-                <Input
-                  placeholder="Search by name or file…"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 rounded-xl border-zinc-200 text-sm"
-                />
-              </div>
-              <Select value={filterSignal} onValueChange={setFilterSignal}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Signals</SelectItem>
-                  <SelectItem value="strong_match">Strong Match</SelectItem>
-                  <SelectItem value="good_match">Good Match</SelectItem>
-                  <SelectItem value="partial_match">Partial Match</SelectItem>
-                  <SelectItem value="weak_match">Weak Match</SelectItem>
-                  <SelectItem value="no_match">No Match</SelectItem>
-                </SelectContent>
-              </Select>
-              {isFiltered && (
-                <span className="text-xs font-medium text-muted-foreground ml-1">
-                  {filteredItems.length} of {sourceItems.length}
-                </span>
-              )}
-            </div>
+            <FilterControls
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              filterSignal={filterSignal}
+              onFilterChange={setFilterSignal}
+              isFiltered={isFiltered}
+              shownCount={filteredItems.length}
+              totalCount={sourceItems.length}
+            />
           )}
 
           {(!isActive || completedItems.length > 0) && (
@@ -798,190 +445,26 @@ export default function RunDetailPage({
                   <p className="text-muted-foreground text-sm mt-1">Add resumes below to start evaluating candidates.</p>
                 </div>
               ) : (
-                <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
-                        <TableHead className="w-12 text-center">
-                          <span className="sr-only">Select for comparison</span>
-                        </TableHead>
-                        <TableHead className="w-20 text-center">Rank</TableHead>
-                        <TableHead>
-                          <button
-                            onClick={() => setSortBy(prev => prev === "name_asc" ? "name_desc" : prev === "name_desc" ? "score_desc" : "name_asc")}
-                            className="flex items-center gap-1 font-semibold hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            Resume
-                            {sortBy === "name_asc" && <ArrowUp className="w-3 h-3 text-primary" />}
-                            {sortBy === "name_desc" && <ArrowDown className="w-3 h-3 text-primary" />}
-                          </button>
-                        </TableHead>
-                        <TableHead className="w-32 text-center">
-                          <span className="flex items-center justify-center gap-1 font-semibold">
-                            Score
-                            <ArrowDown className={cn("w-3 h-3", sortBy === "score_desc" ? "text-primary" : "text-transparent")} />
-                          </span>
-                        </TableHead>
-                        <TableHead className="w-40 text-center">Hire Signal</TableHead>
-                        <TableHead className="w-24 text-right pr-4">
-                          <button
-                            onClick={handleExpandAll}
-                            className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            {allExpanded ? "Collapse all" : "Expand all"}
-                          </button>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="[&_tr]:border-foreground/10">
-
-                      {filteredItems.length === 0 && isFiltered ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="py-16 text-center">
-                            <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm">No candidates match your filters.</p>
-                            <button
-                              onClick={() => { setSearchQuery(""); setFilterSignal("all"); }}
-                              className="mt-2 text-xs font-semibold text-primary hover:underline cursor-pointer"
-                            >
-                              Clear filters
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-
-                      {filteredItems.map((item, index) => {
-                        const isExpanded = expandedIds.has(item.item_id);
-                        const isFailed = item.status === "failed";
-                        const scorePct = item.final_score != null ? Math.round(item.final_score * 100) : null;
-                        const breakdown = breakdownCache[item.item_id];
-
-                        return (
-                          <React.Fragment key={item.item_id}>
-                            <TableRow
-                              onClick={() => !isFailed && handleRowClick(item)}
-                              className={cn(
-                                "select-none",
-                                isFailed ? "opacity-60" : "cursor-pointer",
-                                isExpanded && "bg-muted/50"
-                              )}
-                            >
-                              <TableCell
-                                className="text-center"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {!isFailed && item.candidate_id && (
-                                  <Checkbox
-                                    checked={compareItemIds.has(item.item_id)}
-                                    onCheckedChange={() => toggleCompare(item.item_id)}
-                                    disabled={!compareItemIds.has(item.item_id) && compareItemIds.size >= MAX_COMPARE}
-                                    aria-label={`Select ${item.candidate_name ?? item.filename} for comparison`}
-                                    title={
-                                      !compareItemIds.has(item.item_id) && compareItemIds.size >= MAX_COMPARE
-                                        ? `You can compare up to ${MAX_COMPARE} candidates`
-                                        : "Select for comparison"
-                                    }
-                                    className="cursor-pointer align-middle"
-                                  />
-                                )}
-                              </TableCell>
-                              <TableCell className="text-center font-bold">{index + 1}</TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  <FileText className={cn("w-5 h-5 shrink-0", isFailed ? "text-error-border" : "text-muted-foreground")} />
-                                  <div>
-                                    <span className="font-medium truncate">
-                                      {item.candidate_name ?? item.filename}
-                                    </span>
-                                    {item.candidate_name && (
-                                      <p className="text-xs text-muted-foreground">{item.filename}</p>
-                                    )}
-                                    {isFailed && (
-                                      <p className="text-xs text-error-foreground font-medium mt-0.5">Evaluation failed</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {scorePct != null ? (
-                                  <div className="flex flex-col items-center gap-1.5">
-                                    <span className="font-bold">{scorePct}%</span>
-                                    <Progress
-                                      value={scorePct}
-                                      className={cn("h-1 w-16", scoreBarColor(item.final_score!))}
-                                    />
-                                  </div>
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {item.hire_signal ? (
-                                  <Badge variant="outline" className={signalStyles[item.hire_signal] ?? ""}>
-                                    {signalLabels[item.hire_signal] ?? item.hire_signal}
-                                  </Badge>
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell className="text-right pr-3 w-24">
-                                <div className="flex items-center justify-end gap-1">
-                                  {!isFailed && item.candidate_id && (
-                                    <button
-                                      onClick={(e) => handleViewResume(e, item)}
-                                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                                      title="View resume"
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  {!isFailed && item.candidate_id && (
-                                    isExpanded
-                                      ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                                      : <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                            <TableRow className="hover:bg-transparent">
-                              <TableCell colSpan={6} className="p-0 border-b-0 whitespace-normal">
-                                <CandidateBreakdownPanel
-                                  key={`${item.item_id}-${isExpanded}`}
-                                  breakdown={breakdown}
-                                  isExpanded={isExpanded}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          </React.Fragment>
-                        );
-                      })}
-
-                      {/* Skeleton rows for candidates still being processed */}
-                      {isActive && data.items
-                        .filter(i => i.final_score === null)
-                        .map((item, i) => (
-                          <TableRow key={`pending-${item.filename}-${i}`} className="opacity-50">
-                            <TableCell />
-                            <TableCell className="text-center">
-                              <div className="h-4 w-4 rounded bg-muted animate-pulse mx-auto" />
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Loader2 className="w-5 h-5 text-muted-foreground/40 animate-spin shrink-0" />
-                                <div className="space-y-1.5">
-                                  <div className="h-3.5 w-40 rounded bg-muted animate-pulse" />
-                                  <div className="h-2.5 w-28 rounded bg-muted/50 animate-pulse" />
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="h-3.5 w-10 rounded bg-muted animate-pulse mx-auto" />
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="h-6 w-24 rounded-full bg-muted/50 animate-pulse mx-auto" />
-                            </TableCell>
-                            <TableCell />
-                          </TableRow>
-                        ))
-                      }
-                    </TableBody>
-                  </Table>
-                </div>
+                <ResultsTable
+                  items={filteredItems}
+                  pendingItems={data.items.filter(i => i.final_score === null)}
+                  expandedIds={expandedIds}
+                  breakdownCache={breakdownCache}
+                  compareIds={compareItemIds}
+                  sortBy={sortBy}
+                  onSort={() => setSortBy(prev => prev === "name_asc" ? "name_desc" : prev === "name_desc" ? "score_desc" : "name_asc")}
+                  onRowClick={handleRowClick}
+                  onToggleCompare={toggleCompare}
+                  onViewResume={handleViewResume}
+                  allExpanded={allExpanded}
+                  onExpandAll={handleExpandAll}
+                  isProcessing={isActive}
+                  isFiltered={isFiltered}
+                  showEmptyFilterRow={filteredItems.length === 0}
+                  onClearFilters={() => { setSearchQuery(""); setFilterSignal("all"); }}
+                  getCompareId={(item) => item.item_id}
+                  getBreakdownKey={(item) => item.item_id}
+                />
               )}
             </>
           )}
@@ -1056,50 +539,13 @@ export default function RunDetailPage({
         </div>
 
         {/* Floating compare bar */}
-        {compareItems.length > 0 && (
-          <div className="sticky bottom-6 z-40 mx-auto mt-8 w-full max-w-3xl">
-            <div className="bg-card border border-border rounded-2xl shadow-xl px-4 py-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
-                Compare
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-                {compareItems.map(item => (
-                  <span
-                    key={item.item_id}
-                    className="inline-flex items-center gap-1 bg-muted text-foreground text-xs font-medium rounded-lg pl-2.5 pr-1 py-1 max-w-44"
-                  >
-                    <span className="truncate">{item.candidate_name ?? item.filename}</span>
-                    <button
-                      onClick={() => handleRemoveFromCompare(item.candidate_id)}
-                      className="p-0.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
-                      title="Remove from comparison"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-auto">
-                <button
-                  onClick={() => setCompareItemIds(new Set())}
-                  className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2"
-                >
-                  Clear
-                </button>
-                <Button
-                  size="sm"
-                  onClick={handleOpenCompare}
-                  disabled={compareItems.length < 2}
-                  className="h-9 px-4 font-bold rounded-xl gap-2 cursor-pointer"
-                  title={compareItems.length < 2 ? "Select at least 2 candidates to compare" : undefined}
-                >
-                  <Columns2 className="w-4 h-4" />
-                  Compare ({compareItems.length})
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <CompareBar
+          candidates={compareItems}
+          getKey={(item) => item.item_id}
+          onRemove={handleRemoveFromCompare}
+          onClear={() => setCompareItemIds(new Set())}
+          onOpen={handleOpenCompare}
+        />
       </main>
 
       <CandidateCompareDialog
@@ -1110,27 +556,7 @@ export default function RunDetailPage({
         onRemove={handleRemoveFromCompare}
       />
 
-      <Sheet open={resumePanel !== null} onOpenChange={open => { if (!open) setResumePanel(null); }}>
-        <SheetContent side="right" className="w-[480px] sm:w-[540px] sm:max-w-none flex flex-col p-0">
-          <SheetHeader className="px-6 py-5 border-b border-border shrink-0">
-            <SheetTitle className="text-base font-bold leading-tight">
-              {resumePanel?.name ?? resumePanel?.filename}
-            </SheetTitle>
-            {resumePanel?.name && (
-              <p className="text-xs text-muted-foreground mt-0.5">{resumePanel.filename}</p>
-            )}
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {resumePanel?.markdown ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
-                <ReactMarkdown>{resumePanel.markdown}</ReactMarkdown>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No resume content available.</p>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
     </>
   );
 }
