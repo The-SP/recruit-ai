@@ -220,7 +220,7 @@ export default function DashboardPage() {
           <div className="mt-3 text-right">
             <Link
               href="/history"
-              className="text-sm text-primary hover:underline"
+              className="text-sm text-foreground hover:underline"
             >
               View all runs →
             </Link>

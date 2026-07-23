@@ -460,7 +460,10 @@ export default function RunDetailPage({
     ? Math.round((data.processed_count / Math.max(data.total_count, 1)) * 100)
     : 0;
 
-  const completedItems = (data?.items ?? []).filter(i => i.final_score != null);
+  const completedItems = useMemo(
+    () => (data?.items ?? []).filter(i => i.final_score != null),
+    [data?.items]
+  );
   const bestScore = completedItems.length > 0
     ? Math.round(Math.max(...completedItems.map(i => i.final_score!)) * 100)
     : null;
@@ -468,7 +471,10 @@ export default function RunDetailPage({
     i => i.hire_signal === "strong_match" || i.hire_signal === "good_match"
   ).length;
 
-  const sourceItems = isActive ? completedItems : (data?.items ?? []);
+  const sourceItems = useMemo(
+    () => (isActive ? completedItems : (data?.items ?? [])),
+    [isActive, completedItems, data?.items]
+  );
 
   const filteredItems = useMemo(() =>
     sourceItems
@@ -732,10 +738,10 @@ export default function RunDetailPage({
                   <p className="text-muted-foreground text-sm mt-1">Add resumes below to start evaluating candidates.</p>
                 </div>
               ) : (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
                   <Table>
                     <TableHeader>
-                      <TableRow>
+                      <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                         <TableHead className="w-20 text-center">Rank</TableHead>
                         <TableHead>
                           <button
@@ -764,7 +770,8 @@ export default function RunDetailPage({
                         </TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className="[&_tr]:border-foreground/10">
+
                       {filteredItems.length === 0 && isFiltered ? (
                         <TableRow>
                           <TableCell colSpan={5} className="py-16 text-center">
