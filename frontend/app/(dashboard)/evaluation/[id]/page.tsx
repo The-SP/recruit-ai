@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Columns2,
   Download,
   FileText,
   Loader2,
@@ -26,10 +27,12 @@ import Link from "next/link";
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { CandidateCompareDialog } from "@/components/candidate-compare-dialog";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -73,6 +76,8 @@ import {
 
 type BreakdownSection = "skills" | "experience" | "education";
 type SortBy = "score_desc" | "name_asc" | "name_desc";
+
+const MAX_COMPARE = 4;
 
 function CandidateBreakdownPanel({
   breakdown,
@@ -325,6 +330,8 @@ export default function RunDetailPage({
     filename: string;
     markdown: string;
   } | null>(null);
+  const [compareItemIds, setCompareItemIds] = useState<Set<string>>(new Set());
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addFiles, setAddFiles] = useState<File[]>([]);
   const [addSubmitting, setAddSubmitting] = useState(false);
@@ -365,14 +372,8 @@ export default function RunDetailPage({
     };
   }, [data, fetchData]);
 
-  const handleRowClick = useCallback(async (item: RunItemSummary) => {
+  const ensureBreakdown = useCallback(async (item: RunItemSummary) => {
     const id = item.item_id;
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); return next; }
-      next.add(id);
-      return next;
-    });
     if (!item.candidate_id || breakdownCache[id]) return;
     setBreakdownCache((prev) => ({ ...prev, [id]: "loading" }));
     try {
@@ -382,6 +383,17 @@ export default function RunDetailPage({
       setBreakdownCache((prev) => ({ ...prev, [id]: "error" }));
     }
   }, [breakdownCache, runId]);
+
+  const handleRowClick = useCallback((item: RunItemSummary) => {
+    const id = item.item_id;
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); return next; }
+      next.add(id);
+      return next;
+    });
+    ensureBreakdown(item);
+  }, [ensureBreakdown]);
 
   const handleViewResume = async (e: React.MouseEvent, item: RunItemSummary) => {
     e.stopPropagation();
@@ -494,6 +506,54 @@ export default function RunDetailPage({
   );
 
   const isFiltered = searchQuery !== "" || filterSignal !== "all";
+
+  const compareItems = useMemo(
+    () =>
+      sourceItems.filter(
+        (i): i is RunItemSummary & { candidate_id: string } =>
+          i.candidate_id !== null && compareItemIds.has(i.item_id)
+      ),
+    [sourceItems, compareItemIds]
+  );
+
+  // The compare dialog looks up breakdowns by candidate_id; this page's cache
+  // is keyed by item_id, so re-key the selected entries.
+  const compareBreakdowns = useMemo(() => {
+    const rec: Record<string, CandidateBreakdown | "loading" | "error"> = {};
+    for (const item of compareItems) {
+      const bd = breakdownCache[item.item_id];
+      if (bd) rec[item.candidate_id] = bd;
+    }
+    return rec;
+  }, [compareItems, breakdownCache]);
+
+  const toggleCompare = (itemId: string) => {
+    setCompareItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else if (next.size < MAX_COMPARE) {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  const handleOpenCompare = () => {
+    compareItems.forEach(item => ensureBreakdown(item));
+    setIsCompareOpen(true);
+  };
+
+  const handleRemoveFromCompare = (candidateId: string) => {
+    const item = compareItems.find(i => i.candidate_id === candidateId);
+    if (!item) return;
+    setCompareItemIds(prev => {
+      const next = new Set(prev);
+      next.delete(item.item_id);
+      if (next.size < 2) setIsCompareOpen(false);
+      return next;
+    });
+  };
 
   const expandableIds = filteredItems.map(i => i.item_id);
   const allExpanded = expandableIds.length > 0 && expandableIds.every(id => expandedIds.has(id));
@@ -742,6 +802,9 @@ export default function RunDetailPage({
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
+                        <TableHead className="w-12 text-center">
+                          <span className="sr-only">Select for comparison</span>
+                        </TableHead>
                         <TableHead className="w-20 text-center">Rank</TableHead>
                         <TableHead>
                           <button
@@ -774,7 +837,7 @@ export default function RunDetailPage({
 
                       {filteredItems.length === 0 && isFiltered ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="py-16 text-center">
+                          <TableCell colSpan={6} className="py-16 text-center">
                             <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm">No candidates match your filters.</p>
                             <button
                               onClick={() => { setSearchQuery(""); setFilterSignal("all"); }}
@@ -802,6 +865,25 @@ export default function RunDetailPage({
                                 isExpanded && "bg-muted/50"
                               )}
                             >
+                              <TableCell
+                                className="text-center"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {!isFailed && item.candidate_id && (
+                                  <Checkbox
+                                    checked={compareItemIds.has(item.item_id)}
+                                    onCheckedChange={() => toggleCompare(item.item_id)}
+                                    disabled={!compareItemIds.has(item.item_id) && compareItemIds.size >= MAX_COMPARE}
+                                    aria-label={`Select ${item.candidate_name ?? item.filename} for comparison`}
+                                    title={
+                                      !compareItemIds.has(item.item_id) && compareItemIds.size >= MAX_COMPARE
+                                        ? `You can compare up to ${MAX_COMPARE} candidates`
+                                        : "Select for comparison"
+                                    }
+                                    className="cursor-pointer align-middle"
+                                  />
+                                )}
+                              </TableCell>
                               <TableCell className="text-center font-bold">{index + 1}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-3">
@@ -857,7 +939,7 @@ export default function RunDetailPage({
                               </TableCell>
                             </TableRow>
                             <TableRow className="hover:bg-transparent">
-                              <TableCell colSpan={5} className="p-0 border-b-0 whitespace-normal">
+                              <TableCell colSpan={6} className="p-0 border-b-0 whitespace-normal">
                                 <CandidateBreakdownPanel
                                   key={`${item.item_id}-${isExpanded}`}
                                   breakdown={breakdown}
@@ -874,6 +956,7 @@ export default function RunDetailPage({
                         .filter(i => i.final_score === null)
                         .map((item, i) => (
                           <TableRow key={`pending-${item.filename}-${i}`} className="opacity-50">
+                            <TableCell />
                             <TableCell className="text-center">
                               <div className="h-4 w-4 rounded bg-muted animate-pulse mx-auto" />
                             </TableCell>
@@ -971,7 +1054,61 @@ export default function RunDetailPage({
             </div>
           </div>
         </div>
+
+        {/* Floating compare bar */}
+        {compareItems.length > 0 && (
+          <div className="sticky bottom-6 z-40 mx-auto mt-8 w-full max-w-3xl">
+            <div className="bg-card border border-border rounded-2xl shadow-xl px-4 py-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
+                Compare
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                {compareItems.map(item => (
+                  <span
+                    key={item.item_id}
+                    className="inline-flex items-center gap-1 bg-muted text-foreground text-xs font-medium rounded-lg pl-2.5 pr-1 py-1 max-w-44"
+                  >
+                    <span className="truncate">{item.candidate_name ?? item.filename}</span>
+                    <button
+                      onClick={() => handleRemoveFromCompare(item.candidate_id)}
+                      className="p-0.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
+                      title="Remove from comparison"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-auto">
+                <button
+                  onClick={() => setCompareItemIds(new Set())}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2"
+                >
+                  Clear
+                </button>
+                <Button
+                  size="sm"
+                  onClick={handleOpenCompare}
+                  disabled={compareItems.length < 2}
+                  className="h-9 px-4 font-bold rounded-xl gap-2 cursor-pointer"
+                  title={compareItems.length < 2 ? "Select at least 2 candidates to compare" : undefined}
+                >
+                  <Columns2 className="w-4 h-4" />
+                  Compare ({compareItems.length})
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      <CandidateCompareDialog
+        open={isCompareOpen}
+        onOpenChange={setIsCompareOpen}
+        candidates={compareItems}
+        breakdowns={compareBreakdowns}
+        onRemove={handleRemoveFromCompare}
+      />
 
       <Sheet open={resumePanel !== null} onOpenChange={open => { if (!open) setResumePanel(null); }}>
         <SheetContent side="right" className="w-[480px] sm:w-[540px] sm:max-w-none flex flex-col p-0">

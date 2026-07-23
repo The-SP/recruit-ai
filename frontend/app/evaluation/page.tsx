@@ -2,16 +2,18 @@
 
 import {
     ArrowDown, ArrowUp, BookOpen, Briefcase, CheckCircle, ChevronDown, ChevronLeft, ChevronUp,
-    Clock, Download, FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw, RotateCcw,
-    Search, Sparkles, Users, X, Zap
+    Clock, Columns2, Download, FileText, KeyRound, LayoutDashboard, Loader2, Plus, RefreshCw,
+    RotateCcw, Search, Sparkles, Users, X, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
+import { CandidateCompareDialog } from '@/components/candidate-compare-dialog';
 import { ResumeFileUpload } from '@/components/resume-file-upload';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -43,6 +45,8 @@ import {
 
 type BreakdownSection = "skills" | "experience" | "education";
 type SortBy = "score_desc" | "name_asc" | "name_desc";
+
+const MAX_COMPARE = 4;
 
 function CandidateBreakdownPanel({
   breakdown,
@@ -411,6 +415,8 @@ function EvaluationPageInner() {
     filename: string;
     markdown: string;
   } | null>(null);
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   const fetchStatus = async (t: string, isRefresh = false) => {
     if (isRefresh) {
@@ -452,6 +458,8 @@ function EvaluationPageInner() {
     setSearchQuery("");
     setFilterSignal("all");
     setSortBy("score_desc");
+    setCompareIds(new Set());
+    setIsCompareOpen(false);
   }, [data?.run_id]);
 
   const handleRefresh = () => {
@@ -534,15 +542,8 @@ function EvaluationPageInner() {
     URL.revokeObjectURL(url);
   };
 
-  const handleRowClick = async (candidateId: string | null) => {
-    if (!candidateId || !token) return;
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(candidateId)) { next.delete(candidateId); return next; }
-      next.add(candidateId);
-      return next;
-    });
-    if (breakdownCache[candidateId]) return;
+  const ensureBreakdown = async (candidateId: string) => {
+    if (!token || breakdownCache[candidateId]) return;
     setBreakdownCache(prev => ({ ...prev, [candidateId]: "loading" }));
     try {
       const bd = await getCandidateBreakdown(token, candidateId);
@@ -550,6 +551,43 @@ function EvaluationPageInner() {
     } catch {
       setBreakdownCache(prev => ({ ...prev, [candidateId]: "error" }));
     }
+  };
+
+  const handleRowClick = (candidateId: string | null) => {
+    if (!candidateId || !token) return;
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) { next.delete(candidateId); return next; }
+      next.add(candidateId);
+      return next;
+    });
+    ensureBreakdown(candidateId);
+  };
+
+  const toggleCompare = (candidateId: string) => {
+    setCompareIds(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else if (next.size < MAX_COMPARE) {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  };
+
+  const handleOpenCompare = () => {
+    compareIds.forEach(id => ensureBreakdown(id));
+    setIsCompareOpen(true);
+  };
+
+  const handleRemoveFromCompare = (candidateId: string) => {
+    setCompareIds(prev => {
+      const next = new Set(prev);
+      next.delete(candidateId);
+      if (next.size < 2) setIsCompareOpen(false);
+      return next;
+    });
   };
 
   // No token or error - show entry form
@@ -669,6 +707,11 @@ function EvaluationPageInner() {
   })();
 
   const isFiltered = needsFilter;
+
+  const compareCandidates = sourceResults.filter(
+    (r): r is CandidateResult & { candidate_id: string } =>
+      r.candidate_id !== null && compareIds.has(r.candidate_id)
+  );
 
   return (
     <>
@@ -868,6 +911,9 @@ function EvaluationPageInner() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12 text-center">
+                        <span className="sr-only">Select for comparison</span>
+                      </TableHead>
                       <TableHead className="w-20 text-center">Rank</TableHead>
                       <TableHead>
                         <button
@@ -912,7 +958,7 @@ function EvaluationPageInner() {
                   <TableBody>
                     {displayResults.length === 0 && (needsFilter) ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-16 text-center">
+                        <TableCell colSpan={6} className="py-16 text-center">
                           <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm">No candidates match your filters.</p>
                           <button
                             onClick={() => { setSearchQuery(""); setFilterSignal("all"); }}
@@ -943,6 +989,25 @@ function EvaluationPageInner() {
                                 isExpanded && "bg-muted/50"
                               )}
                             >
+                              <TableCell
+                                className="text-center"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {!isFailed && id && (
+                                  <Checkbox
+                                    checked={compareIds.has(id)}
+                                    onCheckedChange={() => toggleCompare(id)}
+                                    disabled={!compareIds.has(id) && compareIds.size >= MAX_COMPARE}
+                                    aria-label={`Select ${result.candidate_name ?? result.filename} for comparison`}
+                                    title={
+                                      !compareIds.has(id) && compareIds.size >= MAX_COMPARE
+                                        ? `You can compare up to ${MAX_COMPARE} candidates`
+                                        : "Select for comparison"
+                                    }
+                                    className="cursor-pointer align-middle"
+                                  />
+                                )}
+                              </TableCell>
                               <TableCell className="text-center font-bold">{index + 1}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-3">
@@ -1013,7 +1078,7 @@ function EvaluationPageInner() {
                         })()}
 
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={5} className="p-0 border-b-0 whitespace-normal">
+                          <TableCell colSpan={6} className="p-0 border-b-0 whitespace-normal">
                             <CandidateBreakdownPanel key={`${id}-${isExpanded}`} breakdown={breakdown} isExpanded={isExpanded} />
                           </TableCell>
                         </TableRow>
@@ -1026,6 +1091,7 @@ function EvaluationPageInner() {
                     .filter(r => r.final_score === null)
                     .map((result, i) => (
                       <TableRow key={`pending-${result.filename}-${i}`} className="opacity-50">
+                        <TableCell />
                         <TableCell className="text-center">
                           <div className="h-4 w-4 rounded bg-muted animate-pulse mx-auto" />
                         </TableCell>
@@ -1071,7 +1137,61 @@ function EvaluationPageInner() {
         </div>
       </div>
 
+      {/* Floating compare bar */}
+      {compareCandidates.length > 0 && (
+        <div className="sticky bottom-6 z-40 mx-auto mt-8 w-full max-w-3xl">
+          <div className="bg-card border border-border rounded-2xl shadow-xl px-4 py-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
+              Compare
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+              {compareCandidates.map(c => (
+                <span
+                  key={c.candidate_id}
+                  className="inline-flex items-center gap-1 bg-muted text-foreground text-xs font-medium rounded-lg pl-2.5 pr-1 py-1 max-w-44"
+                >
+                  <span className="truncate">{c.candidate_name ?? c.filename}</span>
+                  <button
+                    onClick={() => handleRemoveFromCompare(c.candidate_id)}
+                    className="p-0.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
+                    title="Remove from comparison"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-auto">
+              <button
+                onClick={() => setCompareIds(new Set())}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2"
+              >
+                Clear
+              </button>
+              <Button
+                size="sm"
+                onClick={handleOpenCompare}
+                disabled={compareCandidates.length < 2}
+                className="h-9 px-4 font-bold rounded-xl gap-2 cursor-pointer"
+                title={compareCandidates.length < 2 ? "Select at least 2 candidates to compare" : undefined}
+              >
+                <Columns2 className="w-4 h-4" />
+                Compare ({compareCandidates.length})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
+
+    <CandidateCompareDialog
+      open={isCompareOpen}
+      onOpenChange={setIsCompareOpen}
+      candidates={compareCandidates}
+      breakdowns={breakdownCache}
+      onRemove={handleRemoveFromCompare}
+    />
 
     <Sheet open={resumePanel !== null} onOpenChange={open => { if (!open) setResumePanel(null); }}>
       <SheetContent side="right" className="w-[480px] sm:w-[540px] sm:max-w-none flex flex-col p-0">
