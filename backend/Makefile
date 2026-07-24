@@ -9,7 +9,7 @@ dev: ## Start the FastAPI server in development mode
 	uv run uvicorn app.api.main:app --reload
 
 worker:  ## Start Celery worker
-	uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+	uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
 
 flower:  ## Start Flower monitoring
 	uv run celery -A app.worker.celery_app flower
@@ -33,6 +33,9 @@ batch-results:  ## Check results (usage: make batch-results RUN_ID=<id>)
 	fi
 	@echo "Checking results for run: $(RUN_ID)"
 	uv run -m scripts.run_batch results $(RUN_ID)
+
+seed-ssm:  ## Seed SSM Parameter Store from an env file (usage: make seed-ssm FILE=.env.prod [DRY_RUN=1])
+	uv run -m scripts.seed_ssm_params --file $(or $(FILE),.env.prod) $(if $(DRY_RUN),--dry-run,)
 
 circuit-status:  ## Check circuit breaker status
 	@uv run -m scripts.circuit_breaker status

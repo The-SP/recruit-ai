@@ -2,18 +2,23 @@
 #
 # Production deploy for the recruit-ai backend.
 #
-# Pulls the requested ref, rebuilds the prod compose stack, and applies DB
-# migrations. Run on the EC2 host as the deploy user (ssm-user), either by
-# hand or via the "Deploy to EC2" GitHub Actions workflow.
+# Pulls the requested ref, renders .env.prod from SSM Parameter Store, rebuilds
+# the prod compose stack, and applies DB migrations. Run on the EC2 host as the
+# deploy user (ssm-user), either by hand or via the "Deploy to EC2" GitHub
+# Actions workflow.
 #
 # Usage:
 #   ./deploy/deploy.sh [ref]     # ref defaults to "main"
 #
-# Does NOT touch .env.prod or the certbot-managed nginx/TLS config.
+# .env.prod is regenerated on every deploy from the SSM params under
+# /recruit-ai/prod/ (see below), so config changes never require editing the
+# host over SSH. Does NOT touch the certbot-managed nginx/TLS config.
 
 set -euo pipefail
 
 REF="${1:-main}"
+AWS_REGION="${AWS_REGION:-ap-south-1}"
+SSM_PREFIX="/recruit-ai/prod/"
 
 # Resolve the backend dir (parent of this script's deploy/ dir) so the script
 # works regardless of the caller's cwd.
@@ -29,6 +34,11 @@ echo "==> Fetching and checking out ${REF}"
 git fetch --all --prune
 git checkout "${REF}"
 git pull --ff-only origin "${REF}"
+
+# Regenerate .env.prod from SSM Parameter Store. Rendering lives in render-env.sh
+# so it can also be run standalone on the host for a config-only refresh.
+AWS_REGION="${AWS_REGION}" SSM_PREFIX="${SSM_PREFIX}" OUTPUT=".env.prod" \
+  "${SCRIPT_DIR}/render-env.sh"
 
 echo "==> Building and starting containers"
 docker compose -f "${COMPOSE_FILE}" up -d --build
