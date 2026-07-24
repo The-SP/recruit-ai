@@ -4,8 +4,8 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from app.config import Config
 from app.core.logger import init_logger
+from app.core.model_factory import build_model
 from app.schemas.experience_evaluation import (
     ExperienceEvaluation,
     ExperienceRelevance,
@@ -247,7 +247,7 @@ def calculate_experience_score(
     # --- Call LLM ---
 
     agent = create_agent(
-        model=Config.MODEL_NAME,
+        model=build_model(),
         system_prompt="You evaluate work experience relevance and return structured JSON.",
         response_format=ToolStrategy(LLMExperienceResponse),
     )

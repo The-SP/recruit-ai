@@ -12,6 +12,16 @@ class Config:
 
     # Model Configuration
     MODEL_NAME: str = os.getenv("MODEL_NAME", "google_genai:gemini-2.5-flash-lite")
+
+    # Comma-separated list of Google API keys to rotate across (round-robin).
+    # Takes precedence over GOOGLE_API_KEY; falls back to it when unset.
+    GOOGLE_API_KEYS: list[str] = [
+        k.strip()
+        for k in os.getenv(
+            "GOOGLE_API_KEYS", os.getenv("GOOGLE_API_KEY", "")
+        ).split(",")
+        if k.strip()
+    ]
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
     )

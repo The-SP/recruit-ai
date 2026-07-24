@@ -3,8 +3,8 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from app.config import Config
 from app.core.logger import init_logger
+from app.core.model_factory import build_model
 from app.schemas.job_description import SkillGroup, SkillRequirements
 from app.schemas.skill_evaluation import (
     LLMEvaluationResponse,
@@ -239,7 +239,7 @@ def calculate_skill_score(
     # --- Step 2: Call LLM ---
 
     agent = create_agent(
-        model=Config.MODEL_NAME,
+        model=build_model(),
         system_prompt="You are a helpful assistant that evaluates candidate-job fit and returns structured JSON.",
         response_format=ToolStrategy(LLMEvaluationResponse),
     )

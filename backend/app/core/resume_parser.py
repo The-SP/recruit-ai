@@ -4,9 +4,9 @@ from typing import Any, cast
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from app.config import Config
 from app.core.file_storage import get_file_content
 from app.core.logger import init_logger
+from app.core.model_factory import build_model
 from app.schemas.resume import ResumeResponse
 
 logger = init_logger(__name__)
@@ -82,7 +82,7 @@ def parse_resume(file_path: str) -> ResumeResponse:
     pdf_base64 = encode_pdf_to_base64(file_path)
 
     agent = create_agent(
-        model=Config.MODEL_NAME,
+        model=build_model(),
         system_prompt="You are a helpful assistant that analyzes documents and returns structured JSON data.",
         response_format=ToolStrategy(ResumeResponse),
     )

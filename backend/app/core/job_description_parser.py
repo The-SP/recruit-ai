@@ -3,8 +3,8 @@ from typing import Any, cast
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from app.config import Config
 from app.core.logger import init_logger
+from app.core.model_factory import build_model
 from app.schemas.job_description import JobDescriptionResponse
 
 logger = init_logger(__name__)
@@ -143,7 +143,7 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
     """Parse a job description from plain text and return structured data"""
     logger.info(f"Parsing job description ({len(text)} chars)")
     agent = create_agent(
-        model=Config.MODEL_NAME,
+        model=build_model(),
         system_prompt=PROMPT,
         response_format=ToolStrategy(JobDescriptionResponse),
     )

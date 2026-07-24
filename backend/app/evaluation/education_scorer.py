@@ -3,8 +3,8 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from app.config import Config
 from app.core.logger import init_logger
+from app.core.model_factory import build_model
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.job_description import EducationRequirement
 
@@ -116,7 +116,7 @@ def calculate_education_score(
     # --- Call LLM ---
 
     agent = create_agent(
-        model=Config.MODEL_NAME,
+        model=build_model(),
         system_prompt="You evaluate education qualifications and return structured JSON.",
         response_format=ToolStrategy(EducationScoreResult),
     )
