@@ -41,11 +41,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The deploy logic lives in the tracked deploy/deploy.sh on the host
-          # (already present via the previous deploy's git checkout). We just
-          # invoke it as ssm-user (SSM runs commands as root); the script does
-          # its own git fetch/checkout of the requested ref.
-          REMOTE="sudo -iu ssm-user bash ${DEPLOY_PATH}/deploy/deploy.sh $(printf '%q' "${DEPLOY_REF}")"
+          # Update the host checkout to the requested ref before invoking
+          # deploy.sh. Performing the git update here, rather than inside the
+          # script, ensures that changes to deploy.sh take effect on the same
+          # deploy that introduces them; otherwise the previous deploy's copy of
+          # the script would run and pick up the change only on the next deploy.
+          #
+          # The command is assembled as a single %q-quoted argument to `bash -c`
+          # and executed as ssm-user (SSM runs commands as root by default).
+          REF_Q=$(printf '%q' "${DEPLOY_REF}")
+          REMOTE_SCRIPT="set -euo pipefail && cd ${DEPLOY_PATH} && git fetch --all --prune && git checkout ${REF_Q} && git pull --ff-only origin ${REF_Q} && exec ${DEPLOY_PATH}/deploy/deploy.sh ${REF_Q}"
+          REMOTE="sudo -iu ssm-user bash -c $(printf '%q' "${REMOTE_SCRIPT}")"
 
           # Pass the command as JSON via jq so quoting survives intact.
           PARAMS=$(jq -n --arg cmd "$REMOTE" '{commands: [$cmd]}')
