@@ -54,7 +54,7 @@ docker compose -f "${COMPOSE_FILE}" run --rm migrate
 # races a still-booting app.
 echo "==> Starting containers"
 if ! docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans --wait --wait-timeout 180; then
-  echo "ERROR: containers did not become healthy within 180s" >&2
+  echo "ERROR: containers did not all report healthy (timeout 180s)" >&2
   echo "----- container status -----" >&2
   docker compose -f "${COMPOSE_FILE}" ps >&2 || true
   echo "----- recent logs -----" >&2

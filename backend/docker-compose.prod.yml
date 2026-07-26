@@ -1,9 +1,13 @@
 services:
+  # One-shot migration runner, invoked explicitly by deploy.sh via
+  # `run --rm migrate`. Kept out of the default profile so `up --wait` does not
+  # treat its (expected) exit as a service that failed to stay running.
   migrate:
     build: .
     command: alembic upgrade head
     env_file: .env.prod
     restart: "no"
+    profiles: ["tools"]
 
   api:
     build: .
