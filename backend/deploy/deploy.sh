@@ -48,7 +48,18 @@ docker compose -f "${COMPOSE_FILE}" build
 echo "==> Applying database migrations"
 docker compose -f "${COMPOSE_FILE}" run --rm migrate
 
+# --wait blocks until every service with a healthcheck reports healthy, so the
+# script only returns once the new API is actually serving. Without it, `up -d`
+# returns as soon as containers are *created* and the workflow's health check
+# races a still-booting app.
 echo "==> Starting containers"
-docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
+if ! docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans --wait --wait-timeout 180; then
+  echo "ERROR: containers did not become healthy within 180s" >&2
+  echo "----- container status -----" >&2
+  docker compose -f "${COMPOSE_FILE}" ps >&2 || true
+  echo "----- recent logs -----" >&2
+  docker compose -f "${COMPOSE_FILE}" logs --tail 50 >&2 || true
+  exit 1
+fi
 
 echo "==> Deploy complete"
