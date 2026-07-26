@@ -2,9 +2,10 @@
 #
 # Production deploy for the recruit-ai backend.
 #
-# Renders .env.prod from SSM Parameter Store, rebuilds the prod compose stack,
-# and applies DB migrations. Run on the EC2 host as the deploy user (ssm-user),
-# either by hand or via the "Deploy to EC2" GitHub Actions workflow.
+# Renders .env.prod from SSM Parameter Store, builds images, applies DB
+# migrations, then swaps the running containers. Run on the EC2 host as the
+# deploy user (ssm-user), either by hand or via the "Deploy to EC2" GitHub
+# Actions workflow.
 #
 # This script does NOT update the git checkout. The deploy workflow fetches and
 # checks out the requested ref BEFORE invoking this script, so that changes to
@@ -39,10 +40,15 @@ echo "==> Deploying ref '${REF}' from ${BACKEND_DIR}"
 AWS_REGION="${AWS_REGION}" SSM_PREFIX="${SSM_PREFIX}" OUTPUT=".env.prod" \
   "${SCRIPT_DIR}/render-env.sh"
 
-echo "==> Building and starting containers"
-docker compose -f "${COMPOSE_FILE}" up -d --build
+echo "==> Building images"
+docker compose -f "${COMPOSE_FILE}" build
 
+# Migrate before the swap so new code never serves against the old schema.
+# A build or migration failure aborts here, with the old stack still up.
 echo "==> Applying database migrations"
-docker compose -f "${COMPOSE_FILE}" exec -T api uv run alembic upgrade head
+docker compose -f "${COMPOSE_FILE}" run --rm migrate
+
+echo "==> Starting containers"
+docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
 echo "==> Deploy complete"
