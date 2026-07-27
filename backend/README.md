@@ -45,3 +45,12 @@ docker compose up
 
 - The API will be accessible at http://localhost:8000
 - Interactive API docs: http://localhost:8000/docs
+
+## Infrastructure
+
+- **EC2** — API, Celery worker, and Redis as Docker Compose services behind nginx
+- **RDS** — PostgreSQL
+- **S3** — resume storage
+- **SSM Parameter Store** — production config, rendered on each deploy
+
+Deploys run from the **Deploy to EC2** GitHub Actions workflow (manual trigger).
