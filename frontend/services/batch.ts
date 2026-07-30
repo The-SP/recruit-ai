@@ -1,3 +1,12 @@
+import {
+  IS_DEMO_MODE,
+  demoAddCandidates,
+  demoGetBatchStatus,
+  demoGetCandidateBreakdown,
+  demoRetryFailed,
+  demoSubmitBatch,
+} from "@/lib/demo";
+
 import { apiRequest } from "./api";
 
 // Types
@@ -135,6 +144,8 @@ export async function submitBatch(
   email: string,
   files: File[]
 ): Promise<SubmitBatchResponse> {
+  if (IS_DEMO_MODE) return demoSubmitBatch();
+
   const formData = new FormData();
   formData.append("job_text", jobText);
   formData.append("email", email);
@@ -147,6 +158,8 @@ export async function submitBatch(
 }
 
 export async function getBatchStatus(token: string): Promise<BatchStatus> {
+  if (IS_DEMO_MODE) return demoGetBatchStatus();
+
   return apiRequest<BatchStatus>(`/batch/status/${token}`);
 }
 
@@ -154,6 +167,8 @@ export async function getCandidateBreakdown(
   token: string,
   candidateId: string
 ): Promise<CandidateBreakdown> {
+  if (IS_DEMO_MODE) return demoGetCandidateBreakdown(candidateId);
+
   return apiRequest<CandidateBreakdown>(
     `/batch/status/${token}/candidate/${candidateId}`
   );
@@ -167,6 +182,8 @@ export async function addCandidatesToBatch(
   token: string,
   files: File[]
 ): Promise<AddCandidatesResponse> {
+  if (IS_DEMO_MODE) return demoAddCandidates();
+
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   return apiRequest<AddCandidatesResponse>(
@@ -176,6 +193,8 @@ export async function addCandidatesToBatch(
 }
 
 export async function retryAllFailed(token: string): Promise<RetryFailedResponse> {
+  if (IS_DEMO_MODE) return demoRetryFailed();
+
   return apiRequest<RetryFailedResponse>(
     `/batch/status/${token}/retry-failed`,
     { method: "POST" }
@@ -186,6 +205,8 @@ export async function retrySingleFailed(
   token: string,
   itemId: string
 ): Promise<RetryFailedResponse> {
+  if (IS_DEMO_MODE) return demoRetryFailed();
+
   return apiRequest<RetryFailedResponse>(
     `/batch/status/${token}/retry-failed/${itemId}`,
     { method: "POST" }

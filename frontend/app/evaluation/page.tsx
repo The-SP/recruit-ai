@@ -21,6 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DemoBanner } from '@/components/demo-banner';
+import { DemoNotice } from '@/components/demo-notice';
+import { DEMO_TOKEN, DemoModeError, IS_DEMO_MODE } from '@/lib/demo';
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from '@/lib/evaluation-types';
 import { ApiError } from '@/services/api';
 import {
@@ -41,6 +44,7 @@ function AddCandidatesPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AddCandidatesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
 
   const handleFilesChange = (newFiles: File[]) => {
@@ -66,7 +70,13 @@ function AddCandidatesPanel({
       onSuccess();
       setTimeout(() => setResult(null), 5000);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
+      if (err instanceof DemoModeError) {
+        setNotice(err.message);
+        setIsOpen(false);
+        setFiles([]);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Something went wrong");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -83,6 +93,8 @@ function AddCandidatesPanel({
           )}
         </div>
       )}
+
+      {notice && <DemoNotice>{notice}</DemoNotice>}
 
       {!isOpen ? (
         <button
@@ -185,9 +197,14 @@ function EvaluationPageInner() {
   };
 
   useEffect(() => {
-    if (!token) return;
+    // In demo mode there is only one saved evaluation, so a missing token
+    // sends the visitor to it rather than to a token-entry dead end.
+    if (!token) {
+      if (IS_DEMO_MODE) router.replace(`/evaluation?token=${DEMO_TOKEN}`);
+      return;
+    }
     fetchStatus(token);
-  }, [token]);
+  }, [token, router]);
 
   const isProcessing = data?.status === "processing" || data?.status === "pending";
 
@@ -469,6 +486,8 @@ function EvaluationPageInner() {
   return (
     <>
     <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
+      {IS_DEMO_MODE && <DemoBanner className="mb-8" />}
+
       {/* Header Info */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b border-border">
         <div className="space-y-2">

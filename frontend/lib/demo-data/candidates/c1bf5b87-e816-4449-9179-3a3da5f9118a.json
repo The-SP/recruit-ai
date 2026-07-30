@@ -1,0 +1,134 @@
+{
+  "candidate_id": "c1bf5b87-e816-4449-9179-3a3da5f9118a",
+  "candidate_name": "Jane Doe",
+  "filename": "jane_doe.pdf",
+  "final_score": 0.379,
+  "hire_signal": "no_match",
+  "skill_score": 0.422,
+  "experience_score": 0.192,
+  "education_score": 0.75,
+  "summary": "Poor candidate match (37%). Breakdown: Skills: 42%, Experience: 19%, Education: 75%.",
+  "skills": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "skill_options": ["Python"],
+          "tier": "critical",
+          "match_type": "partial",
+          "matched_by": "Python",
+          "evidence": "3 years turning messy data into reporting and lightweight internal tools. Strong SQL and pandas; growing backend experience through Flask services and pipeline automation.",
+          "reasoning": "The candidate has 3 years of experience with Python, which is less than the required 4+ years. However, they demonstrate strong proficiency through the use of libraries like pandas and numpy, and application in backend development with Flask."
+        },
+        {
+          "skill_options": ["FastAPI", "Flask"],
+          "tier": "critical",
+          "match_type": "partial",
+          "matched_by": "Flask",
+          "evidence": "Stood up a small internal Flask app exposing self-serve report downloads, removing ~5 hrs/week of manual pulls. Built a data pipeline (Python + PostgreSQL) and a Flask API surfacing London bike-share trends; visualized with Plotly.",
+          "reasoning": "The candidate has experience with Flask, including building a Flask app and a Flask API, which partially matches the requirement for FastAPI or Flask. However, their experience is described as 'basic' in the skills section."
+        },
+        {
+          "skill_options": ["PostgreSQL"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "PostgreSQL",
+          "evidence": "Authored complex SQL against a PostgreSQL warehouse, built 20+ dashboards in Tableau. Built a data pipeline (Python + PostgreSQL) and a Flask API surfacing London bike-share trends",
+          "reasoning": "The candidate explicitly mentions authoring complex SQL against a PostgreSQL warehouse and using PostgreSQL in a project, indicating an exact match."
+        },
+        {
+          "skill_options": ["Celery", "RQ"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "Automated ETL jobs with cron and migrated two pipelines to Apache Airflow.",
+          "reasoning": "The resume mentions cron and Apache Airflow for job automation but does not provide any evidence of experience with Celery or RQ."
+        },
+        {
+          "skill_options": ["Docker"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of Docker in the resume.",
+          "reasoning": "There is no mention of Docker experience in the candidate's resume."
+        },
+        {
+          "skill_options": ["asynchronous programming", "concurrency"],
+          "tier": "required",
+          "match_type": "partial",
+          "matched_by": "Flask",
+          "evidence": "growing backend experience through Flask services and pipeline automation. Built a data pipeline (Python + PostgreSQL) and a Flask API",
+          "reasoning": "While not explicitly stated, the candidate's experience with Flask services and building APIs suggests exposure to asynchronous programming concepts, meeting a partial match."
+        },
+        {
+          "skill_options": ["Kubernetes", "AWS", "GCP"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of Kubernetes, AWS, or GCP in the resume.",
+          "reasoning": "The candidate's resume does not contain any information about experience with Kubernetes, AWS, or GCP."
+        },
+        {
+          "skill_options": ["LangChain"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of LangChain in the resume.",
+          "reasoning": "There is no mention of LangChain in the candidate's resume."
+        },
+        {
+          "skill_options": ["CI/CD pipelines", "infrastructure-as-code"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "Automated ETL jobs with cron and migrated two pipelines to Apache Airflow.",
+          "reasoning": "The candidate mentions automating ETL jobs with cron and migrating pipelines to Airflow, but there is no explicit mention of CI/CD pipelines or infrastructure-as-code."
+        }
+      ],
+      "strengths": ["Python", "SQL", "Flask", "pandas", "numpy", "Tableau", "PostgreSQL", "Airflow"]
+    },
+    "critical_score": 0.65,
+    "required_score": 0.412,
+    "preferred_score": 0.0,
+    "critical_gaps": [],
+    "critical_penalty": 1.0,
+    "final_score": 0.422,
+    "summary": "Weak skills match (42%). Strong in: Python, SQL, Flask."
+  },
+  "experience": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "job_title": "Data Analyst",
+          "company": "Meridian Retail",
+          "start_date": "2022-09",
+          "end_date": "null",
+          "duration_months": 46,
+          "relevance": "low",
+          "evidence": "The candidate's experience as a Data Analyst involved Python and Flask, but the primary focus was on data cleaning, reporting, and dashboards, not backend engineering for scalable APIs or asynchronous processing. While SQL and PostgreSQL were used, it was for a data warehouse, not high-volume transactional workloads. The Flask app was described as 'small' and 'internal', indicating a lower level of complexity and scale compared to the target role's requirements."
+        },
+        {
+          "job_title": "Analyst Intern",
+          "company": "DataWorks",
+          "start_date": "2021-01",
+          "end_date": "2022-08",
+          "duration_months": 19,
+          "relevance": "none",
+          "evidence": "This internship focused on Excel and Tableau dashboards, with Python used for ad-hoc analysis and scraping. This is significantly different from the backend engineering responsibilities and skills required for a Senior Backend Python Engineer role."
+        }
+      ],
+      "notes": "The candidate has some relevant skills like Python, Flask, and PostgreSQL, but their experience is primarily in data analysis and reporting, not in building scalable backend systems. The responsibilities described do not align well with the core requirements of a Senior Backend Python Engineer, such as designing and operating scalable REST APIs, optimizing for high-volume workloads, or building complex asynchronous processing pipelines. The 'basic' Flask experience and the description of the Flask app as 'small' and 'internal' further indicate a gap in the required expertise. The candidate's project 'CityBikes Explorer' shows some relevant skills (Python + PostgreSQL + Flask API), but it's a personal project and its scale and complexity are not detailed enough to be considered high relevance. The candidate also lacks experience with FastAPI, Celery, RQ, Docker, and concurrency/asynchronous programming at the level expected for a senior role."
+    },
+    "effective_months": 11.5,
+    "effective_years": 0.96,
+    "required_years": 5.0,
+    "experience_score": 0.192,
+    "summary": "Limited relevant experience (1.0/5.0 years relevant, 19%)"
+  },
+  "education": {
+    "score": 0.75,
+    "candidate_degree": "B.A.",
+    "field_of_study": "Economics",
+    "summary": "The candidate has a Bachelor of Arts in Economics, which is considered a related field to the preferred fields of Computer Science and Software Engineering. While not a direct match, the candidate demonstrates strong technical skills and practical experience in data analysis and Python development, which are highly valued in tech roles. The candidate also holds relevant certifications that supplement their formal education."
+  },
+  "resume_markdown": "# Jane Doe\nLondon, UK | +44 20 79460321 | jane.doe@example.com | linkedin.com/in/janedoe\n\n## SUMMARY\nData analyst and Python developer with 3 years turning messy data into reporting and lightweight internal\ntools. Strong SQL and pandas; growing backend experience through Flask services and pipeline automation.\n\n## EXPERIENCE\n### Data Analyst | Meridian Retail | Sep. 2022 – Present\nBusiness Intelligence\nLondon, UK\n- Wrote Python (pandas, numpy) scripts to clean, join, and transform sales data feeding weekly executive\nreporting.\n- Authored complex SQL against a PostgreSQL warehouse; built 20+ dashboards in Tableau.\n- Stood up a small internal Flask app exposing self-serve report downloads, removing ~5 hrs/week of\nmanual pulls.\n- Automated ETL jobs with cron and migrated two pipelines to Apache Airflow.\n\n### Analyst Intern | DataWorks | Jan. 2021 – Aug. 2022\nAnalytics\nRemote\n- Produced Excel and Tableau dashboards; used Python for ad-hoc analysis and one-off scraping scripts.\n\n## PROJECTS\n### CityBikes Explorer | 2023\n- Built a data pipeline (Python + PostgreSQL) and a Flask API surfacing London bike-share trends;\nvisualized with Plotly.\n\n## EDUCATION\n### B.A. in Economics | University of Manchester | 2020\nManchester, UK\n\n## CERTIFICATIONS\n- Google Data Analytics Professional Certificate (2022)\n- DataCamp: Python Data Associate (2023)\n\n## TECHNICAL SKILLS\nLanguages: Python (pandas, numpy), SQL\nTools: PostgreSQL, Flask (basic), Airflow, Tableau, Plotly, Excel, Git, cron\n"
+}

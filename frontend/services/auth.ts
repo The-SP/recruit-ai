@@ -1,3 +1,5 @@
+import { IS_DEMO_MODE } from "@/lib/demo";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const TOKEN_KEY = "recruit_ai_token";
 
@@ -23,6 +25,11 @@ export function clearToken(): void {
 }
 
 export async function getMe(): Promise<UserResponse | null> {
+  // The demo has no backend to authenticate against, so skip the request
+  // rather than fail it on every page load. Returning null leaves the app in
+  // its logged-out state, which is what the demo shows.
+  if (IS_DEMO_MODE) return null;
+
   const token = getToken();
   if (!token) return null;
   try {

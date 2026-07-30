@@ -1,0 +1,62 @@
+{
+  "run_id": "ee10eb4a-2d68-4f44-9e69-ad49b0efa75f",
+  "status": "completed",
+  "progress": {
+    "total": 5,
+    "processed": 5,
+    "failed": 0
+  },
+  "job": {
+    "title": "Senior Backend Python Engineer",
+    "company_name": "platform team"
+  },
+  "results": [
+    {
+      "item_id": "c8e0364f-a7d5-4a4f-9132-d19d76e060ed",
+      "candidate_id": "9556299e-6195-436a-a273-b8c12aaa9dde",
+      "candidate_name": "John Smith",
+      "filename": "john_smith.pdf",
+      "final_score": 0.947,
+      "hire_signal": "strong_match",
+      "status": "completed"
+    },
+    {
+      "item_id": "ec138a80-ba88-487f-a521-3bb06f4974a4",
+      "candidate_id": "eab91c40-4a73-47f8-a63f-99c248505d34",
+      "candidate_name": "Michael Johnson",
+      "filename": "michael_johnson.pdf",
+      "final_score": 0.911,
+      "hire_signal": "strong_match",
+      "status": "completed"
+    },
+    {
+      "item_id": "769b2d31-e404-48d8-991a-4ef034ec2274",
+      "candidate_id": "c1bf5b87-e816-4449-9179-3a3da5f9118a",
+      "candidate_name": "Jane Doe",
+      "filename": "jane_doe.pdf",
+      "final_score": 0.379,
+      "hire_signal": "no_match",
+      "status": "completed"
+    },
+    {
+      "item_id": "84a7ca83-075c-4ada-b520-ab9dc8e6d9e7",
+      "candidate_id": "71ac2e0a-77fc-41c7-bc42-51ce1fae6fd9",
+      "candidate_name": "David Brown",
+      "filename": "david_brown.pdf",
+      "final_score": 0.172,
+      "hire_signal": "no_match",
+      "status": "completed"
+    },
+    {
+      "item_id": "4b77b34c-9924-4474-bd2e-c96817160e72",
+      "candidate_id": "76ef7c9f-0f4c-40ad-b900-b846b7ce7b32",
+      "candidate_name": "Emily Davis",
+      "filename": "emily_davis.pdf",
+      "final_score": 0.075,
+      "hire_signal": "no_match",
+      "status": "completed"
+    }
+  ],
+  "processing_time_seconds": 39.491224,
+  "created_at": "2026-07-27T17:38:26.354897"
+}

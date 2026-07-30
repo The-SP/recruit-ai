@@ -1,0 +1,134 @@
+{
+  "candidate_id": "9556299e-6195-436a-a273-b8c12aaa9dde",
+  "candidate_name": "John Smith",
+  "filename": "john_smith.pdf",
+  "final_score": 0.947,
+  "hire_signal": "strong_match",
+  "skill_score": 0.883,
+  "experience_score": 1.0,
+  "education_score": 1.0,
+  "summary": "Strong candidate match (94%). Breakdown: Skills: 88%, Experience: 100%, Education: 100%.",
+  "skills": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "skill_options": ["Python"],
+          "tier": "critical",
+          "match_type": "exact",
+          "matched_by": "Python",
+          "evidence": "Backend engineer with 6 years building Python services at scale.",
+          "reasoning": "Candidate has 6 years of experience and lists Python as an expert skill."
+        },
+        {
+          "skill_options": ["FastAPI", "Flask"],
+          "tier": "critical",
+          "match_type": "exact",
+          "matched_by": "FastAPI",
+          "evidence": "Strong background in FastAPI... Designed and own a suite of high-throughput REST APIs in FastAPI serving 12k req/s at p99 < 90ms... Migrated a legacy Flask service to FastAPI...",
+          "reasoning": "Candidate explicitly lists FastAPI and Flask as backend skills and has extensive experience with FastAPI in their current role."
+        },
+        {
+          "skill_options": ["PostgreSQL"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "PostgreSQL",
+          "evidence": "PostgreSQL performance tuning... Re-architected PostgreSQL schemas, partitioning, and query plans, cutting analytics latency 70% on a 4 TB dataset.",
+          "reasoning": "Candidate has experience with PostgreSQL, including performance tuning and schema re-architecture."
+        },
+        {
+          "skill_options": ["Celery", "RQ"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "Celery",
+          "evidence": "distributed task processing with Celery/Redis. Built asynchronous processing pipelines with Celery and Redis handling 40M tasks/day with idempotent retries.",
+          "reasoning": "Candidate has experience building asynchronous processing pipelines with Celery."
+        },
+        {
+          "skill_options": ["Docker"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "Docker",
+          "evidence": "Containerized all services with Docker and deployed them via the team's existing pipeline.",
+          "reasoning": "Candidate has experience containerizing services with Docker."
+        },
+        {
+          "skill_options": ["asynchronous programming", "concurrency"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "asynchronous programming, concurrency",
+          "evidence": "Built async, concurrent data-ingestion services in Python (asyncio) processing 500 GB/day... Open-source async rate limiter",
+          "reasoning": "Candidate explicitly mentions building async and concurrent services using Python's asyncio and has developed an async rate limiter."
+        },
+        {
+          "skill_options": ["Kubernetes", "AWS", "GCP"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "None",
+          "evidence": "None",
+          "reasoning": "The resume does not mention any experience with Kubernetes, AWS, or GCP."
+        },
+        {
+          "skill_options": ["LangChain"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "None",
+          "evidence": "None",
+          "reasoning": "The resume does not mention any experience with LangChain."
+        },
+        {
+          "skill_options": ["CI/CD pipelines", "infrastructure-as-code"],
+          "tier": "preferred",
+          "match_type": "partial",
+          "matched_by": "CI/CD pipelines",
+          "evidence": "Containerized all services with Docker and deployed them via the team's existing pipeline.",
+          "reasoning": "Candidate deployed services via an existing pipeline, implying familiarity with CI/CD, though not explicitly mentioning IaC."
+        }
+      ],
+      "strengths": ["Python", "FastAPI", "Celery", "PostgreSQL", "Docker", "async programming"]
+    },
+    "critical_score": 1.0,
+    "required_score": 1.0,
+    "preferred_score": 0.217,
+    "critical_gaps": [],
+    "critical_penalty": 1.0,
+    "final_score": 0.883,
+    "summary": "Excellent skills match (88%). Strong in: Python, FastAPI, Celery."
+  },
+  "experience": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "job_title": "Senior Backend Engineer",
+          "company": "Vantix",
+          "start_date": "2022-03",
+          "end_date": "null",
+          "duration_months": 52,
+          "relevance": "high",
+          "evidence": "Directly matches the Senior Backend Python Engineer role with responsibilities including designing and owning high-throughput REST APIs in FastAPI, optimizing PostgreSQL, building asynchronous processing pipelines with Celery and Redis, and contributing to backend standards and onboarding. Uses key skills: Python, FastAPI, PostgreSQL, Celery, Redis, Docker, asynchronous programming, concurrency."
+        },
+        {
+          "job_title": "Software Engineer",
+          "company": "Northbeam",
+          "start_date": "2019-07",
+          "end_date": "2022-02",
+          "duration_months": 31,
+          "relevance": "medium",
+          "evidence": "Related experience in backend development with Python, including asynchronous/concurrent programming (asyncio) and migrating a Flask service to FastAPI. Demonstrates transferable skills in building and optimizing backend services, though the focus was on data infrastructure and not explicitly 'senior' or API-focused like the target role."
+        }
+      ],
+      "notes": "The candidate's experience at Vantix is a very strong match for the Senior Backend Python Engineer role. The experience at Northbeam is also relevant, particularly the work with asyncio and FastAPI, though it was a more junior role and had a different focus (data infrastructure). The project 'OpenRateLimit' further demonstrates relevant skills and initiative."
+    },
+    "effective_months": 70.6,
+    "effective_years": 5.88,
+    "required_years": 5.0,
+    "experience_score": 1.0,
+    "summary": "Meets experience requirement (5.9/5.0 years relevant, 100%)"
+  },
+  "education": {
+    "score": 1.0,
+    "candidate_degree": "B.S.",
+    "field_of_study": "Computer Science",
+    "summary": "The candidate has a B.S. in Computer Science, which directly meets the job requirements for a minimum of a bachelors degree and preferred fields. The candidate also has 6 years of experience as a backend engineer, further strengthening their qualifications."
+  },
+  "resume_markdown": "# John Smith\nSan Francisco, CA • (415) 555-0142 john.smith@example.com linkedin.com/in/johnsmith • github.com/johnsmith\n\n## SUMMARY\nBackend engineer with 6 years building Python services at scale. Strong background in FastAPI,\nPostgreSQL performance tuning, and distributed task processing with Celery/Redis. Comfortable owning\nbackend architecture end-to-end and supporting other engineers on the team.\n\n## EXPERIENCE\nVantix Senior Backend EngineerSan Francisco, CA\nBackend Platform TeamMar. 2022 – Present\n- Designed and own a suite of high-throughput REST APIs in FastAPI serving 12k req/s at p99 < 90ms\nacross 20+ microservices.\n- Re-architected PostgreSQL schemas, partitioning, and query plans, cutting analytics latency 70% on\na 4 TB dataset.\n- Built asynchronous processing pipelines with Celery and Redis handling 40M tasks/day with\nidempotent retries.\n- Contributed to backend code-review standards and onboarded two engineers to the platform team.\n- Containerized all services with Docker and deployed them via the team's existing pipeline.\n\nNorthbeam\nSoftware EngineerSeattle, WA\nData Infrastructure Jul. 2019 – Feb. 2022\n- Built async, concurrent data-ingestion services in Python (asyncio) processing 500 GB/day.\n- Migrated a legacy Flask service to FastAPI, cutting p95 response time by half.\n- Wrote the service-level integration test suite and maintained the team's staging environment.\n\n## PROJECTS\nOpenRateLimit — Open-source async rate limiter2022\n- Authored a Redis-backed distributed rate limiter for FastAPI (1.2k GitHub stars); used in production by\nseveral startups.\n\n## EDUCATION\nUniversity of California, San DiegoLa Jolla, CA\nB.S. in Computer Science2019\n\n## TECHNICAL SKILLS\nLanguages: Python (expert), SQL, Bash\nBackend: FastAPI, Flask, asyncio, REST\nData & Infra: PostgreSQL, Redis, Celery, Docker\nOther: Git, pytest, observability (Prometheus, Grafana)"
+}

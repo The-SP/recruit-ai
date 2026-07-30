@@ -1,0 +1,134 @@
+{
+  "candidate_id": "76ef7c9f-0f4c-40ad-b900-b846b7ce7b32",
+  "candidate_name": "Emily Davis",
+  "filename": "emily_davis.pdf",
+  "final_score": 0.075,
+  "hire_signal": "no_match",
+  "skill_score": 0.0,
+  "experience_score": 0.0,
+  "education_score": 0.5,
+  "summary": "Poor candidate match (7%). Breakdown: Skills: 0%, Experience: 0%, Education: 50%.",
+  "skills": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "skill_options": ["Python"],
+          "tier": "critical",
+          "match_type": "none",
+          "matched_by": "Python",
+          "evidence": "No mention of Python in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with Python."
+        },
+        {
+          "skill_options": ["FastAPI", "Flask"],
+          "tier": "critical",
+          "match_type": "none",
+          "matched_by": "FastAPI, Flask",
+          "evidence": "No mention of FastAPI or Flask in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with FastAPI or Flask."
+        },
+        {
+          "skill_options": ["PostgreSQL"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "PostgreSQL",
+          "evidence": "No mention of PostgreSQL in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with PostgreSQL."
+        },
+        {
+          "skill_options": ["Celery", "RQ"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "Celery, RQ",
+          "evidence": "No mention of Celery or RQ in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with Celery or RQ."
+        },
+        {
+          "skill_options": ["Docker"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "Docker",
+          "evidence": "No mention of Docker in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with Docker."
+        },
+        {
+          "skill_options": ["asynchronous programming", "concurrency"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "asynchronous programming, concurrency",
+          "evidence": "No mention of asynchronous programming or concurrency in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with asynchronous programming or concurrency."
+        },
+        {
+          "skill_options": ["Kubernetes", "AWS", "GCP"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "Kubernetes, AWS, GCP",
+          "evidence": "No mention of Kubernetes, AWS, or GCP in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with Kubernetes, AWS, or GCP."
+        },
+        {
+          "skill_options": ["LangChain"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "LangChain",
+          "evidence": "No mention of LangChain in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with LangChain."
+        },
+        {
+          "skill_options": ["CI/CD pipelines", "infrastructure-as-code"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "CI/CD pipelines, infrastructure-as-code",
+          "evidence": "No mention of CI/CD pipelines or infrastructure-as-code in the resume.",
+          "reasoning": "The candidate's resume does not mention any experience with CI/CD pipelines or infrastructure-as-code."
+        }
+      ],
+      "strengths": []
+    },
+    "critical_score": 0.0,
+    "required_score": 0.0,
+    "preferred_score": 0.0,
+    "critical_gaps": ["Python", "FastAPI, Flask"],
+    "critical_penalty": 0.25,
+    "final_score": 0.0,
+    "summary": "Poor skills match (0%). Missing critical: Python, FastAPI, Flask."
+  },
+  "experience": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "job_title": "Senior Marketing Manager",
+          "company": "Coastline Brands",
+          "start_date": "2019-04",
+          "end_date": "null",
+          "duration_months": 87,
+          "relevance": "none",
+          "evidence": "The candidate's experience is in marketing management, focusing on brand strategy, demand generation, and campaign execution. This does not align with the core technical requirements of a Senior Backend Python Engineer, which involve software development, API design, database management, and asynchronous programming."
+        },
+        {
+          "job_title": "Marketing Specialist",
+          "company": "Sunbelt Media",
+          "start_date": "2016-07",
+          "end_date": "2019-03",
+          "duration_months": 32,
+          "relevance": "none",
+          "evidence": "This role involved running ad campaigns and managing content production, which is outside the scope of backend engineering. The skills and responsibilities are not transferable to the requirements of a Senior Backend Python Engineer."
+        }
+      ],
+      "notes": null
+    },
+    "effective_months": 0.0,
+    "effective_years": 0.0,
+    "required_years": 5.0,
+    "experience_score": 0.0,
+    "summary": "Limited relevant experience (0.0/5.0 years relevant, 0%)"
+  },
+  "education": {
+    "score": 0.5,
+    "candidate_degree": "B.A.",
+    "field_of_study": "Communications",
+    "summary": "The candidate has a Bachelor of Arts degree, which meets the minimum degree requirement. However, their field of study (Communications) is unrelated to the preferred fields of Computer Science or Software Engineering for this tech role. Therefore, the score is 0.5."
+  },
+  "resume_markdown": "# Emily Davis\nMiami, FL | (305) 555-0110 | emily.davis@example.com | linkedin.com/in/emilydavis\n\n## SUMMARY\nMarketing manager with 7 years leading brand and demand-generation campaigns across B2B SaaS and\nconsumer brands. Skilled in content strategy, paid media, and cross-functional team leadership.\nConsistently exceeds pipeline and revenue targets.\n\n## EXPERIENCE\n### Senior Marketing Manager | Coastline Brands | Apr. 2019 – Present\nMiami, FL\n- Led integrated campaigns across paid social, email, and events, growing marketing-qualified leads\n3x in two years.\n- Managed a team of 5 marketers and a $2M annual budget, reporting to the VP of Marketing.\n- Owned brand positioning and messaging for two product launches.\n\n### Marketing Specialist | Sunbelt Media | Jul. 2016 – Mar. 2019\nTampa, FL\n- Ran paid search and social ad campaigns; managed content production calendar.\n- Produced monthly performance reports for client accounts.\n\n## EDUCATION\n### B.A. in Communications | University of Florida | 2016\nGainesville, FL\n\n## SKILLS\nMarketing: Brand strategy, demand generation, content strategy, paid media, SEO\nTools: HubSpot, Salesforce, Google Analytics, Mailchimp, Asana, Figma\n"
+}

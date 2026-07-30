@@ -1,0 +1,134 @@
+{
+  "candidate_id": "eab91c40-4a73-47f8-a63f-99c248505d34",
+  "candidate_name": "Michael Johnson",
+  "filename": "michael_johnson.pdf",
+  "final_score": 0.911,
+  "hire_signal": "strong_match",
+  "skill_score": 0.802,
+  "experience_score": 1.0,
+  "education_score": 1.0,
+  "summary": "Strong candidate match (91%). Breakdown: Skills: 80%, Experience: 100%, Education: 100%.",
+  "skills": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "skill_options": ["Python"],
+          "tier": "critical",
+          "match_type": "exact",
+          "matched_by": "Python",
+          "evidence": "Backend engineer with 4 years of Python experience",
+          "reasoning": "The candidate explicitly states 4 years of Python experience, meeting the 4+ years requirement."
+        },
+        {
+          "skill_options": ["FastAPI", "Flask"],
+          "tier": "critical",
+          "match_type": "exact",
+          "matched_by": "FastAPI",
+          "evidence": "Built and maintained REST APIs in Python with FastAPI powering a customer-facing analytics dashboard (300+ endpoints).",
+          "reasoning": "The candidate has extensive experience with FastAPI, a direct match for one of the critical skill options."
+        },
+        {
+          "skill_options": ["PostgreSQL"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "PostgreSQL",
+          "evidence": "Modeled and optimized PostgreSQL schemas; added indexes and rewrote N+1 queries, halving p95 latency on key endpoints.",
+          "reasoning": "The candidate demonstrates direct experience with PostgreSQL, including schema modeling and optimization."
+        },
+        {
+          "skill_options": ["Celery", "RQ"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "Celery",
+          "evidence": "Implemented background jobs with Celery and Redis for scheduled report generation and email delivery.",
+          "reasoning": "The candidate has hands-on experience implementing background jobs using Celery."
+        },
+        {
+          "skill_options": ["Docker"],
+          "tier": "required",
+          "match_type": "exact",
+          "matched_by": "Docker",
+          "evidence": "Packaged services with Docker and set up docker-compose environments for local and staging.",
+          "reasoning": "The candidate explicitly mentions packaging services with Docker and setting up docker-compose environments."
+        },
+        {
+          "skill_options": ["asynchronous programming", "concurrency"],
+          "tier": "required",
+          "match_type": "partial",
+          "matched_by": "FastAPI",
+          "evidence": "Built and maintained REST APIs in Python with FastAPI powering a customer-facing analytics dashboard (300+ endpoints).",
+          "reasoning": "The use of FastAPI for building REST APIs implies experience with asynchronous programming concepts, which are fundamental to FastAPI's operation."
+        },
+        {
+          "skill_options": ["Kubernetes", "AWS", "GCP"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of Kubernetes, AWS, or GCP in the resume.",
+          "reasoning": "The resume does not contain any information regarding experience with Kubernetes, AWS, or GCP."
+        },
+        {
+          "skill_options": ["LangChain"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of LangChain in the resume.",
+          "reasoning": "The candidate's resume does not list or describe any experience with LangChain."
+        },
+        {
+          "skill_options": ["CI/CD pipelines", "infrastructure-as-code"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No explicit mention of CI/CD pipelines or infrastructure-as-code practices.",
+          "reasoning": "While Docker experience is present, there is no direct mention or description of CI/CD pipelines or infrastructure-as-code."
+        }
+      ],
+      "strengths": ["Python", "FastAPI", "PostgreSQL", "Celery", "Docker"]
+    },
+    "critical_score": 1.0,
+    "required_score": 0.912,
+    "preferred_score": 0.0,
+    "critical_gaps": [],
+    "critical_penalty": 1.0,
+    "final_score": 0.802,
+    "summary": "Good skills match (80%). Strong in: Python, FastAPI, PostgreSQL."
+  },
+  "experience": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "job_title": "Backend Engineer",
+          "company": "Loophole Analytics",
+          "start_date": "2021-08",
+          "end_date": "null",
+          "duration_months": 59,
+          "relevance": "high",
+          "evidence": "Directly relevant experience with Python, FastAPI, PostgreSQL, Celery, and Docker, including building and optimizing REST APIs and background processing pipelines. Matches key responsibilities and skills."
+        },
+        {
+          "job_title": "Junior Software Developer",
+          "company": "GreenTree Software",
+          "start_date": "2020-07",
+          "end_date": "2021-07",
+          "duration_months": 12,
+          "relevance": "medium",
+          "evidence": "Used Python and Flask, which are related to the required skills. Also involved database migrations and bug triaging, showing some transferable experience."
+        }
+      ],
+      "notes": null
+    },
+    "effective_months": 66.2,
+    "effective_years": 5.52,
+    "required_years": 5.0,
+    "experience_score": 1.0,
+    "summary": "Meets experience requirement (5.5/5.0 years relevant, 100%)"
+  },
+  "education": {
+    "score": 1.0,
+    "candidate_degree": "B.S.",
+    "field_of_study": "Computer Science",
+    "summary": "The candidate has a B.S. in Computer Science, which directly meets the degree requirement and preferred field of study. The candidate also has a strong background in backend engineering and relevant technical skills."
+  },
+  "resume_markdown": "# Michael Johnson\nChicago, IL | (312) 555-0198 | michael.johnson@example.com | github.com/mjohnson-dev\n\n## PROFESSIONAL SUMMARY\nBackend engineer with 4 years of Python experience building web APIs and background-processing\nsystems. Comfortable across the request lifecycle: FastAPI services, PostgreSQL data models, and Celery\njob queues. Eager to grow into a senior backend role.\n\n## EXPERIENCE\n### Loophole AnalyticsAug. 2021 – Present\nBackend EngineerChicago, IL\n- Built and maintained REST APIs in Python with FastAPI powering a customer-facing analytics\n  dashboard (300+ endpoints).\n- Implemented background jobs with Celery and Redis for scheduled report generation and email\n  delivery.\n- Modeled and optimized PostgreSQL schemas; added indexes and rewrote N+1 queries, halving\n  p95 latency on key endpoints.\n- Packaged services with Docker and set up docker-compose environments for local and staging.\n- Wrote unit and integration tests (pytest), lifting service coverage from 40% to 78%.\n\n### GreenTree SoftwareJul. 2020 – Jul. 2021\nJunior Software DeveloperMilwaukee, WI\n- Contributed Python scripts and small Flask endpoints for internal operations tooling.\n- Assisted with Alembic database migrations and triaged production bugs.\n\n## PROJECTS\n### DevBoard - Self-hosted Kanban API2023\n- Solo-built a FastAPI + PostgreSQL backend with JWT auth and a small React frontend; dockerized\n  for one-command deploy.\n\n## EDUCATION\n### University of Illinois Urbana-Champaign2020\nB.S. in Computer Science\n\n## TECHNICAL SKILLS\nLanguages: Python, SQL, JavaScript\nFrameworks: FastAPI, Flask, pytest\nData/Infra: PostgreSQL, Redis, Celery, Docker, Git\n"
+}

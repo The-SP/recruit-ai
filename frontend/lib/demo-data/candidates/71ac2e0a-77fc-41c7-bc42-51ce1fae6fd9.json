@@ -1,0 +1,143 @@
+{
+  "candidate_id": "71ac2e0a-77fc-41c7-bc42-51ce1fae6fd9",
+  "candidate_name": "David Brown",
+  "filename": "david_brown.pdf",
+  "final_score": 0.172,
+  "hire_signal": "no_match",
+  "skill_score": 0.093,
+  "experience_score": 0.138,
+  "education_score": 0.5,
+  "summary": "Poor candidate match (17%). Breakdown: Skills: 9%, Experience: 13%, Education: 50%.",
+  "skills": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "skill_options": ["Python"],
+          "tier": "critical",
+          "match_type": "partial",
+          "matched_by": "habit.py",
+          "evidence": "Weekend project: a simple CLI habit tracker in Python with a SQLite store; first real backend code.",
+          "reasoning": "Candidate has some Python experience through a personal project, but lacks the 4+ years of advanced proficiency required."
+        },
+        {
+          "skill_options": ["FastAPI", "Flask"],
+          "tier": "critical",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No explicit mention of FastAPI or Flask. Resume mentions 'basic Python' and 'small Node.js/Express endpoints'.",
+          "reasoning": "The candidate has not demonstrated experience with FastAPI or Flask."
+        },
+        {
+          "skill_options": ["PostgreSQL"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "Resume mentions SQLite as a data store for a Python project, but no mention of PostgreSQL.",
+          "reasoning": "The candidate has experience with SQLite but not PostgreSQL."
+        },
+        {
+          "skill_options": ["Celery", "RQ"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of message queues or background task processing libraries like Celery or RQ.",
+          "reasoning": "The candidate has not demonstrated experience with Celery or RQ."
+        },
+        {
+          "skill_options": ["Docker"],
+          "tier": "required",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "Docker is not mentioned in the resume.",
+          "reasoning": "The candidate has not demonstrated experience with Docker."
+        },
+        {
+          "skill_options": ["asynchronous programming", "concurrency"],
+          "tier": "required",
+          "match_type": "partial",
+          "matched_by": "React, TypeScript, Next.js, code-splitting",
+          "evidence": "Built responsive, accessible interfaces in React, TypeScript, and Next.js; Improved Core Web Vitals (LCP –40%) via code-splitting and image optimization.",
+          "reasoning": "While the candidate has experience with frontend asynchronous operations (e.g., code-splitting, image optimization) and uses TypeScript, there's no explicit mention of backend asynchronous programming or concurrency concepts."
+        },
+        {
+          "skill_options": ["Kubernetes", "AWS", "GCP"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of Kubernetes, AWS, or GCP in the resume.",
+          "reasoning": "The candidate has not demonstrated experience with Kubernetes, AWS, or GCP."
+        },
+        {
+          "skill_options": ["LangChain"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "LangChain is not mentioned in the resume.",
+          "reasoning": "The candidate has not demonstrated experience with LangChain."
+        },
+        {
+          "skill_options": ["CI/CD pipelines", "infrastructure-as-code"],
+          "tier": "preferred",
+          "match_type": "none",
+          "matched_by": "",
+          "evidence": "No mention of CI/CD pipelines or infrastructure-as-code practices.",
+          "reasoning": "The candidate has not demonstrated experience with CI/CD pipelines or infrastructure-as-code."
+        }
+      ],
+      "strengths": ["React", "TypeScript", "Next.js", "Node.js", "Express", "HTML/CSS", "JavaScript", "Redux", "Git", "Webpack", "Vite", "Figma", "Jest"]
+    },
+    "critical_score": 0.325,
+    "required_score": 0.163,
+    "preferred_score": 0.0,
+    "critical_gaps": ["FastAPI, Flask"],
+    "critical_penalty": 0.5,
+    "final_score": 0.093,
+    "summary": "Poor skills match (9%). Strong in: React, TypeScript, Next.js. Missing critical: FastAPI, Flask."
+  },
+  "experience": {
+    "llm_response": {
+      "evaluations": [
+        {
+          "job_title": "Frontend Engineer",
+          "company": "BrightLabel",
+          "start_date": "2021-03",
+          "end_date": "null",
+          "duration_months": 64,
+          "relevance": "low",
+          "evidence": "The candidate's primary experience is in frontend development using React, TypeScript, and Next.js. While they have experience consuming REST APIs and writing light Node.js backends, this does not directly align with the backend focus of the Senior Backend Python Engineer role, which requires Python, FastAPI, Flask, PostgreSQL, Celery, RQ, and Docker. The mention of 'some exposure to Python' is noted but not substantial."
+        },
+        {
+          "job_title": "Web Developer",
+          "company": "Pixelworks Studio",
+          "start_date": "2019-06",
+          "end_date": "2021-02",
+          "duration_months": 20,
+          "relevance": "none",
+          "evidence": "This role involved frontend development with HTML, CSS, JavaScript, jQuery, and WordPress/PHP. It has no direct relevance to the Senior Backend Python Engineer position, which requires Python and related backend technologies."
+        },
+        {
+          "job_title": "habit.py",
+          "company": "Personal Project",
+          "start_date": "2023-01",
+          "end_date": "2023-12",
+          "duration_months": 11,
+          "relevance": "low",
+          "evidence": "This is a personal project where the candidate used Python for the first time to build a simple CLI habit tracker with SQLite. While it demonstrates an attempt to use Python, it is a very basic project and does not showcase experience with the required backend technologies like FastAPI, Flask, PostgreSQL, Celery, RQ, or Docker, nor does it indicate senior-level experience."
+        }
+      ],
+      "notes": "The candidate has extensive frontend experience but limited and very basic backend experience, primarily with Node.js and a recent, simple Python project. They do not meet the required 5 years of backend experience, nor do they demonstrate proficiency in the key backend skills and technologies specified for the Senior Backend Python Engineer role."
+    },
+    "effective_months": 8.2,
+    "effective_years": 0.69,
+    "required_years": 5.0,
+    "experience_score": 0.138,
+    "summary": "Limited relevant experience (0.7/5.0 years relevant, 13%) | [Concurrent roles detected: only the most recent role was counted per overlapping period]"
+  },
+  "education": {
+    "score": 0.5,
+    "candidate_degree": "B.A.",
+    "field_of_study": "Graphic Design",
+    "summary": "The candidate has a B.A. in Graphic Design, which is an unrelated field to the preferred fields of Computer Science or Software Engineering. However, they possess a Meta Front-End Developer Professional Certificate and extensive practical experience in frontend development, which compensates for the lack of a directly relevant degree."
+  },
+  "resume_markdown": "David Brown\nSeattle, WA (206) 555-0177 • david.brown@example.com • github.com/davidbrown • davidbrown.dev\n\n## SUMMARY\nFrontend engineer with 4 years crafting React web applications with a focus on UI architecture, design\nsystems, and client-side performance. Comfortable consuming APIs and writing light Node.js backends;\nsome exposure to Python.\n\n## EXPERIENCE\n### Frontend Engineer | BrightLabel | Mar. 2021 – Present\nWeb PlatformSeattle, WA\n- Built responsive, accessible interfaces in React, TypeScript, and Next.js used by 200k monthly users.\n- Led a design-system migration to a shared component library, cutting UI bug reports 35%.\n- Improved Core Web Vitals (LCP –40%) via code-splitting and image optimization.\n- Consumed REST APIs and wrote small Node.js/Express endpoints for BFF aggregation.\n\n### Web Developer | Pixelworks Studio | Jun. 2019 – Feb. 2021\nClient ServicesPortland, OR\n- Developed marketing sites with HTML, CSS, JavaScript, and jQuery for 15+ agency clients.\n- Maintained a small WordPress/PHP theme codebase.\n\n## PROJECTS\n### habit.py | Personal habit tracker | 2023\n- Weekend project: a simple CLI habit tracker in Python with a SQLite store; first real backend code.\n\n## EDUCATION\n### B.A. in Graphic Design | Cornish College of the Arts | 2019\nSeattle, WA\n\n## CERTIFICATIONS\n### Meta Front-End Developer Professional Certificate | (2021)\n\n## TECHNICAL SKILLS\nFrontend: React, TypeScript, JavaScript, Next.js, HTML/CSS, Redux\nBackend: Node.js, Express, basic Python, SQLite\nTools: Git, Webpack, Vite, Figma, Jest\n"
+}

@@ -11,7 +11,9 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { DemoBanner } from '@/components/demo-banner';
 import { ResumeFileUpload } from '@/components/resume-file-upload';
+import { IS_DEMO_MODE } from '@/lib/demo';
 import { ApiError } from '@/services/api';
 import { submitBatch } from '@/services/batch';
 
@@ -68,6 +70,8 @@ export function SubmitForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="p-8 space-y-10">
+        {IS_DEMO_MODE && <DemoBanner variant="submit" />}
+
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
             <X className="w-5 h-5 flex-shrink-0 mt-0.5" />

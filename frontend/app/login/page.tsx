@@ -1,16 +1,35 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Briefcase } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DemoBanner } from "@/components/demo-banner";
+import { IS_DEMO_MODE } from "@/lib/demo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function LoginPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const [isDemoDialogOpen, setIsDemoDialogOpen] = useState(false);
+
+  // In demo mode sign-in stays visible to show the feature exists, but the
+  // OAuth redirect would leave the site for a backend that is powered down.
+  const handleSignIn = () => {
+    if (IS_DEMO_MODE) {
+      setIsDemoDialogOpen(true);
+      return;
+    }
+    window.location.href = `${API_URL}/auth/google`;
+  };
 
   useEffect(() => {
     if (!isLoading && user) router.replace("/");
@@ -36,7 +55,7 @@ export default function LoginPage() {
         <Button
           className="w-full gap-3"
           size="lg"
-          onClick={() => { window.location.href = `${API_URL}/auth/google`; }}
+          onClick={handleSignIn}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -58,6 +77,19 @@ export default function LoginPage() {
           </svg>
           Sign in with Google
         </Button>
+
+        <Dialog open={isDemoDialogOpen} onOpenChange={setIsDemoDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            {/* The banner carries the visible heading and copy; these keep the
+                dialog accessible without repeating that text on screen. */}
+            <DialogTitle className="sr-only">Demo mode</DialogTitle>
+            <DialogDescription className="sr-only">
+              Sign-in is unavailable in this demo because the backend is powered
+              down.
+            </DialogDescription>
+            <DemoBanner variant="login" bare className="text-left" />
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
