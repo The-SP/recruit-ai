@@ -21,8 +21,8 @@ concurrency:
 
 env:
   AWS_REGION: ap-south-1
-  INSTANCE_ID: i-09f5974c17c5142dd
-  DEPLOY_PATH: /home/ssm-user/r.ai/backend
+  INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+  DEPLOY_PATH: /home/ssm-user/recruit-ai/backend
   HEALTH_URL: https://api.recruitai.qzz.io/health
 
 jobs:
