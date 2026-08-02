@@ -22,6 +22,14 @@ class Config:
         )
         if k.strip()
     ]
+    # AI Interviewer
+    INTERVIEW_MODEL_NAME: str = os.getenv(
+        "INTERVIEW_MODEL_NAME", "google_genai:gemini-3.5-flash-lite"
+    )
+    # Dedicated key so interviews don't share the scorers' quota or circuit
+    # breaker. Falls back to the rotated GOOGLE_API_KEYS pool when unset.
+    INTERVIEW_GOOGLE_API_KEY: str = os.getenv("INTERVIEW_GOOGLE_API_KEY", "")
+
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
     )

@@ -1,10 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, UploadFile
+from fastapi import APIRouter, Depends, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.api.exceptions import NotFoundError, ValidationError
+from app.api.schemas.interview import (
+    InterviewDetailResponse,
+    InterviewSummaryResponse,
+    build_detail_response,
+    build_summary_response,
+)
 from app.api.schemas.public import (
     AddCandidatesResponse,
     CandidateBreakdownResponse,
@@ -25,7 +31,12 @@ from app.core.file_upload import (
     validate_pdf_filename,
 )
 from app.core.job_description_parser import parse_job_description
-from app.models.evaluation_run import RunStatus
+from app.interview.service import (
+    create_interview,
+    get_interview,
+    reissue_interview,
+)
+from app.models.evaluation_run import EvaluationRun, RunStatus
 from app.models.user import User
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
@@ -33,6 +44,7 @@ from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
     EvaluationRunRepository,
 )
+from app.repositories.interview_repository import InterviewRepository
 from app.repositories.job_repository import JobRepository
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.experience_evaluation import ExperienceScoreResult
@@ -362,6 +374,77 @@ def get_run_candidate_breakdown(
         experience=experience,
         education=education,
     )
+
+
+# =============================================================================
+# Interviews (owned flavor — JWT plus ownership check)
+# =============================================================================
+
+
+def _load_owned_run(db: Session, run_id: UUID, user: User) -> EvaluationRun:
+    run = EvaluationRunRepository(db).get_by_id_for_user(
+        run_id, user.id, with_items=True
+    )
+    if not run:
+        raise NotFoundError("Evaluation run", str(run_id))
+    return run
+
+
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview",
+    response_model=InterviewSummaryResponse,
+    status_code=201,
+)
+def create_owned_candidate_interview(
+    run_id: UUID,
+    candidate_id: UUID,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewSummaryResponse:
+    """Generate an interview invite for a candidate in an owned run.
+
+    Idempotent: returns the existing interview with 200 rather than creating a
+    second one. Question generation runs synchronously, so expect a few seconds.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    interview, created = create_interview(db, run, candidate_id)
+    if not created:
+        response.status_code = 200
+    return build_summary_response(interview)
+
+
+@runs_router.get(
+    "/{run_id}/candidate/{candidate_id}/interview",
+    response_model=InterviewDetailResponse,
+)
+def get_owned_candidate_interview(
+    run_id: UUID,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewDetailResponse:
+    """Recruiter view of an interview: transcript, rubric, and assessment."""
+    run = _load_owned_run(db, run_id, current_user)
+    interview = get_interview(db, run, candidate_id)
+    turns = InterviewRepository(db).get_turns(interview.id)
+    return build_detail_response(interview, turns)
+
+
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview/reissue",
+    response_model=InterviewSummaryResponse,
+)
+def reissue_owned_candidate_interview(
+    run_id: UUID,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewSummaryResponse:
+    """Rotate the invite token and expiry. Never wipes a transcript."""
+    run = _load_owned_run(db, run_id, current_user)
+    interview = reissue_interview(db, run, candidate_id)
+    return build_summary_response(interview)
 
 
 @dashboard_router.get("/stats", response_model=DashboardStatsResponse)

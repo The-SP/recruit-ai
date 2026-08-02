@@ -7,7 +7,16 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.dependencies import verify_api_key
 from app.api.exceptions import register_exception_handlers
-from app.api.routes import auth, batch, candidates, evaluations, health, jobs, user_runs
+from app.api.routes import (
+    auth,
+    batch,
+    candidates,
+    evaluations,
+    health,
+    interview,
+    jobs,
+    user_runs,
+)
 from app.config import Config
 from app.core.logger import init_logger
 
@@ -55,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(candidates.router, dependencies=api_key_auth)
     app.include_router(evaluations.router, dependencies=api_key_auth)
     app.include_router(batch.router, dependencies=api_key_auth)
+    app.include_router(interview.router, dependencies=api_key_auth)
 
     return app
 

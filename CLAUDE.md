@@ -103,6 +103,8 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
 - **`services/`** — `email_service.py` with pluggable providers: `ConsoleProvider` (local dev, logs to stdout), `GmailProvider` (SMTP), `ResendProvider` (API). Set via `EMAIL_PROVIDER`. Templates in `app/templates/emails/`.
 
+- **`interview/`** — AI interviewer (question generation, shared create/detail/reissue service; engine and assessor land later). Its routes are deliberately split three ways: candidate endpoints in `api/routes/interview.py` (unguessable token in the path, no account), recruiter endpoints inside `api/routes/batch.py` and `api/routes/user_runs.py` — both thin wrappers over `interview/service.py`. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
+
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` (default: `google_genai:gemini-2.5-flash-lite`).
 
 ### Frontend (`frontend/`)
