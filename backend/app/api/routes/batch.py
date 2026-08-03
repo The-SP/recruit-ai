@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, UploadFile
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,6 @@ from app.api.schemas.batch import (
     BatchResultItem,
     BatchResultsResponse,
     BatchRunResponse,
-)
-from app.api.schemas.interview import (
-    InterviewDetailResponse,
-    InterviewSummaryResponse,
-    build_detail_response,
-    build_summary_response,
 )
 from app.api.schemas.public import (
     AddCandidatesResponse,
@@ -39,21 +33,19 @@ from app.core.file_storage import (
     resolve_file_path,
     save_uploaded_file,
 )
-from app.core.file_upload import read_pdf_content, validate_pdf_filename
-from app.core.job_description_parser import parse_job_description
-from app.interview.service import (
-    create_interview,
-    get_interview,
-    reissue_interview,
+from app.core.file_upload import (
+    enforce_anonymous_resume_cap,
+    read_pdf_content,
+    validate_pdf_filename,
 )
-from app.models.evaluation_run import EvaluationRun, RunStatus
+from app.core.job_description_parser import parse_job_description
+from app.models.evaluation_run import RunStatus
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
     EvaluationRunRepository,
 )
-from app.repositories.interview_repository import InterviewRepository
 from app.repositories.job_repository import JobRepository
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.experience_evaluation import ExperienceScoreResult
@@ -90,6 +82,8 @@ async def submit_batch(
     """
     if not files:
         raise ValidationError("At least one PDF file is required")
+
+    enforce_anonymous_resume_cap(0, len(files))
 
     # Parse job description
     jd = parse_job_description(job_text)
@@ -265,6 +259,8 @@ async def add_candidates_to_batch(
     run = run_repo.get_by_token_for_update(token)
     if not run:
         raise NotFoundError("Batch", token)
+
+    enforce_anonymous_resume_cap(run.total_count, len(files))
 
     allowed_statuses = {RunStatus.COMPLETED.value, RunStatus.FAILED.value}
     if run.status not in allowed_statuses:
@@ -572,6 +568,8 @@ async def upload_files(
     if run.status != RunStatus.DRAFT.value:
         raise ValidationError("Cannot upload files to a batch that has already started")
 
+    enforce_anonymous_resume_cap(run.total_count, len(files))
+
     item_repo = EvaluationRunItemRepository(db)
     results: list[BatchFileUploadResult] = []
     uploaded = 0
@@ -758,67 +756,12 @@ def get_batch_results(
 
 
 # =============================================================================
-# Interviews (anonymous flavor — capability is the batch access token)
+# Interviews: deliberately absent here
 # =============================================================================
-
-
-def _load_run_by_token(db: Session, token: str) -> EvaluationRun:
-    run = EvaluationRunRepository(db).get_by_token(token, with_items=True)
-    if not run:
-        raise NotFoundError("Batch", token)
-    return run
-
-
-@router.post(
-    "/status/{token}/candidate/{candidate_id}/interview",
-    response_model=InterviewSummaryResponse,
-    status_code=201,
-)
-def create_candidate_interview(
-    token: str,
-    candidate_id: UUID,
-    response: Response,
-    db: Session = Depends(get_db),
-) -> InterviewSummaryResponse:
-    """Generate an interview invite for a scored candidate.
-
-    Idempotent: returns the existing interview with 200 instead of creating a
-    second one. Question generation runs synchronously here, so this call
-    takes a few seconds.
-    """
-    run = _load_run_by_token(db, token)
-    interview, created = create_interview(db, run, candidate_id)
-    if not created:
-        response.status_code = 200
-    return build_summary_response(interview)
-
-
-@router.get(
-    "/status/{token}/candidate/{candidate_id}/interview",
-    response_model=InterviewDetailResponse,
-)
-def get_candidate_interview(
-    token: str,
-    candidate_id: UUID,
-    db: Session = Depends(get_db),
-) -> InterviewDetailResponse:
-    """Recruiter view of an interview: transcript, rubric, and assessment."""
-    run = _load_run_by_token(db, token)
-    interview = get_interview(db, run, candidate_id)
-    turns = InterviewRepository(db).get_turns(interview.id)
-    return build_detail_response(interview, turns)
-
-
-@router.post(
-    "/status/{token}/candidate/{candidate_id}/interview/reissue",
-    response_model=InterviewSummaryResponse,
-)
-def reissue_candidate_interview(
-    token: str,
-    candidate_id: UUID,
-    db: Session = Depends(get_db),
-) -> InterviewSummaryResponse:
-    """Rotate the invite token and expiry. Never wipes a transcript."""
-    run = _load_run_by_token(db, token)
-    interview = reissue_interview(db, run, candidate_id)
-    return build_summary_response(interview)
+#
+# Interview creation is login-only. The batch access token grants add-candidates
+# and retry, but NOT interviews: every interview a candidate takes spends Gemini
+# quota through the turn engine, and an anonymous run has no account to attribute
+# or throttle that against. The recruiter surface lives solely in
+# `api/routes/user_runs.py`, behind `get_current_active_user` + an ownership
+# filter. Do not re-add token-flavored interview routes here for symmetry.

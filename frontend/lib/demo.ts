@@ -108,15 +108,3 @@ export async function demoAddCandidates(): Promise<AddCandidatesResponse> {
 export async function demoRetryFailed(): Promise<RetryFailedResponse> {
   throw new DemoModeError();
 }
-
-/** No saved interviews in the demo fixtures: every candidate shows the
- * invite button, and pressing it raises the notice below. */
-export async function demoGetInterview(): Promise<null> {
-  return delay(null);
-}
-
-export async function demoCreateInterview(): Promise<never> {
-  throw new DemoModeError(
-    "This is a demo with saved sample data, so interview invites can't be created."
-  );
-}

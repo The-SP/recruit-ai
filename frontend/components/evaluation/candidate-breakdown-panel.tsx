@@ -26,6 +26,7 @@ export function CandidateBreakdownPanel({
   interviewHref,
   onGenerateInterview,
   onReissueInterview,
+  interviewLocked = false,
 }: {
   breakdown: CandidateBreakdown | "loading" | "error" | undefined;
   isExpanded: boolean;
@@ -35,6 +36,8 @@ export function CandidateBreakdownPanel({
   interviewHref?: string | null;
   onGenerateInterview?: () => Promise<void>;
   onReissueInterview?: () => Promise<void>;
+  /** Anonymous results page: show the login upsell instead of the callbacks. */
+  interviewLocked?: boolean;
 }) {
   const [activeSection, setActiveSection] = useState<BreakdownSection | null>(null);
 
@@ -255,13 +258,15 @@ export function CandidateBreakdownPanel({
               </div>
             )}
 
-            {/* AI interview (only on surfaces that wire the callbacks) */}
-            {onGenerateInterview && onReissueInterview && (
+            {/* AI interview: surfaces that wire the callbacks, plus the
+                anonymous page, which passes `interviewLocked` and no callbacks. */}
+            {((onGenerateInterview && onReissueInterview) || interviewLocked) && (
               <InterviewSection
                 interview={interview}
                 interviewHref={interviewHref ?? null}
                 onGenerate={onGenerateInterview}
                 onReissue={onReissueInterview}
+                locked={interviewLocked}
               />
             )}
           </>

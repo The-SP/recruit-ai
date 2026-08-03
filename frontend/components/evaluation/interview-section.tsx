@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   Loader2,
+  Lock,
   MessageSquareText,
   RotateCcw,
   Sparkles,
@@ -15,6 +16,11 @@ import Link from "next/link";
 import { DemoNotice } from "@/components/demo-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   interviewStatusLabels,
@@ -29,17 +35,24 @@ import { useInviteActions } from "@/lib/use-invite-actions";
  * styled like the candidate's own chat. No rubric, no verdict — assessment
  * UI is a later milestone. Service-agnostic: both results pages pass wired
  * callbacks.
+ *
+ * `locked` is the anonymous results page: interviews are login-only, so that
+ * page passes no callbacks and gets an upsell instead of a generate button.
+ * Kept as an explicit prop rather than a `useAuth()` call so this component
+ * stays flow-agnostic (the compare dialog renders it with neither).
  */
 export function InterviewSection({
   interview,
   interviewHref,
   onGenerate,
   onReissue,
+  locked = false,
 }: {
   interview: CachedInterview | undefined;
   interviewHref: string | null;
-  onGenerate: () => Promise<void>;
-  onReissue: () => Promise<void>;
+  onGenerate?: () => Promise<void>;
+  onReissue?: () => Promise<void>;
+  locked?: boolean;
 }) {
   const { isWorking, error, demoNotice, copied, runAction, copyInviteUrl } =
     useInviteActions();
@@ -64,6 +77,36 @@ export function InterviewSection({
         )}
       </h3>
 
+      {locked && (
+        <div className="space-y-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* Navigates rather than being `disabled`: a disabled button
+                  swallows the click and can't take focus, which turns the
+                  upsell into a dead end. */}
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                <Link href="/login">
+                  <Lock className="w-4 h-4" />
+                  Interview with an account
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Interviews are available on a free account.
+            </TooltipContent>
+          </Tooltip>
+          <p className="text-xs text-muted-foreground">
+            Sign in and run an evaluation from your dashboard to interview
+            candidates with AI-generated questions.
+          </p>
+        </div>
+      )}
+
       {demoNotice && <DemoNotice>{demoNotice}</DemoNotice>}
 
       {error && (
@@ -84,7 +127,7 @@ export function InterviewSection({
         <p className="text-sm text-error-foreground">Failed to load interview details.</p>
       )}
 
-      {interview === null && (
+      {interview === null && onGenerate && (
         <div className="space-y-2">
           <Button
             size="sm"
@@ -151,7 +194,7 @@ export function InterviewSection({
                     {detail.questions_count}
                   </span>
                 )}
-                {detail.status === "created" && (
+                {detail.status === "created" && onReissue && (
                   <button
                     onClick={() => runAction(onReissue)}
                     disabled={isWorking}
@@ -171,7 +214,7 @@ export function InterviewSection({
           )}
 
           {/* Expired with no answers: offer a fresh link */}
-          {detail.status === "expired" && !detail.turns.some((t) => t.role === "candidate") && (
+          {detail.status === "expired" && onReissue && !detail.turns.some((t) => t.role === "candidate") && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 The invite expired before the candidate started.

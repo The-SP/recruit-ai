@@ -6,6 +6,14 @@ export const MAX_COMPARE = 4;
 // Shared shape of a candidate row across both results pages. CandidateResult
 // (services/batch.ts) and RunItemSummary (services/runs.ts) are both assignable
 // to this — the presentational components accept either.
+/**
+ * Trial cap on the anonymous flow, mirroring MAX_ANONYMOUS_RESUMES in
+ * backend/app/core/file_upload.py. Signed-in runs are uncapped. The backend
+ * enforces this; the client copy exists so people aren't surprised after
+ * picking files.
+ */
+export const MAX_ANONYMOUS_RESUMES = 5;
+
 export interface EvaluationItem {
   item_id: string;
   candidate_id: string | null;

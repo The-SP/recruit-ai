@@ -54,6 +54,9 @@ interface ResultsTableProps<T extends EvaluationItem> {
   // whether it's the token or run flavor); null hides the "View interview"
   // link even if an interview exists.
   getInterviewHref?: (item: T) => string | null;
+  // Anonymous page: interviews are login-only, so it passes this instead of
+  // the callbacks above and each row shows a sign-in upsell.
+  interviewLocked?: boolean;
 }
 
 export function ResultsTable<T extends EvaluationItem>({
@@ -80,6 +83,7 @@ export function ResultsTable<T extends EvaluationItem>({
   onGenerateInterview,
   onReissueInterview,
   getInterviewHref,
+  interviewLocked,
 }: ResultsTableProps<T>) {
   return (
     <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
@@ -247,6 +251,7 @@ export function ResultsTable<T extends EvaluationItem>({
                           ? () => onReissueInterview(item)
                           : undefined
                       }
+                      interviewLocked={interviewLocked}
                     />
                   </TableCell>
                 </TableRow>

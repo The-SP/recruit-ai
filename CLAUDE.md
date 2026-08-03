@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Recruit AI is an AI-powered resume screening system. Users upload PDF resumes and a job description, and the system scores candidates using Google Gemini (via LangChain). There are two entry paths: signed-in users own their evaluation runs (Google OAuth), and an anonymous token-based batch flow lets anyone submit and get results via an unguessable link plus email notification.
 
+The anonymous flow is a **trial surface**, not a workspace: it is capped at 5 resumes per run (`MAX_ANONYMOUS_RESUMES` in `core/file_upload.py`) and cannot create AI interviews. Both are deliberate — signing in does not carry an anonymous run over, so those users start a fresh evaluation.
+
 ## Tech Stack
 
 - **Backend:** Python 3.13+, FastAPI, SQLAlchemy, Celery (Redis broker), Alembic, LangChain + Gemini
@@ -76,7 +78,7 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
 - **`api/`** — FastAPI routes (`routes/`) and HTTP request/response schemas (`schemas/`). Entry point is `api/main.py` which creates the app via `create_app()`. Route files: `auth.py`, `batch.py`, `candidates.py`, `jobs.py`, `evaluations.py`, `user_runs.py`, `health.py`. Custom exception handlers in `api/exceptions.py`.
 
-  **Two auth schemes coexist.** `verify_api_key` (`api/dependencies.py`) checks an `X-API-Key` header on jobs/candidates/evaluations/batch, and is a **no-op when `API_KEY` is empty**. JWT Bearer auth is required on `/evaluations/runs/*`, `/dashboard/*`, and `/auth/me`. The anonymous batch flow has no user; it is protected only by unguessable access tokens in the URL.
+  **Two auth schemes coexist.** `verify_api_key` (`api/dependencies.py`) checks an `X-API-Key` header on jobs/candidates/evaluations/batch, and is a **no-op when `API_KEY` is empty**. JWT Bearer auth is required on `/evaluations/runs/*`, `/dashboard/*`, and `/auth/me`. The anonymous batch flow has no user; it is protected only by unguessable access tokens in the URL. Because that token is shareable and has no account behind it, the anonymous surface is bounded in two ways: uploads are capped via `enforce_anonymous_resume_cap` (called **before** the per-file loop — the loops fold `ValidationError` into a per-file `errors` list, so a cap raised inside one would never reach the client as a 400), and interviews are excluded entirely.
 
   **Router order is load-bearing:** `user_runs.runs_router` is registered *before* `evaluations.router` so `/evaluations/runs` isn't captured by `/evaluations/{evaluation_id}`.
 
@@ -103,7 +105,11 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
 - **`services/`** — `email_service.py` with pluggable providers: `ConsoleProvider` (local dev, logs to stdout), `GmailProvider` (SMTP), `ResendProvider` (API). Set via `EMAIL_PROVIDER`. Templates in `app/templates/emails/`.
 
-- **`interview/`** — AI interviewer (question generation, the turn engine in `engine.py`, shared create/detail/reissue service; assessor lands later). Its routes are deliberately split three ways: candidate endpoints in `api/routes/interview.py` (unguessable token in the path, no account; the answers endpoint streams SSE from a sync generator that opens its own `create_session()`, never `Depends(get_db)`), recruiter endpoints inside `api/routes/batch.py` and `api/routes/user_runs.py` — both thin wrappers over `interview/service.py`. `engine.py` is the voice seam: it speaks typed `EngineEvent`s only, no FastAPI imports; the route maps events to SSE frames. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
+- **`interview/`** — AI interviewer (question generation, the turn engine in `engine.py`, shared create/detail/reissue service; assessor lands later). Its routes are deliberately split two ways: candidate endpoints in `api/routes/interview.py` (unguessable token in the path, no account; the answers endpoint streams SSE from a sync generator that opens its own `create_session()`, never `Depends(get_db)`), and recruiter endpoints in `api/routes/user_runs.py` — thin wrappers over `interview/service.py`.
+
+  **Interview creation is login-only.** The batch access token grants add-candidates and retry but deliberately *not* interviews: each interview spends Gemini quota through the turn engine, and an anonymous run has no account to attribute or throttle it against. Do not add token-flavored interview routes to `api/routes/batch.py` for symmetry — `batch.py` carries a comment marking their absence as intentional. Note `interview/service.py` itself has no notion of `user_id`; it authorizes by run-membership only, so the boundary is *which resolver fetched the run* (`_load_owned_run` filters on `user_id` in SQL). The anonymous results page shows a locked sign-in upsell instead, via the `interviewLocked` prop.
+
+  `engine.py` is the voice seam: it speaks typed `EngineEvent`s only, no FastAPI imports; the route maps events to SSE frames. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
 
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` (default: `google_genai:gemini-2.5-flash-lite`).
 
@@ -127,6 +133,8 @@ Next.js App Router. Routes:
 Auth-gated routes live in the `app/(dashboard)/` route group. **There is no `middleware.ts`** — gating is client-side in `components/dashboard-layout.tsx`, which redirects to `/login` when `useAuth()` resolves with no user. `contexts/auth-context.tsx` holds the session; the JWT is stored in `localStorage` and attached by `services/api.ts` on every request.
 
 **Two parallel data models, one shared UI.** `services/batch.ts` covers the anonymous token flow and `services/runs.ts` the authenticated one; they return different shapes. The structural `EvaluationItem` type in `lib/evaluation-types.ts` reconciles them so everything in `components/evaluation/` (results table, breakdown panel, compare bar, resume sheet, stats) serves both pages. When touching results UI, keep it working for both.
+
+The shared components are flow-agnostic on purpose: they never call `useAuth()` or import a service, so flow identity arrives only as props (bound callbacks, or `interviewLocked` for the anonymous page). Interview functions live in `services/runs.ts` only.
 
 **Demo mode is frontend-only** — there is no backend flag or endpoint for it. `NEXT_PUBLIC_DEMO_MODE=true` makes `lib/demo.ts` intercept the batch and auth service calls and serve fixtures from `lib/demo-data/`.
 

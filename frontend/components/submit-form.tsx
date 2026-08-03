@@ -1,8 +1,9 @@
 "use client";
 
 import {
-    Briefcase, CheckCircle2, Loader2, Mail, Sparkles, X
+    Briefcase, CheckCircle2, Info, Loader2, Mail, Sparkles, X
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -14,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DemoBanner } from '@/components/demo-banner';
 import { ResumeFileUpload } from '@/components/resume-file-upload';
 import { IS_DEMO_MODE } from '@/lib/demo';
+import { MAX_ANONYMOUS_RESUMES } from '@/lib/evaluation-types';
 import { ApiError } from '@/services/api';
 import { submitBatch } from '@/services/batch';
 
@@ -26,13 +28,26 @@ export function SubmitForm() {
   const [error, setError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
 
+  // Capped here rather than inside ResumeFileUpload: that component is shared
+  // with the signed-in add-candidates panels, which stay uncapped.
   const handleFilesChange = (newFiles: File[]) => {
-    setFiles(newFiles);
     if (newFiles.length === 0) {
+      setFiles(newFiles);
       setFilesError("At least one resume PDF is required");
-    } else {
-      setFilesError(null);
+      return;
     }
+
+    if (newFiles.length > MAX_ANONYMOUS_RESUMES) {
+      setFiles(newFiles.slice(0, MAX_ANONYMOUS_RESUMES));
+      setFilesError(
+        `Up to ${MAX_ANONYMOUS_RESUMES} resumes without an account. ` +
+          "Sign in to evaluate more."
+      );
+      return;
+    }
+
+    setFiles(newFiles);
+    setFilesError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +86,23 @@ export function SubmitForm() {
 
       <form onSubmit={handleSubmit} className="p-8 space-y-10">
         {IS_DEMO_MODE && <DemoBanner variant="submit" />}
+
+        {/* Stated up front rather than on rejection: people shouldn't discover
+            the boundary after picking twenty files. */}
+        <div className="bg-muted/50 border border-border text-sm p-4 rounded-2xl flex items-start gap-3">
+          <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-primary" />
+          <p className="text-muted-foreground font-medium">
+            Try it out with up to {MAX_ANONYMOUS_RESUMES} resumes, no account
+            needed.{" "}
+            <Link
+              href="/login"
+              className="font-semibold text-primary hover:underline"
+            >
+              Sign in
+            </Link>{" "}
+            to evaluate more and to interview candidates with AI.
+          </p>
+        </div>
 
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">

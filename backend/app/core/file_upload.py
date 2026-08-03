@@ -10,6 +10,39 @@ from fastapi import UploadFile
 
 from app.api.exceptions import ValidationError
 
+# The anonymous batch flow is a trial surface, not a workspace: it exists to show
+# that ranking works on a handful of resumes. Signed-in runs are uncapped.
+MAX_ANONYMOUS_RESUMES = 5
+
+
+def enforce_anonymous_resume_cap(existing_count: int, incoming_count: int) -> None:
+    """Reject an anonymous upload that would push a run past the trial cap.
+
+    Must be called *before* the per-file upload loop. The loops (and
+    `process_uploaded_files` below) catch ValidationError per file and fold it
+    into an `errors` list, so a cap raised inside one would be silently
+    downgraded to a per-file warning instead of failing the request.
+    """
+    if existing_count + incoming_count <= MAX_ANONYMOUS_RESUMES:
+        return
+
+    remaining = max(0, MAX_ANONYMOUS_RESUMES - existing_count)
+    if not existing_count:
+        detail = f"You tried to upload {incoming_count}."
+    elif remaining:
+        detail = (
+            f"This evaluation already has {existing_count}, so you can add "
+            f"{remaining} more."
+        )
+    else:
+        detail = f"This evaluation already has {existing_count}."
+
+    raise ValidationError(
+        f"Evaluations without an account are limited to "
+        f"{MAX_ANONYMOUS_RESUMES} resumes. {detail} "
+        "Sign in to evaluate more."
+    )
+
 
 def validate_pdf_filename(filename: str | None) -> str:
     """
