@@ -26,9 +26,6 @@ class InterviewQuestion(BaseModel):
     subject: str = Field(
         description="The JD requirement or resume claim being probed (recruiter-visible only)"
     )
-    good_answer_covers: list[str] = Field(
-        description="Rubric hints for the assessor: what a strong answer touches on"
-    )
 
 
 class InterviewScript(BaseModel):

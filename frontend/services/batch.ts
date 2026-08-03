@@ -1,13 +1,16 @@
 import {
   IS_DEMO_MODE,
   demoAddCandidates,
+  demoCreateInterview,
   demoGetBatchStatus,
   demoGetCandidateBreakdown,
+  demoGetInterview,
   demoRetryFailed,
   demoSubmitBatch,
 } from "@/lib/demo";
+import type { InterviewDetail, InterviewSummary } from "@/lib/interview-types";
 
-import { apiRequest } from "./api";
+import { ApiError, apiRequest } from "./api";
 
 // Types
 export interface SubmitBatchResponse {
@@ -209,6 +212,49 @@ export async function retrySingleFailed(
 
   return apiRequest<RetryFailedResponse>(
     `/batch/status/${token}/retry-failed/${itemId}`,
+    { method: "POST" }
+  );
+}
+
+// AI interviewer (recruiter side, batch-token flavor)
+
+export async function getCandidateInterview(
+  token: string,
+  candidateId: string
+): Promise<InterviewDetail | null> {
+  if (IS_DEMO_MODE) return demoGetInterview();
+
+  try {
+    return await apiRequest<InterviewDetail>(
+      `/batch/status/${token}/candidate/${candidateId}/interview`
+    );
+  } catch (err) {
+    // 404 means "no interview yet", which the UI renders as the invite button.
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function createCandidateInterview(
+  token: string,
+  candidateId: string
+): Promise<InterviewSummary> {
+  if (IS_DEMO_MODE) return demoCreateInterview();
+
+  return apiRequest<InterviewSummary>(
+    `/batch/status/${token}/candidate/${candidateId}/interview`,
+    { method: "POST" }
+  );
+}
+
+export async function reissueCandidateInterview(
+  token: string,
+  candidateId: string
+): Promise<InterviewSummary> {
+  if (IS_DEMO_MODE) return demoCreateInterview();
+
+  return apiRequest<InterviewSummary>(
+    `/batch/status/${token}/candidate/${candidateId}/interview/reissue`,
     { method: "POST" }
   );
 }

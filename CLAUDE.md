@@ -103,7 +103,7 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
 - **`services/`** — `email_service.py` with pluggable providers: `ConsoleProvider` (local dev, logs to stdout), `GmailProvider` (SMTP), `ResendProvider` (API). Set via `EMAIL_PROVIDER`. Templates in `app/templates/emails/`.
 
-- **`interview/`** — AI interviewer (question generation, shared create/detail/reissue service; engine and assessor land later). Its routes are deliberately split three ways: candidate endpoints in `api/routes/interview.py` (unguessable token in the path, no account), recruiter endpoints inside `api/routes/batch.py` and `api/routes/user_runs.py` — both thin wrappers over `interview/service.py`. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
+- **`interview/`** — AI interviewer (question generation, the turn engine in `engine.py`, shared create/detail/reissue service; assessor lands later). Its routes are deliberately split three ways: candidate endpoints in `api/routes/interview.py` (unguessable token in the path, no account; the answers endpoint streams SSE from a sync generator that opens its own `create_session()`, never `Depends(get_db)`), recruiter endpoints inside `api/routes/batch.py` and `api/routes/user_runs.py` — both thin wrappers over `interview/service.py`. `engine.py` is the voice seam: it speaks typed `EngineEvent`s only, no FastAPI imports; the route maps events to SSE frames. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
 
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` (default: `google_genai:gemini-2.5-flash-lite`).
 
@@ -119,6 +119,7 @@ Next.js App Router. Routes:
 | `/login`, `/auth/callback` | public | Google sign-in; callback reads `?token=` |
 | `/demo` | public | Anonymous submit flow (`components/submit-form.tsx`) |
 | `/evaluation?token=` | public | Anonymous batch results |
+| `/interview?token=` | public | Candidate takes an AI interview (invite link) |
 | `/dashboard`, `/dashboard/new` | auth | Stats + recent runs; new-evaluation wizard |
 | `/history`, `/profile` | auth | Past runs; account |
 | `/evaluation/[id]` | auth | Owned run detail |

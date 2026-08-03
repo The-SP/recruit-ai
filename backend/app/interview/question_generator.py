@@ -90,9 +90,8 @@ Also write:
   review and follow up. Do not promise a decision or a timeline.
 
 For each question set `subject` to the specific JD requirement or resume claim
-being probed, and `good_answer_covers` to 2-4 concrete things a strong answer
-would mention. Both are read only by the recruiter and the assessor, never
-shown to the candidate."""
+being probed. It is read only by the recruiter and the assessor, never shown
+to the candidate."""
 
 
 def _json_block(value: Any) -> str:

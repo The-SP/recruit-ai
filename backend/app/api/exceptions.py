@@ -24,6 +24,18 @@ class ValidationError(Exception):
         super().__init__(self.message)
 
 
+class ConflictError(Exception):
+    """Raised when a request lost a concurrency race (e.g. a stale after_seq).
+
+    409 rather than 400 so clients can tell "refetch state and retry" apart
+    from "your input is invalid".
+    """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers."""
 
@@ -36,6 +48,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: ValidationError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": exc.message})
+
+    @app.exception_handler(ConflictError)
+    async def conflict_error_handler(
+        request: Request, exc: ConflictError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": exc.message})
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(

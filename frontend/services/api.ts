@@ -17,51 +17,64 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
 }
 
+export const apiUrl = (endpoint: string) => `${BASE_URL}${endpoint}`;
+
+/** The API key + JWT headers every request carries. Exported for callers that
+ * must fetch by hand (streaming responses) and can't go through apiRequest. */
+export function authHeaders(): Record<string, string> {
+  const jwtToken = getToken();
+  return {
+    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+    ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+  };
+}
+
+/** Best-effort `detail` extraction from a failed response body, matching the
+ * message apiRequest would have thrown. Consumes the body. */
+export async function errorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data.detail) {
+      return typeof data.detail === "string"
+        ? data.detail
+        : JSON.stringify(data.detail);
+    }
+  } catch {
+    // Response body is not JSON, use default message
+  }
+  return `Request failed with status ${res.status}`;
+}
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const { body, headers = {}, ...rest } = options;
-  const jwtToken = getToken();
-  const authHeaders: Record<string, string> = {
-    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-    ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-  };
+  const auth = authHeaders();
 
   const config: RequestInit = { ...rest };
 
   if (body !== undefined) {
     if (body instanceof FormData) {
       config.body = body;
-      config.headers = { ...authHeaders, ...headers };
+      config.headers = { ...auth, ...headers };
     } else {
       config.body = JSON.stringify(body);
-      config.headers = { "Content-Type": "application/json", ...authHeaders, ...headers };
+      config.headers = { "Content-Type": "application/json", ...auth, ...headers };
     }
   } else {
-    config.headers = { ...authHeaders, ...headers };
+    config.headers = { ...auth, ...headers };
   }
 
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${endpoint}`, config);
+    res = await fetch(apiUrl(endpoint), config);
   } catch {
     throw new ApiError("Network error. Please check your connection.", 0);
   }
 
   if (!res.ok) {
-    let message = `Request failed with status ${res.status}`;
-    try {
-      const data = await res.json();
-      if (data.detail) {
-        message = typeof data.detail === "string"
-          ? data.detail
-          : JSON.stringify(data.detail);
-      }
-    } catch {
-      // Response body is not JSON, use default message
-    }
-    throw new ApiError(message, res.status);
+    throw new ApiError(await errorMessage(res), res.status);
   }
 
   if (res.status === 204) {

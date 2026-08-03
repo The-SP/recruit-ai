@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { scoreBarColor, signalLabels, signalStyles } from "@/lib/evaluation-styles";
 import { MAX_COMPARE, type EvaluationItem, type SortBy } from "@/lib/evaluation-types";
+import type { CachedInterview } from "@/lib/interview-types";
 import type { CandidateBreakdown } from "@/services/batch";
 
 type CachedBreakdown = CandidateBreakdown | "loading" | "error";
@@ -44,6 +45,15 @@ interface ResultsTableProps<T extends EvaluationItem> {
   // Optional per-row action rendered in the action cell (e.g. retry button on
   // the public page). Returning null falls back to the expand chevron.
   renderRowAction?: (item: T) => React.ReactNode;
+  // Interview support (optional): cache keyed by getBreakdownKey, plus the
+  // page-wired create/reissue callbacks passed down to the breakdown panel.
+  interviewCache?: Record<string, CachedInterview>;
+  onGenerateInterview?: (item: T) => Promise<void>;
+  onReissueInterview?: (item: T) => Promise<void>;
+  // URL of the dedicated interview page for this row (each page knows
+  // whether it's the token or run flavor); null hides the "View interview"
+  // link even if an interview exists.
+  getInterviewHref?: (item: T) => string | null;
 }
 
 export function ResultsTable<T extends EvaluationItem>({
@@ -66,6 +76,10 @@ export function ResultsTable<T extends EvaluationItem>({
   getCompareId,
   getBreakdownKey,
   renderRowAction,
+  interviewCache,
+  onGenerateInterview,
+  onReissueInterview,
+  getInterviewHref,
 }: ResultsTableProps<T>) {
   return (
     <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
@@ -125,6 +139,8 @@ export function ResultsTable<T extends EvaluationItem>({
             const scorePct = item.final_score != null ? Math.round(item.final_score * 100) : null;
             const breakdownKey = getBreakdownKey(item);
             const breakdown = breakdownKey ? breakdownCache[breakdownKey] : undefined;
+            const interview = breakdownKey ? interviewCache?.[breakdownKey] : undefined;
+            const interviewHref = getInterviewHref?.(item) ?? null;
             const rowAction = renderRowAction?.(item);
 
             return (
@@ -219,6 +235,18 @@ export function ResultsTable<T extends EvaluationItem>({
                       key={`${compareId}-${isExpanded}`}
                       breakdown={breakdown}
                       isExpanded={isExpanded}
+                      interview={interview}
+                      interviewHref={interviewHref}
+                      onGenerateInterview={
+                        onGenerateInterview
+                          ? () => onGenerateInterview(item)
+                          : undefined
+                      }
+                      onReissueInterview={
+                        onReissueInterview
+                          ? () => onReissueInterview(item)
+                          : undefined
+                      }
                     />
                   </TableCell>
                 </TableRow>

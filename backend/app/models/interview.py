@@ -27,6 +27,7 @@ class TurnRole(str, Enum):
 
 
 class TurnKind(str, Enum):
+    OPENING = "opening"
     QUESTION = "question"
     FOLLOWUP = "followup"
     ANSWER = "answer"

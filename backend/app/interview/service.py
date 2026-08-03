@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.exceptions import NotFoundError, ValidationError
@@ -85,12 +86,28 @@ def create_interview(
     grounding = build_grounding(job, candidate, evaluation)
     script = generate_script(grounding)
 
-    interview = interview_repo.create(
-        evaluation_id=evaluation_id,
-        question_script=script.model_dump(mode="json"),
-        grounding=grounding,
-        model_name=Config.INTERVIEW_MODEL_NAME,
-    )
+    try:
+        interview = interview_repo.create(
+            evaluation_id=evaluation_id,
+            question_script=script.model_dump(mode="json"),
+            grounding=grounding,
+            model_name=Config.INTERVIEW_MODEL_NAME,
+        )
+    except IntegrityError:
+        # Two clicks raced: both passed the check above while generation ran
+        # (~20s), and the other request inserted first. The unique constraint
+        # on evaluation_id is what makes that safe to recover from -- discard
+        # this script and return the winner's interview.
+        db.rollback()
+        existing = interview_repo.get_by_evaluation_id(evaluation_id)
+        if not existing:
+            raise
+        logger.info(
+            f"Concurrent interview creation for evaluation {evaluation_id}; "
+            "returning the interview that won"
+        )
+        return apply_lazy_expiry(db, existing), False
+
     return interview, True
 
 

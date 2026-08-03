@@ -25,10 +25,12 @@ import { DemoBanner } from '@/components/demo-banner';
 import { DemoNotice } from '@/components/demo-notice';
 import { DEMO_TOKEN, DemoModeError, IS_DEMO_MODE } from '@/lib/demo';
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from '@/lib/evaluation-types';
+import type { CachedInterview } from '@/lib/interview-types';
 import { ApiError } from '@/services/api';
 import {
     AddCandidatesResponse, BatchStatus, CandidateBreakdown, CandidateResult,
-    addCandidatesToBatch, getCandidateBreakdown, getBatchStatus,
+    addCandidatesToBatch, createCandidateInterview, getCandidateBreakdown,
+    getBatchStatus, getCandidateInterview, reissueCandidateInterview,
     retryAllFailed, retrySingleFailed
 } from '@/services/batch';
 
@@ -165,6 +167,9 @@ function EvaluationPageInner() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [breakdownCache, setBreakdownCache] = useState<
     Record<string, CandidateBreakdown | "loading" | "error">
+  >({});
+  const [interviewCache, setInterviewCache] = useState<
+    Record<string, CachedInterview>
   >({});
   const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [retryingItemIds, setRetryingItemIds] = useState<Set<string>>(new Set());
@@ -315,6 +320,54 @@ function EvaluationPageInner() {
     }
   };
 
+  // `null` (no interview yet) is a valid cached value, hence the `in` check.
+  const ensureInterview = async (candidateId: string) => {
+    if (!token || candidateId in interviewCache) return;
+    setInterviewCache(prev => ({ ...prev, [candidateId]: "loading" }));
+    try {
+      const detail = await getCandidateInterview(token, candidateId);
+      setInterviewCache(prev => ({ ...prev, [candidateId]: detail }));
+    } catch {
+      setInterviewCache(prev => ({ ...prev, [candidateId]: "error" }));
+    }
+  };
+
+  // Generation runs an LLM call (~20s). The cache slot is marked "loading"
+  // for the duration so a panel remount can't drop the in-flight request and
+  // leave a dead spinner; on failure the slot is refetched, not guessed.
+  const runInterviewAction = async (
+    activeToken: string,
+    candidateId: string,
+    action: () => Promise<unknown>
+  ) => {
+    try {
+      await action();
+    } finally {
+      // Refetch rather than guess, on success and failure alike. In demo mode
+      // this resolves to null through the service stub, restoring the invite
+      // button on its own.
+      const detail = await getCandidateInterview(activeToken, candidateId);
+      setInterviewCache(prev => ({ ...prev, [candidateId]: detail }));
+    }
+  };
+
+  const handleGenerateInterview = async (item: CandidateResult) => {
+    if (!token || !item.candidate_id) return;
+    const candidateId = item.candidate_id;
+    setInterviewCache(prev => ({ ...prev, [candidateId]: "loading" }));
+    await runInterviewAction(token, candidateId, () =>
+      createCandidateInterview(token, candidateId)
+    );
+  };
+
+  const handleReissueInterview = async (item: CandidateResult) => {
+    if (!token || !item.candidate_id) return;
+    const candidateId = item.candidate_id;
+    await runInterviewAction(token, candidateId, () =>
+      reissueCandidateInterview(token, candidateId)
+    );
+  };
+
   const handleRowClick = (candidateId: string | null) => {
     if (!candidateId || !token) return;
     setExpandedIds(prev => {
@@ -324,6 +377,7 @@ function EvaluationPageInner() {
       return next;
     });
     ensureBreakdown(candidateId);
+    ensureInterview(candidateId);
   };
 
   const toggleCompare = (candidateId: string) => {
@@ -618,6 +672,14 @@ function EvaluationPageInner() {
                 onClearFilters={() => { setSearchQuery(""); setFilterSignal("all"); }}
                 getCompareId={(item) => item.candidate_id!}
                 getBreakdownKey={(item) => item.candidate_id}
+                interviewCache={interviewCache}
+                onGenerateInterview={handleGenerateInterview}
+                onReissueInterview={handleReissueInterview}
+                getInterviewHref={(item) =>
+                  item.candidate_id
+                    ? `/evaluation/candidate/${item.candidate_id}/interview?token=${token}`
+                    : null
+                }
                 renderRowAction={(item) => {
                   // Only override the default chevron for failed rows. When the
                   // run is settled, a failed row shows a retry button; while

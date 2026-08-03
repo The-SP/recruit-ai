@@ -26,12 +26,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from "@/lib/evaluation-types";
+import type { CachedInterview } from "@/lib/interview-types";
 import { ApiError } from "@/services/api";
 import { type CandidateBreakdown } from "@/services/batch";
 import {
   addCandidatesToRun,
+  createRunCandidateInterview,
   getEvaluationRun,
   getRunCandidateBreakdown,
+  getRunCandidateInterview,
+  reissueRunCandidateInterview,
   retryFailedRun,
   type EvaluationRunDetail,
   type RunItemSummary,
@@ -52,6 +56,9 @@ export default function RunDetailPage({
   const [breakdownCache, setBreakdownCache] = useState<
     Record<string, CandidateBreakdown | "loading" | "error">
   >({});
+  const [interviewCache, setInterviewCache] = useState<
+    Record<string, CachedInterview>
+  >({});
   const [retryingAll, setRetryingAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSignal, setFilterSignal] = useState("all");
@@ -66,6 +73,11 @@ export default function RunDetailPage({
   const [addFilesError, setAddFilesError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Keys already fetched or in flight. Kept in a ref so the ensure* callbacks
+  // don't depend on the cache state: depending on it gives them a new identity
+  // on every cache write, which re-renders the whole results table.
+  const requestedBreakdowns = useRef<Set<string>>(new Set());
+  const requestedInterviews = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(
     async (silent = false) => {
@@ -101,7 +113,8 @@ export default function RunDetailPage({
 
   const ensureBreakdown = useCallback(async (item: RunItemSummary) => {
     const id = item.item_id;
-    if (!item.candidate_id || breakdownCache[id]) return;
+    if (!item.candidate_id || requestedBreakdowns.current.has(id)) return;
+    requestedBreakdowns.current.add(id);
     setBreakdownCache((prev) => ({ ...prev, [id]: "loading" }));
     try {
       const bd = await getRunCandidateBreakdown(runId, item.candidate_id);
@@ -109,7 +122,52 @@ export default function RunDetailPage({
     } catch {
       setBreakdownCache((prev) => ({ ...prev, [id]: "error" }));
     }
-  }, [breakdownCache, runId]);
+  }, [runId]);
+
+  const ensureInterview = useCallback(async (item: RunItemSummary) => {
+    const id = item.item_id;
+    if (!item.candidate_id || requestedInterviews.current.has(id)) return;
+    requestedInterviews.current.add(id);
+    setInterviewCache((prev) => ({ ...prev, [id]: "loading" }));
+    try {
+      const detail = await getRunCandidateInterview(runId, item.candidate_id);
+      setInterviewCache((prev) => ({ ...prev, [id]: detail }));
+    } catch {
+      setInterviewCache((prev) => ({ ...prev, [id]: "error" }));
+    }
+  }, [runId]);
+
+  const runInterviewAction = useCallback(
+    async (item: RunItemSummary, action: (candidateId: string) => Promise<unknown>) => {
+      if (!item.candidate_id) return;
+      const candidateId = item.candidate_id;
+      try {
+        await action(candidateId);
+      } finally {
+        // Refetch rather than guess, on success and failure alike.
+        const detail = await getRunCandidateInterview(runId, candidateId);
+        setInterviewCache((prev) => ({ ...prev, [item.item_id]: detail }));
+      }
+    },
+    [runId]
+  );
+
+  // Generation runs an LLM call (~20s). The cache slot is marked "loading"
+  // for the duration so a panel remount can't drop the in-flight request and
+  // leave a dead spinner; on failure the slot is refetched, not guessed.
+  const handleGenerateInterview = useCallback(async (item: RunItemSummary) => {
+    if (!item.candidate_id) return;
+    setInterviewCache((prev) => ({ ...prev, [item.item_id]: "loading" }));
+    await runInterviewAction(item, (candidateId) =>
+      createRunCandidateInterview(runId, candidateId)
+    );
+  }, [runId, runInterviewAction]);
+
+  const handleReissueInterview = useCallback(async (item: RunItemSummary) => {
+    await runInterviewAction(item, (candidateId) =>
+      reissueRunCandidateInterview(runId, candidateId)
+    );
+  }, [runId, runInterviewAction]);
 
   const handleRowClick = useCallback((item: RunItemSummary) => {
     const id = item.item_id;
@@ -120,7 +178,8 @@ export default function RunDetailPage({
       return next;
     });
     ensureBreakdown(item);
-  }, [ensureBreakdown]);
+    ensureInterview(item);
+  }, [ensureBreakdown, ensureInterview]);
 
   const handleViewResume = async (e: React.MouseEvent, item: RunItemSummary) => {
     e.stopPropagation();
@@ -130,6 +189,7 @@ export default function RunDetailPage({
       setResumePanel({ name: item.candidate_name ?? null, filename: item.filename, markdown: cached.resume_markdown });
       return;
     }
+    requestedBreakdowns.current.add(item.item_id);
     setBreakdownCache(prev => ({ ...prev, [item.item_id]: "loading" }));
     try {
       const bd = await getRunCandidateBreakdown(runId, item.candidate_id);
@@ -464,6 +524,14 @@ export default function RunDetailPage({
                   onClearFilters={() => { setSearchQuery(""); setFilterSignal("all"); }}
                   getCompareId={(item) => item.item_id}
                   getBreakdownKey={(item) => item.item_id}
+                  interviewCache={interviewCache}
+                  onGenerateInterview={handleGenerateInterview}
+                  onReissueInterview={handleReissueInterview}
+                  getInterviewHref={(item) =>
+                    item.candidate_id
+                      ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`
+                      : null
+                  }
                 />
               )}
             </>

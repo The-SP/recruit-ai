@@ -1,12 +1,13 @@
 # Number of core questions per interview.
 #
-# DEVELOPMENT VALUE: 3, so a test interview is a couple of minutes rather than
-# fifteen. The planned production value is 5-6 with a 4..8 validation bound;
+# DEVELOPMENT VALUE: 1, so a test interview takes seconds rather than
+# minutes. The planned production value is 5-6 with a 4..8 validation bound;
 # both are restored at M8.
-QUESTION_COUNT = 3
+QUESTION_COUNT = 1
 
 # Accepted spread around QUESTION_COUNT when validating LLM output.
-QUESTION_COUNT_TOLERANCE = 1
+# DEVELOPMENT VALUE: 0, since QUESTION_COUNT=1 can't tolerate a -1 spread.
+QUESTION_COUNT_TOLERANCE = 0
 
 # At most one adaptive follow-up per core question, enforced in code via
 # Interview.followup_asked — never by trusting the model.

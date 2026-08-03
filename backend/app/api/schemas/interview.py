@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.config import Config
+from app.interview import state
 from app.models.interview import Interview, InterviewTurn
 from app.schemas.interview import InterviewScript
 
@@ -27,13 +28,33 @@ class TurnOut(BaseModel):
 
 class QuestionOut(BaseModel):
     """A core question with its rubric. Never serve this to a candidate —
-    subject and good_answer_covers are the answers."""
+    subject is the answer."""
 
     id: int
     text: str
     focus: str
     subject: str
-    good_answer_covers: list[str] = Field(default_factory=list)
+
+
+class AnswerRequest(BaseModel):
+    """Candidate answer submission. after_seq is the last seq the client has;
+    a mismatch with the server's last_seq returns 409."""
+
+    content: str = Field(min_length=1, max_length=5000)
+    after_seq: int = Field(ge=0)
+
+
+class InterviewStateResponse(BaseModel):
+    """Candidate-facing state. Must never carry the script, the rubric
+    (subject), the assessment, or the access token."""
+
+    status: str
+    job_title: str | None = None
+    company_name: str | None = None
+    question_number: int
+    total_questions: int
+    time_remaining_seconds: int | None = None
+    turns: list[TurnOut] = Field(default_factory=list)
 
 
 class InterviewSummaryResponse(BaseModel):
@@ -85,7 +106,6 @@ def _questions_from_script(script_data: dict[str, Any]) -> list[QuestionOut]:
             text=q.text,
             focus=q.focus.value,
             subject=q.subject,
-            good_answer_covers=q.good_answer_covers,
         )
         for q in script.questions
     ]
@@ -99,6 +119,21 @@ def build_turn_out(turn: InterviewTurn) -> TurnOut:
         question_index=turn.question_index,
         content=turn.content,
         created_at=turn.created_at,
+    )
+
+
+def build_state_response(
+    interview: Interview, turns: list[InterviewTurn]
+) -> InterviewStateResponse:
+    grounding = interview.grounding or {}
+    return InterviewStateResponse(
+        status=interview.status,
+        job_title=grounding.get("job_title"),
+        company_name=grounding.get("company_name"),
+        question_number=state.question_number(interview),
+        total_questions=state.total_questions(interview),
+        time_remaining_seconds=state.time_remaining_seconds(interview),
+        turns=[build_turn_out(t) for t in turns],
     )
 
 

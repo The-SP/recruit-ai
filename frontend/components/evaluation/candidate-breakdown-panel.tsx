@@ -3,6 +3,7 @@
 import { BookOpen, Briefcase, Loader2, X, Zap } from "lucide-react";
 import { useState } from "react";
 
+import { InterviewSection } from "@/components/evaluation/interview-section";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -15,14 +16,25 @@ import {
   tierSectionStyles,
 } from "@/lib/evaluation-styles";
 import type { BreakdownSection } from "@/lib/evaluation-types";
+import type { CachedInterview } from "@/lib/interview-types";
 import type { CandidateBreakdown } from "@/services/batch";
 
 export function CandidateBreakdownPanel({
   breakdown,
   isExpanded,
+  interview,
+  interviewHref,
+  onGenerateInterview,
+  onReissueInterview,
 }: {
   breakdown: CandidateBreakdown | "loading" | "error" | undefined;
   isExpanded: boolean;
+  /** Interview props are optional so surfaces without interview support
+   * (e.g. the compare dialog) keep working unchanged. */
+  interview?: CachedInterview;
+  interviewHref?: string | null;
+  onGenerateInterview?: () => Promise<void>;
+  onReissueInterview?: () => Promise<void>;
 }) {
   const [activeSection, setActiveSection] = useState<BreakdownSection | null>(null);
 
@@ -241,6 +253,16 @@ export function CandidateBreakdownPanel({
                   <p className="text-xs text-muted-foreground">{breakdown.education.summary}</p>
                 </div>
               </div>
+            )}
+
+            {/* AI interview (only on surfaces that wire the callbacks) */}
+            {onGenerateInterview && onReissueInterview && (
+              <InterviewSection
+                interview={interview}
+                interviewHref={interviewHref ?? null}
+                onGenerate={onGenerateInterview}
+                onReissue={onReissueInterview}
+              />
             )}
           </>
         )}

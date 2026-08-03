@@ -1,4 +1,6 @@
-import { apiRequest } from "./api";
+import type { InterviewDetail, InterviewSummary } from "@/lib/interview-types";
+
+import { ApiError, apiRequest } from "./api";
 import type { CandidateBreakdown } from "./batch";
 
 export type RunStatus = "draft" | "pending" | "processing" | "completed" | "failed";
@@ -108,5 +110,42 @@ export async function getRunCandidateBreakdown(
 ): Promise<CandidateBreakdown> {
   return apiRequest<CandidateBreakdown>(
     `/evaluations/runs/${runId}/candidate/${candidateId}`
+  );
+}
+
+// AI interviewer (recruiter side, owned-run flavor)
+
+export async function getRunCandidateInterview(
+  runId: string,
+  candidateId: string
+): Promise<InterviewDetail | null> {
+  try {
+    return await apiRequest<InterviewDetail>(
+      `/evaluations/runs/${runId}/candidate/${candidateId}/interview`
+    );
+  } catch (err) {
+    // 404 means "no interview yet", which the UI renders as the invite button.
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function createRunCandidateInterview(
+  runId: string,
+  candidateId: string
+): Promise<InterviewSummary> {
+  return apiRequest<InterviewSummary>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview`,
+    { method: "POST" }
+  );
+}
+
+export async function reissueRunCandidateInterview(
+  runId: string,
+  candidateId: string
+): Promise<InterviewSummary> {
+  return apiRequest<InterviewSummary>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/reissue`,
+    { method: "POST" }
   );
 }

@@ -109,19 +109,14 @@ class InterviewRepository:
         logger.info(f"Reissued interview token: id={interview.id}")
         return interview
 
-    def mark_started(self, interview: Interview) -> Interview:
-        interview.status = InterviewStatus.IN_PROGRESS.value
-        interview.started_at = datetime.now()
-        self.db.commit()
-        self.db.refresh(interview)
-        return interview
-
     def append_turns_and_advance(
         self,
         interview: Interview,
         turns: list[dict[str, Any]],
         current_question_index: int | None = None,
         followup_asked: bool | None = None,
+        mark_started: bool = False,
+        mark_completed: bool = False,
     ) -> list[InterviewTurn]:
         """Append turns and update progress cursors in a single commit.
 
@@ -129,6 +124,11 @@ class InterviewRepository:
         cursor updates in one transaction is what makes last_seq /
         current_question_index / followup_asked unable to drift from the
         transcript (see the data-model invariant in the plan).
+
+        mark_started / mark_completed fold the status transition into the same
+        commit: the turns that begin or end an interview must land atomically
+        with its status, and a separate mark_* call would release the caller's
+        FOR UPDATE lock between the two commits.
 
         Each dict in `turns` carries role, kind, content, and optional
         question_index; seq is assigned here from interview.last_seq.
@@ -154,20 +154,19 @@ class InterviewRepository:
             interview.current_question_index = current_question_index
         if followup_asked is not None:
             interview.followup_asked = followup_asked
+        if mark_started:
+            interview.status = InterviewStatus.IN_PROGRESS.value
+            interview.started_at = datetime.now()
+        if mark_completed:
+            interview.status = InterviewStatus.COMPLETED.value
+            interview.completed_at = datetime.now()
+            logger.info(f"Interview completed: id={interview.id}")
 
         self.db.commit()
         for turn in created:
             self.db.refresh(turn)
         self.db.refresh(interview)
         return created
-
-    def mark_completed(self, interview: Interview) -> Interview:
-        interview.status = InterviewStatus.COMPLETED.value
-        interview.completed_at = datetime.now()
-        self.db.commit()
-        self.db.refresh(interview)
-        logger.info(f"Interview completed: id={interview.id}")
-        return interview
 
     def store_assessment(
         self, interview: Interview, assessment: dict[str, Any]

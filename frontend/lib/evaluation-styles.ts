@@ -48,6 +48,22 @@ export const relevanceStyles: Record<string, string> = {
   none: "bg-muted text-muted-foreground border-border",
 };
 
+export const interviewStatusStyles: Record<string, string> = {
+  created: "bg-info text-info-foreground border-info-edge",
+  in_progress: "bg-warning text-warning-foreground border-warning-edge",
+  completed: "bg-success text-success-foreground border-success-edge",
+  assessed: "bg-success text-success-foreground border-success-edge",
+  expired: "bg-muted text-muted-foreground border-border",
+};
+
+export const interviewStatusLabels: Record<string, string> = {
+  created: "Invite Sent",
+  in_progress: "In Progress",
+  completed: "Completed",
+  assessed: "Assessed",
+  expired: "Expired",
+};
+
 export function scoreBarColor(value: number): string {
   if (value >= 0.7) return "[&>div]:bg-success-bar";
   if (value >= 0.5) return "[&>div]:bg-warning-bar";
