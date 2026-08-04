@@ -35,6 +35,7 @@ from app.interview.service import (
     create_interview,
     get_interview,
     reissue_interview,
+    request_assessment,
 )
 from app.models.evaluation_run import EvaluationRun, RunStatus
 from app.models.user import User
@@ -445,6 +446,24 @@ def reissue_owned_candidate_interview(
     run = _load_owned_run(db, run_id, current_user)
     interview = reissue_interview(db, run, candidate_id)
     return build_summary_response(interview)
+
+
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview/assess",
+    response_model=InterviewDetailResponse,
+)
+def assess_owned_candidate_interview(
+    run_id: UUID,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewDetailResponse:
+    """Manually dispatch assessment: retry after a failure, or assess the
+    partial transcript of an expired interview."""
+    run = _load_owned_run(db, run_id, current_user)
+    interview = request_assessment(db, run, candidate_id)
+    turns = InterviewRepository(db).get_turns(interview.id)
+    return build_detail_response(interview, turns)
 
 
 @dashboard_router.get("/stats", response_model=DashboardStatsResponse)

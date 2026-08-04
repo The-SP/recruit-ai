@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
@@ -54,7 +55,18 @@ class StateChanged:
     time_remaining_seconds: int | None
 
 
-EngineEvent = AnswerAccepted | InterviewerTurn | StateChanged
+@dataclass(frozen=True)
+class InterviewClosed:
+    """The interview reached a terminal state and its transcript is final.
+
+    Carries no transport or job concerns: assessment is background work the
+    route dispatches on seeing this, keeping the engine free of app.worker.
+    """
+
+    interview_id: UUID
+
+
+EngineEvent = AnswerAccepted | InterviewerTurn | StateChanged | InterviewClosed
 
 
 # ---------------------------------------------------------------------------
@@ -276,3 +288,9 @@ def submit_answer(
         total_questions=total,
         time_remaining_seconds=time_remaining_seconds(interview),
     )
+
+    if completed:
+        # The commit above has landed, so whoever acts on this sees the
+        # completed row. Emitted last so the candidate's turn reaches them
+        # before any background work is kicked off.
+        yield InterviewClosed(interview_id=interview.id)

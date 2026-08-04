@@ -6,7 +6,7 @@ celery_app = Celery(
     "recruit_ai",
     broker=Config.REDIS_URL,
     backend=Config.REDIS_URL,
-    include=["app.worker.tasks"],
+    include=["app.worker.tasks", "app.worker.interview_tasks"],
 )
 
 celery_app.conf.update(

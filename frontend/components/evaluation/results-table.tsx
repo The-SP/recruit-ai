@@ -50,6 +50,7 @@ interface ResultsTableProps<T extends EvaluationItem> {
   interviewCache?: Record<string, CachedInterview>;
   onGenerateInterview?: (item: T) => Promise<void>;
   onReissueInterview?: (item: T) => Promise<void>;
+  onAssessInterview?: (item: T) => Promise<void>;
   // URL of the dedicated interview page for this row (each page knows
   // whether it's the token or run flavor); null hides the "View interview"
   // link even if an interview exists.
@@ -82,6 +83,7 @@ export function ResultsTable<T extends EvaluationItem>({
   interviewCache,
   onGenerateInterview,
   onReissueInterview,
+  onAssessInterview,
   getInterviewHref,
   interviewLocked,
 }: ResultsTableProps<T>) {
@@ -249,6 +251,11 @@ export function ResultsTable<T extends EvaluationItem>({
                       onReissueInterview={
                         onReissueInterview
                           ? () => onReissueInterview(item)
+                          : undefined
+                      }
+                      onAssessInterview={
+                        onAssessInterview
+                          ? () => onAssessInterview(item)
                           : undefined
                       }
                       interviewLocked={interviewLocked}

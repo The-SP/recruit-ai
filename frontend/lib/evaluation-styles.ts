@@ -64,6 +64,32 @@ export const interviewStatusLabels: Record<string, string> = {
   expired: "Expired",
 };
 
+export const recommendationStyles: Record<string, string> = {
+  advance: "bg-success text-success-foreground border-success-edge",
+  borderline: "bg-warning text-warning-foreground border-warning-edge",
+  do_not_advance: "bg-error text-error-foreground border-error-edge",
+};
+
+export const recommendationLabels: Record<string, string> = {
+  advance: "Advance",
+  borderline: "Borderline",
+  do_not_advance: "Do Not Advance",
+};
+
+export const answerQualityStyles: Record<string, string> = {
+  strong: "bg-success text-success-foreground border-success-edge",
+  adequate: "bg-info text-info-foreground border-info-edge",
+  weak: "bg-warning text-warning-foreground border-warning-edge",
+  not_answered: "bg-muted text-muted-foreground border-border",
+};
+
+export const answerQualityLabels: Record<string, string> = {
+  strong: "Strong",
+  adequate: "Adequate",
+  weak: "Weak",
+  not_answered: "Not Answered",
+};
+
 export function scoreBarColor(value: number): string {
   if (value >= 0.7) return "[&>div]:bg-success-bar";
   if (value >= 0.5) return "[&>div]:bg-warning-bar";

@@ -31,6 +31,7 @@ import { ApiError } from "@/services/api";
 import { type CandidateBreakdown } from "@/services/batch";
 import {
   addCandidatesToRun,
+  assessRunCandidateInterview,
   createRunCandidateInterview,
   getEvaluationRun,
   getRunCandidateBreakdown,
@@ -166,6 +167,12 @@ export default function RunDetailPage({
   const handleReissueInterview = useCallback(async (item: RunItemSummary) => {
     await runInterviewAction(item, (candidateId) =>
       reissueRunCandidateInterview(runId, candidateId)
+    );
+  }, [runId, runInterviewAction]);
+
+  const handleAssessInterview = useCallback(async (item: RunItemSummary) => {
+    await runInterviewAction(item, (candidateId) =>
+      assessRunCandidateInterview(runId, candidateId)
     );
   }, [runId, runInterviewAction]);
 
@@ -527,6 +534,7 @@ export default function RunDetailPage({
                   interviewCache={interviewCache}
                   onGenerateInterview={handleGenerateInterview}
                   onReissueInterview={handleReissueInterview}
+                  onAssessInterview={handleAssessInterview}
                   getInterviewHref={(item) =>
                     item.candidate_id
                       ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`

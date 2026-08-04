@@ -14,6 +14,7 @@ from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.interview_repository import InterviewRepository
 from app.repositories.job_repository import JobRepository
+from app.worker.interview_tasks import assess_interview
 
 logger = init_logger(__name__)
 
@@ -51,6 +52,18 @@ def apply_lazy_expiry(db: Session, interview: Interview) -> Interview:
     if interview.status in overdue_states and interview.expires_at < datetime.now():
         return InterviewRepository(db).mark_expired(interview)
     return interview
+
+
+def _has_candidate_answers(repo: InterviewRepository, interview: Interview) -> bool:
+    """Whether the candidate has answered at all.
+
+    Reissue and assess are exact inverses on an expired interview (reissue
+    only with no answers, assess only with them), so both must read this the
+    same way — hence one definition.
+    """
+    return any(
+        turn.role == TurnRole.CANDIDATE.value for turn in repo.get_turns(interview.id)
+    )
 
 
 def create_interview(
@@ -133,11 +146,7 @@ def reissue_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> In
         return repo.rotate_token(interview)
 
     if interview.status == InterviewStatus.EXPIRED.value:
-        answered = any(
-            turn.role == TurnRole.CANDIDATE.value
-            for turn in repo.get_turns(interview.id)
-        )
-        if not answered:
+        if not _has_candidate_answers(repo, interview):
             return repo.rotate_token(interview)
         raise ValidationError(
             "Cannot reissue an expired interview that already has answers. "
@@ -147,3 +156,44 @@ def reissue_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> In
     raise ValidationError(
         f"Cannot reissue an interview with status '{interview.status}'."
     )
+
+
+def request_assessment(
+    db: Session, run: EvaluationRun, candidate_id: UUID
+) -> Interview:
+    """Dispatch a manual assessment on the recruiter's behalf.
+
+    Allowed from either terminal state: `completed` (the automatic dispatch on
+    completion failed, or never ran because no worker was up to consume it) or
+    `expired` with at least one answer (assess the partial transcript).
+
+    A plain `completed` interview is deliberately included even though the
+    engine already dispatched for it. From the recruiter's side a task that was
+    never consumed is indistinguishable from one still in flight, so refusing
+    here would leave the interview permanently stuck on "pending" with no way
+    out. Re-dispatching is cheap to get wrong in that direction: the task
+    returns early once the status is `assessed`, so a genuine duplicate costs
+    at most one redundant LLM call.
+    """
+    interview = get_interview(db, run, candidate_id)
+    repo = InterviewRepository(db)
+
+    if interview.status not in (
+        InterviewStatus.EXPIRED.value,
+        InterviewStatus.COMPLETED.value,
+    ):
+        raise ValidationError(
+            f"Cannot assess an interview with status '{interview.status}'."
+        )
+
+    if interview.status == InterviewStatus.EXPIRED.value and not _has_candidate_answers(
+        repo, interview
+    ):
+        raise ValidationError(
+            "Cannot assess an expired interview with no answers. "
+            "Reissue the invite instead."
+        )
+
+    assess_interview.delay(str(interview.id))
+    logger.info(f"Dispatched manual assessment for interview {interview.id}")
+    return interview

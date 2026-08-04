@@ -149,3 +149,13 @@ export async function reissueRunCandidateInterview(
     { method: "POST" }
   );
 }
+
+export async function assessRunCandidateInterview(
+  runId: string,
+  candidateId: string
+): Promise<InterviewDetail> {
+  return apiRequest<InterviewDetail>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/assess`,
+    { method: "POST" }
+  );
+}

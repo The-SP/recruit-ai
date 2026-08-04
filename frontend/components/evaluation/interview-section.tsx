@@ -14,6 +14,10 @@ import {
 import Link from "next/link";
 
 import { DemoNotice } from "@/components/demo-notice";
+import {
+  assessmentCopy,
+  InterviewVerdictSummary,
+} from "@/components/interview/assessment-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,11 +34,10 @@ import type { CachedInterview } from "@/lib/interview-types";
 import { useInviteActions } from "@/lib/use-invite-actions";
 
 /**
- * Pre-assessment interview states only (M5): invite management stays inline;
- * the transcript itself lives on a dedicated page (RecruiterInterviewView),
- * styled like the candidate's own chat. No rubric, no verdict — assessment
- * UI is a later milestone. Service-agnostic: both results pages pass wired
- * callbacks.
+ * Invite management stays inline; the transcript itself lives on a dedicated
+ * page (RecruiterInterviewView), styled like the candidate's own chat. Once
+ * assessed, the verdict renders here too. Service-agnostic: both results
+ * pages pass wired callbacks.
  *
  * `locked` is the anonymous results page: interviews are login-only, so that
  * page passes no callbacks and gets an upsell instead of a generate button.
@@ -46,12 +49,14 @@ export function InterviewSection({
   interviewHref,
   onGenerate,
   onReissue,
+  onAssess,
   locked = false,
 }: {
   interview: CachedInterview | undefined;
   interviewHref: string | null;
   onGenerate?: () => Promise<void>;
   onReissue?: () => Promise<void>;
+  onAssess?: () => Promise<void>;
   locked?: boolean;
 }) {
   const { isWorking, error, demoNotice, copied, runAction, copyInviteUrl } =
@@ -61,6 +66,7 @@ export function InterviewSection({
     interview && interview !== "loading" && interview !== "error"
       ? interview
       : null;
+  const answered = detail?.turns.some((t) => t.role === "candidate") ?? false;
 
   return (
     <div className="space-y-3 pt-4 border-t border-border">
@@ -213,8 +219,92 @@ export function InterviewSection({
             </div>
           )}
 
+          {/* Completed, waiting on the assessment task. Updates on refresh —
+              there is deliberately no polling here. The button covers a task
+              that was never consumed (no worker running at completion), which
+              from here looks identical to one still in flight. */}
+          {detail.status === "completed" && !detail.assessment_error && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {assessmentCopy.pending}
+              </p>
+              {onAssess && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runAction(onAssess)}
+                  disabled={isWorking}
+                  className="gap-2 font-semibold cursor-pointer"
+                >
+                  {isWorking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {assessmentCopy.assessNow}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Assessment task failed: surface the error and offer a retry */}
+          {detail.status === "completed" && detail.assessment_error && (
+            <div className="space-y-2">
+              <div className="bg-error border border-error-edge text-error-foreground text-xs px-3 py-2 rounded-lg flex items-start gap-2">
+                <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <p className="font-medium">
+                  {assessmentCopy.failedPrefix} {detail.assessment_error}
+                </p>
+              </div>
+              {onAssess && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runAction(onAssess)}
+                  disabled={isWorking}
+                  className="gap-2 font-semibold cursor-pointer"
+                >
+                  {isWorking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  {assessmentCopy.retry}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* The verdict at a glance; the findings are on the interview page */}
+          {detail.status === "assessed" && detail.assessment && (
+            <InterviewVerdictSummary assessment={detail.assessment} />
+          )}
+
+          {/* Expired mid-interview: the partial transcript can still be assessed */}
+          {detail.status === "expired" && onAssess && answered && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {assessmentCopy.expiredUnfinished}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => runAction(onAssess)}
+                  disabled={isWorking}
+                  className="gap-2 font-semibold cursor-pointer"
+                >
+                  {isWorking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {assessmentCopy.assessPartial}
+                </Button>
+              </div>
+            )}
+
           {/* Expired with no answers: offer a fresh link */}
-          {detail.status === "expired" && onReissue && !detail.turns.some((t) => t.role === "candidate") && (
+          {detail.status === "expired" && onReissue && !answered && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 The invite expired before the candidate started.
@@ -236,16 +326,19 @@ export function InterviewSection({
             </div>
           )}
 
-          {/* Link out to the dedicated transcript page, styled like the
-              candidate's own chat. Shown once the candidate has interacted
-              at all, on any status (in_progress, completed, expired). */}
-          {interviewHref && detail.turns.some((t) => t.role === "candidate") && (
+          {/* Link out to the dedicated page: the transcript, plus the full
+              findings once assessed (which is why the label changes — it is
+              the only route to the detail this section deliberately omits).
+              Shown once the candidate has interacted at all, on any status. */}
+          {interviewHref && answered && (
             <Link
               href={interviewHref}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
             >
-              View interview
+              {detail.status === "assessed"
+                ? assessmentCopy.viewFindings
+                : "View interview"}
               <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           )}

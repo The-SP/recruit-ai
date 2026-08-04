@@ -24,6 +24,7 @@ from app.interview.service import apply_lazy_expiry
 from app.models.database import create_session
 from app.models.interview import Interview, InterviewStatus
 from app.repositories.interview_repository import InterviewRepository
+from app.worker.interview_tasks import assess_interview
 
 logger = init_logger(__name__)
 
@@ -37,21 +38,27 @@ def _sse_frame(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _event_frame(event: engine.EngineEvent) -> str:
-    """Map one EngineEvent to its SSE frame (the thin side of the seam)."""
+def _event_frame(event: engine.EngineEvent) -> str | None:
+    """Map one EngineEvent to its SSE frame (the thin side of the seam).
+
+    Returns None for events with no candidate-facing frame; the protocol is
+    append-only, so nothing is emitted for them.
+    """
     if isinstance(event, engine.AnswerAccepted):
         return _sse_frame("ack", {"answer_seq": event.answer_seq})
     if isinstance(event, engine.InterviewerTurn):
         return _sse_frame("turn", build_turn_out(event.turn).model_dump(mode="json"))
-    return _sse_frame(
-        "state",
-        {
-            "status": event.status,
-            "question_number": event.question_number,
-            "total_questions": event.total_questions,
-            "time_remaining_seconds": event.time_remaining_seconds,
-        },
-    )
+    if isinstance(event, engine.StateChanged):
+        return _sse_frame(
+            "state",
+            {
+                "status": event.status,
+                "question_number": event.question_number,
+                "total_questions": event.total_questions,
+                "time_remaining_seconds": event.time_remaining_seconds,
+            },
+        )
+    return None
 
 
 def _load_by_token(db: Session, token: str) -> Interview:
@@ -133,7 +140,14 @@ def submit_answer(token: str, body: AnswerRequest) -> StreamingResponse:
             for event in engine.submit_answer(
                 db, interview, body.content, body.after_seq
             ):
-                yield _event_frame(event)
+                if isinstance(event, engine.InterviewClosed):
+                    # Routes dispatch, workers execute -- the same split as
+                    # batch.py. Keeps app.worker out of the engine.
+                    assess_interview.delay(str(event.interview_id))
+                    continue
+                frame = _event_frame(event)
+                if frame is not None:
+                    yield frame
             yield _sse_frame("done", {})
         except (ValidationError, ConflictError) as e:
             # Lost a race between the precheck and the lock (e.g. another

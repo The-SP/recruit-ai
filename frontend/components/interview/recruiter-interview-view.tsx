@@ -4,20 +4,31 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
   Copy,
   FileText,
   Loader2,
   RotateCcw,
+  Sparkles,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import {
+  assessmentCopy,
+  InterviewAssessmentView,
+} from "@/components/interview/assessment-view";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
   interviewStatusLabels,
@@ -28,10 +39,10 @@ import type { InterviewDetail } from "@/lib/interview-types";
 import { useInviteActions } from "@/lib/use-invite-actions";
 
 /**
- * Recruiter's read-only view of one candidate's interview, styled the same
- * as the candidate's own chat page (components/interview/transcript.tsx) so
- * the transcript reads exactly as it did live. No rubric, no verdict here —
- * assessment UI is a later milestone.
+ * Recruiter's view of one candidate's interview: the assessment verdict once
+ * it exists, above the transcript styled the same as the candidate's own chat
+ * page (components/interview/transcript.tsx) so it reads exactly as it did
+ * live. Once assessed, the transcript is demoted into a collapsible.
  */
 export function RecruiterInterviewView({
   backHref,
@@ -40,6 +51,7 @@ export function RecruiterInterviewView({
   resumeMarkdown,
   interview,
   onReissue,
+  onAssess,
 }: {
   backHref: string;
   candidateName: string | null;
@@ -47,9 +59,10 @@ export function RecruiterInterviewView({
   resumeMarkdown: string | null;
   interview: InterviewDetail | "loading" | "error" | null;
   onReissue: () => Promise<void>;
+  onAssess: () => Promise<void>;
 }) {
   const {
-    isWorking: isReissuing,
+    isWorking,
     error,
     demoNotice,
     copied,
@@ -61,6 +74,7 @@ export function RecruiterInterviewView({
   const displayName = candidateName ?? resumeFilename ?? "Candidate";
 
   const handleReissue = () => runAction(onReissue);
+  const handleAssess = () => runAction(onAssess);
 
   const backLink = (
     <Link
@@ -112,6 +126,10 @@ export function RecruiterInterviewView({
 
   const isDone = interview.status === "completed" || interview.status === "assessed";
   const answered = interview.turns.some((t) => t.role === "candidate");
+  // Non-null only when there is a verdict to show; the transcript demotes
+  // into a collapsible exactly when this is set.
+  const verdict =
+    interview.status === "assessed" ? interview.assessment : null;
 
   return (
     <>
@@ -198,11 +216,11 @@ export function RecruiterInterviewView({
                   size="sm"
                   variant="outline"
                   onClick={handleReissue}
-                  disabled={isReissuing}
+                  disabled={isWorking}
                   className="gap-1.5 shrink-0 cursor-pointer"
                   title="Invalidate this link and issue a fresh one"
                 >
-                  {isReissuing ? (
+                  {isWorking ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -230,10 +248,10 @@ export function RecruiterInterviewView({
               size="sm"
               variant="outline"
               onClick={handleReissue}
-              disabled={isReissuing}
+              disabled={isWorking}
               className="gap-2 font-semibold cursor-pointer"
             >
-              {isReissuing ? (
+              {isWorking ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <RotateCcw className="w-4 h-4" />
@@ -242,16 +260,109 @@ export function RecruiterInterviewView({
             </Button>
           </div>
         )}
+
+        {/* Completed, waiting on the assessment task. Updates on refresh —
+            there is deliberately no polling here. The button covers a task
+            that was never consumed (no worker running at completion), which
+            from here looks identical to one still in flight. */}
+        {interview.status === "completed" && !interview.assessment_error && (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {assessmentCopy.pending}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAssess}
+              disabled={isWorking}
+              className="gap-2 font-semibold cursor-pointer"
+            >
+              {isWorking ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {assessmentCopy.assessNow}
+            </Button>
+          </div>
+        )}
+
+        {/* Assessment task failed: surface the error and offer a retry */}
+        {interview.status === "completed" && interview.assessment_error && (
+          <div className="space-y-2">
+            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+              <X className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="font-medium">
+                {assessmentCopy.failedPrefix} {interview.assessment_error}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAssess}
+              disabled={isWorking}
+              className="gap-2 font-semibold cursor-pointer"
+            >
+              {isWorking ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
+              {assessmentCopy.retry}
+            </Button>
+          </div>
+        )}
+
+        {/* Expired mid-interview: the partial transcript can still be assessed */}
+        {interview.status === "expired" && answered && (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {assessmentCopy.expiredUnfinished}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAssess}
+              disabled={isWorking}
+              className="gap-2 font-semibold cursor-pointer"
+            >
+              {isWorking ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {assessmentCopy.assessPartial}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Transcript, styled exactly like the candidate's live chat */}
+      {/* The verdict, once the assessment task has stored one */}
+      {verdict && (
+        <div className="py-6 border-b border-border">
+          <InterviewAssessmentView assessment={verdict} />
+        </div>
+      )}
+
+      {/* Transcript, styled exactly like the candidate's live chat. Demoted
+          into a collapsible once the assessment is the main content. */}
       <div className="flex-1 py-6">
-        {answered ? (
-          <InterviewTranscript turns={interview.turns} />
-        ) : (
+        {!answered ? (
           <p className="text-sm text-muted-foreground text-center py-12">
             The candidate hasn&apos;t answered any questions yet.
           </p>
+        ) : verdict ? (
+          <Collapsible>
+            <CollapsibleTrigger className="group flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline cursor-pointer">
+              View transcript
+              <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <InterviewTranscript turns={interview.turns} autoScroll={false} />
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          <InterviewTranscript turns={interview.turns} autoScroll={false} />
         )}
       </div>
     </main>

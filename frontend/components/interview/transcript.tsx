@@ -12,15 +12,20 @@ import type { InterviewTurnData } from "@/lib/interview-types";
 export function InterviewTranscript({
   turns,
   showTyping = false,
+  autoScroll = true,
 }: {
   turns: InterviewTurnData[];
   showTyping?: boolean;
+  /** Off for static read-back views (e.g. inside a collapsible), where
+   * scrolling to the bottom on mount would yank the viewport. */
+  autoScroll?: boolean;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!autoScroll) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns.length, showTyping]);
+  }, [turns.length, showTyping, autoScroll]);
 
   return (
     <div className="space-y-3">

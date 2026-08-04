@@ -6,7 +6,6 @@ secondary. A script built only from flagged weaknesses would give a skewed
 read of a strong candidate and inherit any scorer mistake wholesale.
 """
 
-import json
 from typing import Any
 
 from langchain.agents import create_agent
@@ -21,6 +20,7 @@ from app.interview.constants import (
     QUESTION_COUNT,
     QUESTION_COUNT_TOLERANCE,
 )
+from app.interview.prompting import json_block
 from app.models.candidate import Candidate
 from app.models.evaluation import CandidateEvaluation
 from app.models.job import Job
@@ -92,12 +92,6 @@ Also write:
 For each question set `subject` to the specific JD requirement or resume claim
 being probed. It is read only by the recruiter and the assessor, never shown
 to the candidate."""
-
-
-def _json_block(value: Any) -> str:
-    if value is None:
-        return "Not provided"
-    return json.dumps(value, indent=2, default=str)
 
 
 def _extract_scorer_signals(
@@ -203,7 +197,7 @@ def generate_script(grounding: dict[str, Any]) -> InterviewScript:
         job_title=grounding.get("job_title") or "Not specified",
         company_name=grounding.get("company_name") or "Not specified",
         job_summary=grounding.get("job_summary") or "Not provided",
-        requirements=_json_block(grounding.get("requirements")),
+        requirements=json_block(grounding.get("requirements")),
         resume_markdown=grounding.get("resume_markdown") or "Not available",
         evaluation_summary=grounding.get("evaluation_summary") or "Not available",
         critical_gaps=", ".join(grounding.get("critical_gaps") or []) or "None",

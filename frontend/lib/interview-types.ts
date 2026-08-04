@@ -52,8 +52,29 @@ export interface InterviewSummary {
   created_at: string;
 }
 
-/** Recruiter-facing detail; mirrors InterviewDetailResponse. Assessment
- * fields are carried but not rendered until M7. */
+/** Per-question verdict; mirrors the backend QuestionAssessment schema. */
+export interface QuestionAssessmentData {
+  question_id: number;
+  focus: string;
+  subject: string;
+  answer_quality: "strong" | "adequate" | "weak" | "not_answered";
+  resume_consistency: "consistent" | "inconsistent" | "not_applicable";
+  evidence: string;
+  notes: string;
+}
+
+/** Whole-transcript verdict; mirrors InterviewAssessment (stored as JSONB). */
+export interface InterviewAssessmentData {
+  per_question: QuestionAssessmentData[];
+  competency_summary: string;
+  strengths: string[];
+  concerns: string[];
+  gap_findings: string | null;
+  overall_summary: string;
+  recommendation: "advance" | "borderline" | "do_not_advance";
+}
+
+/** Recruiter-facing detail; mirrors InterviewDetailResponse. */
 export interface InterviewDetail {
   interview_id: string;
   status: string;
@@ -64,7 +85,7 @@ export interface InterviewDetail {
   current_question_index: number;
   questions: InterviewQuestionData[];
   turns: InterviewTurnData[];
-  assessment: Record<string, unknown> | null;
+  assessment: InterviewAssessmentData | null;
   assessment_error: string | null;
   expires_at: string;
   started_at: string | null;

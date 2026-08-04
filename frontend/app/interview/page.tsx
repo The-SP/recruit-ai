@@ -258,7 +258,7 @@ function InterviewPageInner() {
           </div>
           {state.turns.length > 0 && (
             <Card className="p-6 rounded-3xl border-border/60">
-              <InterviewTranscript turns={state.turns} />
+              <InterviewTranscript turns={state.turns} autoScroll={false} />
             </Card>
           )}
         </div>

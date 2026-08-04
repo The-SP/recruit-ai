@@ -6,6 +6,7 @@ import { RecruiterInterviewView } from "@/components/interview/recruiter-intervi
 import type { InterviewDetail } from "@/lib/interview-types";
 import type { CandidateBreakdown } from "@/services/batch";
 import {
+  assessRunCandidateInterview,
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   reissueRunCandidateInterview,
@@ -50,6 +51,11 @@ export default function RunCandidateInterviewPage({
     await fetchInterview();
   };
 
+  const handleAssess = async () => {
+    await assessRunCandidateInterview(runId, candidateId);
+    await fetchInterview();
+  };
+
   return (
     <RecruiterInterviewView
       backHref={`/evaluation/${runId}`}
@@ -58,6 +64,7 @@ export default function RunCandidateInterviewPage({
       resumeMarkdown={breakdown?.resume_markdown ?? null}
       interview={interview}
       onReissue={handleReissue}
+      onAssess={handleAssess}
     />
   );
 }
