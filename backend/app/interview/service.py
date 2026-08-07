@@ -12,7 +12,11 @@ from app.models.evaluation_run import EvaluationRun
 from app.models.interview import Interview, InterviewStatus, TurnRole
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
-from app.repositories.interview_repository import InterviewRepository
+from app.repositories.evaluation_run_repository import (
+    EvaluationRunRepository,
+    InterviewRow,
+)
+from app.repositories.interview_repository import OVERDUE_STATUSES, InterviewRepository
 from app.repositories.job_repository import JobRepository
 from app.worker.interview_tasks import assess_interview
 
@@ -47,11 +51,26 @@ def apply_lazy_expiry(db: Session, interview: Interview) -> Interview:
     There is no scheduler in this repo and nothing needs to *happen* at the
     expiry moment — the state only needs to be correct when observed, so
     whichever request notices writes it.
+
+    InterviewRepository.expire_overdue_for_run is the bulk twin, used by the
+    run listing so it doesn't commit once per stale invite. Both read
+    OVERDUE_STATUSES, so the two can't disagree about which invites are stale.
     """
-    overdue_states = {InterviewStatus.CREATED.value, InterviewStatus.IN_PROGRESS.value}
-    if interview.status in overdue_states and interview.expires_at < datetime.now():
+    if interview.status in OVERDUE_STATUSES and interview.expires_at < datetime.now():
         return InterviewRepository(db).mark_expired(interview)
     return interview
+
+
+def list_interview_rows(db: Session, run: EvaluationRun) -> dict[UUID, InterviewRow]:
+    """Interview state for every item in a run, keyed by run item id.
+
+    The list-read counterpart to get_interview: it owns the same expire-then-read
+    pairing, so a run listing can't show an invite as live that opening it would
+    immediately expire. Kept here rather than in the route so every interview
+    read semantic -- single or bulk -- has one home.
+    """
+    InterviewRepository(db).expire_overdue_for_run(run.id)
+    return EvaluationRunRepository(db).get_interview_rows_for_run(run.id)
 
 
 def _has_candidate_answers(repo: InterviewRepository, interview: Interview) -> bool:

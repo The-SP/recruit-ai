@@ -1,13 +1,15 @@
 import secrets
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logger import init_logger
 from app.interview.constants import INTERVIEW_INVITE_TTL_DAYS
+from app.models.evaluation_run import EvaluationRunItem
 from app.models.interview import Interview, InterviewStatus, InterviewTurn
 
 logger = init_logger(__name__)
@@ -22,6 +24,14 @@ def default_expires_at() -> datetime:
     """Invite expiry. Naive datetime to match the DB columns and the
     datetime.now() convention used by the other repositories."""
     return datetime.now() + timedelta(days=INTERVIEW_INVITE_TTL_DAYS)
+
+
+# The states an overdue invite can expire *from*. Read by both halves of lazy
+# expiry -- the row-at-a-time interview.service.apply_lazy_expiry and the bulk
+# expire_overdue_for_run below -- so a listing and a detail view can't disagree
+# about which invites are stale. The `expires_at < now` half can't be shared
+# (one side is Python, the other SQL), but the state set is the part that moves.
+OVERDUE_STATUSES = (InterviewStatus.CREATED.value, InterviewStatus.IN_PROGRESS.value)
 
 
 class InterviewRepository:
@@ -193,3 +203,33 @@ class InterviewRepository:
         self.db.refresh(interview)
         logger.info(f"Interview expired: id={interview.id}")
         return interview
+
+    def expire_overdue_for_run(self, run_id: UUID) -> int:
+        """Bulk twin of interview.service.apply_lazy_expiry, for a whole run.
+
+        Same rule -- there is no scheduler, so whichever request observes an
+        overdue invite is the one that persists `expired` -- but folded into a
+        single UPDATE. A run listing can't call mark_expired in a loop: that
+        commits and refreshes per row, so N stale invites would mean N
+        transactions on a GET. Both halves read OVERDUE_STATUSES.
+
+        Usually matches zero rows.
+        """
+        member_evaluation_ids = (
+            select(EvaluationRunItem.evaluation_id)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.evaluation_id.is_not(None))
+        )
+        stmt = (
+            update(Interview)
+            .where(Interview.evaluation_id.in_(member_evaluation_ids))
+            .where(Interview.status.in_(OVERDUE_STATUSES))
+            .where(Interview.expires_at < datetime.now())
+            .values(status=InterviewStatus.EXPIRED.value)
+        )
+        result = cast(CursorResult[Any], self.db.execute(stmt))
+        expired = result.rowcount or 0
+        if expired:
+            self.db.commit()
+            logger.info(f"Expired {expired} overdue interview(s) for run {run_id}")
+        return expired

@@ -9,6 +9,7 @@ from app.api.schemas.interview import (
     InterviewDetailResponse,
     InterviewSummaryResponse,
     build_detail_response,
+    build_invite_url,
     build_summary_response,
 )
 from app.api.schemas.public import (
@@ -21,6 +22,7 @@ from app.api.schemas.runs import (
     EvaluationRunDetail,
     EvaluationRunListResponse,
     EvaluationRunSummary,
+    RunItemInterview,
     RunItemSummary,
 )
 from app.auth.jwt import get_current_active_user
@@ -34,6 +36,7 @@ from app.core.job_description_parser import parse_job_description
 from app.interview.service import (
     create_interview,
     get_interview,
+    list_interview_rows,
     reissue_interview,
     request_assessment,
 )
@@ -152,7 +155,13 @@ def get_evaluation_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> EvaluationRunDetail:
-    """Get a single evaluation run by ID (must belong to current user)."""
+    """Get a single evaluation run by ID (must belong to current user).
+
+    Note this GET writes: list_interview_rows expires overdue invites in bulk
+    before reading them, so the listing can't disagree with what opening a
+    single interview would show. Same lazy-expiry contract as the rest of the
+    interview read paths, and owned by the same service.
+    """
     run_repo = EvaluationRunRepository(db)
     run = run_repo.get_by_id_for_user(
         run_id, current_user.id, with_items=True, with_job=True
@@ -160,7 +169,11 @@ def get_evaluation_run(
     if not run:
         raise NotFoundError("Evaluation run", str(run_id))
 
-    candidate_repo = CandidateRepository(db)
+    interview_rows = list_interview_rows(db, run)
+    candidate_names = CandidateRepository(db).get_names_by_ids(
+        [item.candidate_id for item in run.items if item.candidate_id]
+    )
+
     items: list[RunItemSummary] = []
     for item in sorted(
         run.items,
@@ -173,20 +186,33 @@ def get_evaluation_run(
             ),
         ),
     ):
-        candidate_name = None
-        if item.candidate_id:
-            candidate = candidate_repo.get_by_id(item.candidate_id)
-            candidate_name = candidate.name if candidate else None
+        row = interview_rows.get(item.id)
 
         items.append(
             RunItemSummary(
                 item_id=item.id,
                 candidate_id=item.candidate_id,
-                candidate_name=candidate_name,
+                candidate_name=candidate_names.get(item.candidate_id)
+                if item.candidate_id
+                else None,
                 filename=item.pdf_filename,
                 final_score=item.evaluation.final_score if item.evaluation else None,
                 hire_signal=item.evaluation.hire_signal if item.evaluation else None,
                 status=item.status,
+                interview=(
+                    RunItemInterview(
+                        status=row.status,
+                        recommendation=row.recommendation,
+                        answered=row.answered,
+                        has_assessment_error=row.has_assessment_error,
+                        invite_url=build_invite_url(row.access_token),
+                        expires_at=row.expires_at,
+                        completed_at=row.completed_at,
+                        assessed_at=row.assessed_at,
+                    )
+                    if row
+                    else None
+                ),
             )
         )
 

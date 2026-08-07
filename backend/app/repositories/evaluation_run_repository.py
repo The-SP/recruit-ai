@@ -1,6 +1,6 @@
 import secrets
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -16,8 +16,24 @@ from app.models.evaluation_run import (
     ItemStatus,
     RunStatus,
 )
+from app.models.interview import Interview, InterviewTurn, TurnRole
 
 logger = init_logger(__name__)
+
+
+class InterviewRow(NamedTuple):
+    """Flat interview state for one run item, as read by
+    get_interview_rows_for_run. Named so the row stays typed under mypy
+    strict, and so callers don't index into a raw SQLAlchemy Row."""
+
+    status: str
+    recommendation: str | None
+    answered: bool
+    has_assessment_error: bool
+    access_token: str
+    expires_at: datetime
+    completed_at: datetime | None
+    assessed_at: datetime | None
 
 
 class EvaluationRunRepository:
@@ -248,7 +264,54 @@ class EvaluationRunRepository:
             )
         if with_job:
             stmt = stmt.options(joinedload(EvaluationRun.job))
-        return self.db.scalars(stmt).first()
+        return self.db.scalars(stmt).unique().first()
+
+    def get_interview_rows_for_run(self, run_id: UUID) -> dict[UUID, InterviewRow]:
+        """Interview state for every item in a run, keyed by run item id.
+
+        Joins interviews straight onto run items via evaluation_id (unique and
+        indexed on interviews), so candidate_evaluations isn't needed. Scalar
+        columns only: question_script and grounding are the largest columns on
+        the row and nothing here displays them. `recommendation` is pulled out
+        of the assessment JSONB in SQL, which is why surfacing it needs no
+        migration, and `answered` is an EXISTS so the transcript stays unread.
+
+        Items with no interview are simply absent from the map.
+        """
+        answered = (
+            select(1)
+            .where(InterviewTurn.interview_id == Interview.id)
+            .where(InterviewTurn.role == TurnRole.CANDIDATE.value)
+            .exists()
+        )
+        stmt = (
+            select(
+                EvaluationRunItem.id.label("item_id"),
+                Interview.status.label("status"),
+                Interview.assessment["recommendation"].astext.label("recommendation"),
+                answered.label("answered"),
+                Interview.assessment_error.is_not(None).label("has_assessment_error"),
+                Interview.access_token.label("access_token"),
+                Interview.expires_at.label("expires_at"),
+                Interview.completed_at.label("completed_at"),
+                Interview.assessed_at.label("assessed_at"),
+            )
+            .join(Interview, Interview.evaluation_id == EvaluationRunItem.evaluation_id)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+        )
+        return {
+            row.item_id: InterviewRow(
+                status=row.status,
+                recommendation=row.recommendation,
+                answered=row.answered,
+                has_assessment_error=row.has_assessment_error,
+                access_token=row.access_token,
+                expires_at=row.expires_at,
+                completed_at=row.completed_at,
+                assessed_at=row.assessed_at,
+            )
+            for row in self.db.execute(stmt)
+        }
 
     def get_by_id_for_user_for_update(
         self, run_id: UUID, user_id: UUID

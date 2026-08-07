@@ -5,6 +5,27 @@ import type { CandidateBreakdown } from "./batch";
 
 export type RunStatus = "draft" | "pending" | "processing" | "completed" | "failed";
 
+/**
+ * Row-level interview state, mirroring RunItemInterview in
+ * backend/app/api/schemas/runs.py. Enough to render a table row and pick the
+ * right action; the transcript, rubric and assessment body still come from
+ * the per-candidate detail endpoint.
+ *
+ * `answered` separates an expired interview that can still be assessed from
+ * one that can only be reissued; `has_assessment_error` separates a failed
+ * assessment from one merely pending, since both sit at status "completed".
+ */
+export interface RunItemInterview {
+  status: string;
+  recommendation: string | null;
+  answered: boolean;
+  has_assessment_error: boolean;
+  invite_url: string;
+  expires_at: string;
+  completed_at: string | null;
+  assessed_at: string | null;
+}
+
 export interface RunItemSummary {
   item_id: string;
   candidate_id: string | null;
@@ -13,6 +34,9 @@ export interface RunItemSummary {
   final_score: number | null;
   hire_signal: string | null;
   status: string;
+  // null means no interview exists for this candidate yet. Deliberately not
+  // on the shared EvaluationItem type: the anonymous flow can never have one.
+  interview: RunItemInterview | null;
 }
 
 export interface EvaluationRunSummary {

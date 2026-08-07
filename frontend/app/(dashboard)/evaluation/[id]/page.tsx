@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Download,
   Loader2,
+  MessageSquareText,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -12,11 +13,20 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CandidateCompareDialog } from "@/components/candidate-compare-dialog";
 import { CompareBar } from "@/components/evaluation/compare-bar";
 import { FilterControls } from "@/components/evaluation/filter-controls";
+import { InterviewStatsStrip } from "@/components/evaluation/interview-stats-strip";
+import {
+  InterviewTable,
+  firstSortDir,
+  interviewSortDate,
+  type InterviewSort,
+  type InterviewSortColumn,
+} from "@/components/evaluation/interview-table";
 import { ProcessingProgress } from "@/components/evaluation/processing-progress";
 import { ResultsTable } from "@/components/evaluation/results-table";
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
@@ -25,8 +35,11 @@ import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { interviewStatusLabels, recommendationLabels } from "@/lib/evaluation-styles";
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from "@/lib/evaluation-types";
 import type { CachedInterview } from "@/lib/interview-types";
+import { useInviteActions } from "@/lib/use-invite-actions";
 import { ApiError } from "@/services/api";
 import { type CandidateBreakdown } from "@/services/batch";
 import {
@@ -42,12 +55,72 @@ import {
   type RunItemSummary,
 } from "@/services/runs";
 
-export default function RunDetailPage({
+/** Ranks interview states by how far along the funnel they are, so sorting
+ *  the Interview column walks the workflow rather than the alphabet. */
+const INTERVIEW_STATUS_ORDER: Record<string, number> = {
+  assessed: 5,
+  completed: 4,
+  in_progress: 3,
+  created: 2,
+  expired: 1,
+};
+
+/** The real statuses, listed the way a recruiter walks the funnel (invite out
+ *  first, expired last) rather than by rank. Adding a status to
+ *  INTERVIEW_STATUS_ORDER and interviewStatusLabels is all it takes to make it
+ *  sortable and badge-able; adding it here also makes it filterable. */
+const INTERVIEW_STATUS_FILTER_VALUES = [
+  "created",
+  "in_progress",
+  "completed",
+  "assessed",
+  "expired",
+];
+
+/** Strongest recommendation first. */
+const RECOMMENDATION_ORDER: Record<string, number> = {
+  advance: 3,
+  borderline: 2,
+  do_not_advance: 1,
+};
+
+/** Interview-state filter for the Interviews tab, replacing the hire-signal
+ *  options FilterControls shows on Screening. Status labels are read from
+ *  interviewStatusLabels rather than restated, so the dropdown can't drift
+ *  from the badge the table renders in the same row. `all` and `not_sent` are
+ *  filter-only: neither is a real interview status. */
+const INTERVIEW_FILTER_OPTIONS = [
+  { value: "all", label: "All Interviews" },
+  { value: "not_sent", label: "Not Sent" },
+  ...INTERVIEW_STATUS_FILTER_VALUES.map((value) => ({
+    value,
+    label: interviewStatusLabels[value],
+  })),
+];
+
+function RunDetailPageInner({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id: runId } = use(params);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Derived from the URL rather than mirrored into state, so deep links and
+  // browser back/forward work with no sync effect. Anything unrecognised
+  // falls back to the screening view.
+  const tab = searchParams.get("tab") === "interviews" ? "interviews" : "screening";
+  const setTab = useCallback(
+    (value: string) => {
+      // replace, not push: toggling tabs shouldn't stack history entries
+      // between the user and the back-to-dashboard link.
+      router.replace(
+        `/evaluation/${runId}${value === "interviews" ? "?tab=interviews" : ""}`,
+        { scroll: false }
+      );
+    },
+    [router, runId]
+  );
 
   const [data, setData] = useState<EvaluationRunDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +136,15 @@ export default function RunDetailPage({
   const [retryingAll, setRetryingAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSignal, setFilterSignal] = useState("all");
+  const [interviewSearch, setInterviewSearch] = useState("");
+  const [interviewFilter, setInterviewFilter] = useState("all");
+  // Each column toggles its own direction, rather than the single cycling
+  // header the screening table uses: this table has more axes worth sorting,
+  // and a cycle that silently lands on another column reads as a bug.
+  const [interviewSort, setInterviewSort] = useState<InterviewSort>({
+    column: null,
+    dir: "desc",
+  });
   const [sortBy, setSortBy] = useState<SortBy>("score_desc");
   const [resumePanel, setResumePanel] = useState<ResumePanelState | null>(null);
   const [compareItemIds, setCompareItemIds] = useState<Set<string>>(new Set());
@@ -145,12 +227,22 @@ export default function RunDetailPage({
       try {
         await action(candidateId);
       } finally {
-        // Refetch rather than guess, on success and failure alike.
-        const detail = await getRunCandidateInterview(runId, candidateId);
-        setInterviewCache((prev) => ({ ...prev, [item.item_id]: detail }));
+        // Refetch rather than guess, on success and failure alike. The two
+        // reads are independent — the detail feeds the expanded row's panel,
+        // the run feeds the Interviews tab, which renders from
+        // run.items[].interview and would otherwise still read "Not sent" for
+        // a freshly generated invite — so they run concurrently rather than
+        // making the user wait for both in series. fetchData is silent, so
+        // there's no layout flash.
+        await Promise.all([
+          getRunCandidateInterview(runId, candidateId).then((detail) =>
+            setInterviewCache((prev) => ({ ...prev, [item.item_id]: detail }))
+          ),
+          fetchData(true),
+        ]);
       }
     },
-    [runId]
+    [runId, fetchData]
   );
 
   // Generation runs an LLM call (~20s). The cache slot is marked "loading"
@@ -175,6 +267,43 @@ export default function RunDetailPage({
       assessRunCandidateInterview(runId, candidateId)
     );
   }, [runId, runInterviewAction]);
+
+  // The Interviews tab drives the same three handlers as the expanded row,
+  // wrapped so the table can show which row is in flight.
+  const {
+    busyKey: busyItemId,
+    copiedKey: copiedItemId,
+    error: rowActionError,
+    demoNotice: rowActionNotice,
+    runAction: runRowAction,
+    copyInviteUrl: copyRowInviteUrl,
+  } = useInviteActions();
+
+  const handleRowGenerate = useCallback(
+    (item: RunItemSummary) =>
+      runRowAction(() => handleGenerateInterview(item), item.item_id),
+    [runRowAction, handleGenerateInterview]
+  );
+
+  const handleRowReissue = useCallback(
+    (item: RunItemSummary) =>
+      runRowAction(() => handleReissueInterview(item), item.item_id),
+    [runRowAction, handleReissueInterview]
+  );
+
+  const handleRowAssess = useCallback(
+    (item: RunItemSummary) =>
+      runRowAction(() => handleAssessInterview(item), item.item_id),
+    [runRowAction, handleAssessInterview]
+  );
+
+  const handleRowCopyLink = useCallback(
+    (item: RunItemSummary) => {
+      if (!item.interview) return;
+      copyRowInviteUrl(item.interview.invite_url, item.item_id);
+    },
+    [copyRowInviteUrl]
+  );
 
   const handleRowClick = useCallback((item: RunItemSummary) => {
     const id = item.item_id;
@@ -239,7 +368,16 @@ export default function RunDetailPage({
 
   function exportCsv() {
     if (!data) return;
-    const headers = ["Rank", "Name", "File", "Score (%)", "Hire Signal", "Status"];
+    const headers = [
+      "Rank",
+      "Name",
+      "File",
+      "Score (%)",
+      "Hire Signal",
+      "Status",
+      "Interview Status",
+      "Interview Recommendation",
+    ];
     const rows = data.items.map((item, i) => [
       i + 1,
       item.candidate_name ?? item.filename,
@@ -247,6 +385,10 @@ export default function RunDetailPage({
       item.final_score != null ? (item.final_score * 100).toFixed(1) : "N/A",
       item.hire_signal ?? "N/A",
       item.status,
+      item.interview ? (interviewStatusLabels[item.interview.status] ?? item.interview.status) : "Not sent",
+      item.interview?.recommendation
+        ? (recommendationLabels[item.interview.recommendation] ?? item.interview.recommendation)
+        : "N/A",
     ]);
     const csv = [headers, ...rows]
       .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -276,6 +418,96 @@ export default function RunDetailPage({
   const topMatchCount = (data?.items ?? []).filter(
     i => i.hire_signal === "strong_match" || i.hire_signal === "good_match"
   ).length;
+
+  // "Awaiting" is `created` only: a candidate mid-interview has responded.
+  // Overdue invites are expired server-side on load, so they don't inflate it.
+  // Only scored candidates can be interviewed: question generation is
+  // grounded in the evaluation, so a row that hasn't finished scoring has
+  // nothing to offer but a button that would fail. Mirrors how sourceItems
+  // hides unscored rows from the screening table while a run is active.
+  const interviewableItems = useMemo(
+    () => (data?.items ?? []).filter(i => i.candidate_id && i.final_score != null),
+    [data?.items]
+  );
+
+  // One pass rather than three filters: this recomputes on every poll tick
+  // while a run is active, and the result is four integers.
+  const interviewStats = useMemo(() => {
+    let invited = 0;
+    let awaiting = 0;
+    let assessed = 0;
+    for (const i of interviewableItems) {
+      if (!i.interview) continue;
+      invited++;
+      if (i.interview.status === "created") awaiting++;
+      else if (i.interview.status === "assessed") assessed++;
+    }
+    return { total: interviewableItems.length, invited, awaiting, assessed };
+  }, [interviewableItems]);
+
+  // Kept separate from the screening filters: the two tabs filter on
+  // different axes, and carrying a hire-signal filter across would silently
+  // hide rows on a tab that never showed that control.
+  const interviewFiltered = useMemo(() => {
+    const q = interviewSearch.toLowerCase();
+    return interviewableItems.filter(i => {
+      if (
+        q &&
+        !i.candidate_name?.toLowerCase().includes(q) &&
+        !i.filename.toLowerCase().includes(q)
+      )
+        return false;
+      if (interviewFilter === "all") return true;
+      if (interviewFilter === "not_sent") return !i.interview;
+      return i.interview?.status === interviewFilter;
+    })
+    .sort((a, b) => {
+      const { column, dir } = interviewSort;
+      const flip = dir === "asc" ? -1 : 1;
+      // Unsorted: the same best-score-first order the screening tab defaults
+      // to, so clearing a sort lands somewhere familiar rather than arbitrary.
+      if (column === null) return (b.final_score ?? -1) - (a.final_score ?? -1);
+      if (column === "candidate") {
+        const na = a.candidate_name ?? a.filename;
+        const nb = b.candidate_name ?? b.filename;
+        // Names read most naturally A-Z, so "asc" is the un-flipped case.
+        return na.localeCompare(nb) * -flip;
+      }
+      if (column === "score") {
+        return ((b.final_score ?? -1) - (a.final_score ?? -1)) * flip;
+      }
+      if (column === "status") {
+        // No interview sorts below every real state.
+        const sa = a.interview ? INTERVIEW_STATUS_ORDER[a.interview.status] ?? 0 : 0;
+        const sb = b.interview ? INTERVIEW_STATUS_ORDER[b.interview.status] ?? 0 : 0;
+        return (sb - sa) * flip;
+      }
+      if (column === "recommendation") {
+        const ra = RECOMMENDATION_ORDER[a.interview?.recommendation ?? ""] ?? 0;
+        const rb = RECOMMENDATION_ORDER[b.interview?.recommendation ?? ""] ?? 0;
+        return (rb - ra) * flip;
+      }
+      // date: most recent activity first, undated rows last.
+      const da = interviewSortDate(a);
+      const db = interviewSortDate(b);
+      return (db - da) * flip;
+    });
+  }, [interviewableItems, interviewSearch, interviewFilter, interviewSort]);
+
+  const isInterviewFiltered = interviewSearch !== "" || interviewFilter !== "all";
+
+  // Three-state cycle so a sort can be undone: first click sorts in the
+  // direction firstSortDir picks, the second reverses it, the third clears
+  // back to the default order.
+  const handleInterviewSort = useCallback((column: InterviewSortColumn) => {
+    const firstDir = firstSortDir(column);
+    setInterviewSort(prev => {
+      if (prev.column !== column) return { column, dir: firstDir };
+      if (prev.dir === firstDir)
+        return { column, dir: firstDir === "asc" ? "desc" : "asc" };
+      return { column: null, dir: "desc" };
+    });
+  }, []);
 
   const sourceItems = useMemo(
     () => (isActive ? completedItems : (data?.items ?? [])),
@@ -461,28 +693,38 @@ export default function RunDetailPage({
           </div>
         </div>
 
-        {/* Stats */}
-        <StatsSummary
-          candidateCount={data.total_count}
-          processingTimeSeconds={data.processing_time_seconds}
-          bestScore={bestScore}
-          topMatchCount={topMatchCount}
-          isProcessing={isActive}
-        />
+        {/* Tabs lead: each view brings its own stats, so the strip below
+            belongs to the active tab rather than the page. */}
+        <Tabs value={tab} onValueChange={setTab} className="gap-0">
+          <TabsList className="mb-8">
+            <TabsTrigger value="screening">Screening</TabsTrigger>
+            <TabsTrigger value="interviews">Interviews</TabsTrigger>
+          </TabsList>
 
-        {/* Progress Card */}
-        {isActive && (
-          <ProcessingProgress
-            processed={data.processed_count}
-            total={data.total_count}
-            failed={failedCount}
-            percent={progressPercent}
+          <TabsContent value="screening" className="space-y-8">
+          <StatsSummary
+            candidateCount={data.total_count}
+            processingTimeSeconds={data.processing_time_seconds}
+            bestScore={bestScore}
+            topMatchCount={topMatchCount}
+            isProcessing={isActive}
           />
-        )}
 
-        <div className="space-y-8">
-          {/* Search / filter controls */}
-          {data.items.length > 0 && (
+          {/* Progress Card */}
+          {isActive && (
+            <ProcessingProgress
+              processed={data.processed_count}
+              total={data.total_count}
+              failed={failedCount}
+              percent={progressPercent}
+            />
+          )}
+
+          {/* Search / filter controls. Gated on the same condition as the
+              table below: while a run is still scoring its first results
+              there is nothing to filter, and the controls would sit above
+              an absent table. */}
+          {data.items.length > 0 && (!isActive || completedItems.length > 0) && (
             <FilterControls
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -544,7 +786,80 @@ export default function RunDetailPage({
               )}
             </>
           )}
+          </TabsContent>
 
+          <TabsContent value="interviews" className="space-y-8">
+            <InterviewStatsStrip {...interviewStats} />
+
+            {interviewableItems.length > 0 && (
+              <FilterControls
+                searchQuery={interviewSearch}
+                onSearchChange={setInterviewSearch}
+                filterSignal={interviewFilter}
+                onFilterChange={setInterviewFilter}
+                isFiltered={isInterviewFiltered}
+                shownCount={interviewFiltered.length}
+                totalCount={interviewableItems.length}
+                filterOptions={INTERVIEW_FILTER_OPTIONS}
+              />
+            )}
+
+            {interviewableItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  {isActive ? (
+                    <Loader2 className="w-7 h-7 text-muted-foreground animate-spin" />
+                  ) : (
+                    <MessageSquareText className="w-7 h-7 text-muted-foreground" />
+                  )}
+                </div>
+                <p className="text-foreground font-bold text-lg">
+                  {isActive ? "Scoring candidates…" : "No candidates to interview"}
+                </p>
+                <p className="text-muted-foreground text-sm mt-1 max-w-sm">
+                  {isActive
+                    ? "Interviews are generated from a candidate's evaluation, so they unlock as each resume finishes scoring."
+                    : "Add resumes and let them finish scoring to start interviewing candidates."}
+                </p>
+              </div>
+            ) : (
+            <>
+            {isActive && (
+              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
+                Scored So Far
+              </div>
+            )}
+            <InterviewTable
+              items={interviewFiltered}
+              isFiltered={isInterviewFiltered}
+              onClearFilters={() => {
+                setInterviewSearch("");
+                setInterviewFilter("all");
+              }}
+              busyItemId={busyItemId}
+              copiedItemId={copiedItemId}
+              error={rowActionError}
+              demoNotice={rowActionNotice}
+              onGenerate={handleRowGenerate}
+              onReissue={handleRowReissue}
+              onAssess={handleRowAssess}
+              onCopyLink={handleRowCopyLink}
+              onViewResume={handleViewResume}
+              sort={interviewSort}
+              onSort={handleInterviewSort}
+              getInterviewHref={(item) =>
+                item.candidate_id
+                  ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`
+                  : null
+              }
+            />
+            </>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        <div className="space-y-8">
           {/* Add more candidates */}
           <div className="space-y-6 pt-2">
             {!isActive && (
@@ -634,5 +949,17 @@ export default function RunDetailPage({
 
       <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
     </>
+  );
+}
+
+// useSearchParams (the ?tab= state) needs a Suspense boundary, same as the
+// anonymous results page and the candidate interview page.
+export default function RunDetailPage(props: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <React.Suspense>
+      <RunDetailPageInner {...props} />
+    </React.Suspense>
   );
 }

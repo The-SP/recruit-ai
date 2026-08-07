@@ -101,7 +101,7 @@ export function ResultsTable<T extends EvaluationItem>({
                 onClick={onSort}
                 className="flex items-center gap-1 font-semibold hover:text-foreground transition-colors cursor-pointer"
               >
-                Resume
+                Candidate
                 {sortBy === "name_asc" && <ArrowUp className="w-3 h-3 text-primary" />}
                 {sortBy === "name_desc" && <ArrowDown className="w-3 h-3 text-primary" />}
               </button>

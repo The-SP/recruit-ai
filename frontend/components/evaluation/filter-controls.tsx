@@ -11,6 +11,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Hire-signal options: the default filter, used by both results pages. */
+const SIGNAL_OPTIONS = [
+  { value: "all", label: "All Signals" },
+  { value: "strong_match", label: "Strong Match" },
+  { value: "good_match", label: "Good Match" },
+  { value: "partial_match", label: "Partial Match" },
+  { value: "weak_match", label: "Weak Match" },
+  { value: "no_match", label: "No Match" },
+];
+
 export function FilterControls({
   searchQuery,
   onSearchChange,
@@ -19,6 +29,7 @@ export function FilterControls({
   isFiltered,
   shownCount,
   totalCount,
+  filterOptions = SIGNAL_OPTIONS,
 }: {
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -27,6 +38,9 @@ export function FilterControls({
   isFiltered: boolean;
   shownCount: number;
   totalCount: number;
+  // Lets the Interviews tab filter by interview state instead of hire
+  // signal; the search box and the "n of m" readout are identical either way.
+  filterOptions?: { value: string; label: string }[];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -44,12 +58,11 @@ export function FilterControls({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Signals</SelectItem>
-          <SelectItem value="strong_match">Strong Match</SelectItem>
-          <SelectItem value="good_match">Good Match</SelectItem>
-          <SelectItem value="partial_match">Partial Match</SelectItem>
-          <SelectItem value="weak_match">Weak Match</SelectItem>
-          <SelectItem value="no_match">No Match</SelectItem>
+          {filterOptions.map(opt => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       {isFiltered && (

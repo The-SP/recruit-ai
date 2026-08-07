@@ -570,8 +570,11 @@ function EvaluationPageInner() {
       )}
 
       <div className="space-y-8">
-        {/* Search / filter controls */}
-        {data.results.length > 0 && (
+        {/* Search / filter controls. Gated on the same condition as the
+            table below: while a batch is still scoring its first results
+            there is nothing to filter, and the controls would sit above an
+            absent table. */}
+        {data.results.length > 0 && (!isProcessing || completedResults.length > 0) && (
           <FilterControls
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
