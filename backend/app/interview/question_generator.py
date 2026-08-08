@@ -14,12 +14,7 @@ from langchain.agents.structured_output import ToolStrategy
 from app.config import Config
 from app.core.logger import init_logger
 from app.core.model_factory import build_model
-from app.interview.constants import (
-    INTERVIEW_TIME_LIMIT_SECONDS,
-    MAX_GAP_PROBES,
-    QUESTION_COUNT,
-    QUESTION_COUNT_TOLERANCE,
-)
+from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS, MAX_GAP_PROBES
 from app.interview.prompting import json_block
 from app.models.candidate import Candidate
 from app.models.evaluation import CandidateEvaluation
@@ -151,8 +146,8 @@ def build_grounding(
 
 def _validate_script(script: InterviewScript) -> str | None:
     """Return a reason string when the script is unusable, else None."""
-    low = QUESTION_COUNT - QUESTION_COUNT_TOLERANCE
-    high = QUESTION_COUNT + QUESTION_COUNT_TOLERANCE
+    low = Config.INTERVIEW_QUESTION_COUNT - Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
+    high = Config.INTERVIEW_QUESTION_COUNT + Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
     count = len(script.questions)
     if not low <= count <= high:
         return f"expected {low}-{high} questions, got {count}"
@@ -202,7 +197,7 @@ def generate_script(grounding: dict[str, Any]) -> InterviewScript:
         evaluation_summary=grounding.get("evaluation_summary") or "Not available",
         critical_gaps=", ".join(grounding.get("critical_gaps") or []) or "None",
         weak_skills=", ".join(grounding.get("weak_skills") or []) or "None",
-        question_count=QUESTION_COUNT,
+        question_count=Config.INTERVIEW_QUESTION_COUNT,
         max_gap_probes=MAX_GAP_PROBES,
         time_limit_minutes=INTERVIEW_TIME_LIMIT_SECONDS // 60,
     )

@@ -29,6 +29,12 @@ class Config:
     # Dedicated key so interviews don't share the scorers' quota or circuit
     # breaker. Falls back to the rotated GOOGLE_API_KEYS pool when unset.
     INTERVIEW_GOOGLE_API_KEY: str = os.getenv("INTERVIEW_GOOGLE_API_KEY", "")
+    # Core questions per interview. Defaults to the fast development value;
+    INTERVIEW_QUESTION_COUNT: int = int(os.getenv("INTERVIEW_QUESTION_COUNT", "1"))
+    # Accepted spread around the count when validating LLM output.
+    INTERVIEW_QUESTION_COUNT_TOLERANCE: int = int(
+        os.getenv("INTERVIEW_QUESTION_COUNT_TOLERANCE", "0")
+    )
 
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO

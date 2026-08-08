@@ -109,7 +109,7 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
   **Interview creation is login-only.** The batch access token grants add-candidates and retry but deliberately *not* interviews: each interview spends Gemini quota through the turn engine, and an anonymous run has no account to attribute or throttle it against. Do not add token-flavored interview routes to `api/routes/batch.py` for symmetry — `batch.py` carries a comment marking their absence as intentional. Note `interview/service.py` itself has no notion of `user_id`; it authorizes by run-membership only, so the boundary is *which resolver fetched the run* (`_load_owned_run` filters on `user_id` in SQL). The anonymous results page shows a locked sign-in upsell instead, via the `interviewLocked` prop.
 
-  `engine.py` is the voice seam: it speaks typed `EngineEvent`s only, no FastAPI imports; the route maps events to SSE frames. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** Question count, time limit, and invite TTL are constants in `interview/constants.py`, not env vars; only the model name and API key are configurable.
+  `engine.py` is the voice seam: it speaks typed `EngineEvent`s only, no FastAPI imports; the route maps events to SSE frames. **The candidate surface must never expose `question_script`, `grounding`, or a question's `subject`/`good_answer_covers` — those are the rubric.** The follow-up cap, gap-probe cap, time limit, and invite TTL are constants in `interview/constants.py`, not env vars. Question count and its validation tolerance are the exception: they are env-driven (`INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` on `Config`) so a local checkout can run 1-question test interviews while production asks the full 5-6. The code defaults are the short dev values; `.env.example` carries the production ones.
 
 - **`config.py`** — Environment variable loading. LLM model configured via `MODEL_NAME` (default: `google_genai:gemini-2.5-flash-lite`).
 
@@ -140,7 +140,7 @@ The shared components are flow-agnostic on purpose: they never call `useAuth()` 
 
 ## Configuration
 
-Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `API_KEY` (empty disables the header check), `EMAIL_PROVIDER` (console|gmail|resend), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`.
+Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `API_KEY` (empty disables the header check), `EMAIL_PROVIDER` (console|gmail|resend), `INTERVIEW_MODEL_NAME` / `INTERVIEW_GOOGLE_API_KEY` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE`, `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`.
 
 Frontend: `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`), `NEXT_PUBLIC_API_KEY` (optional, must match backend `API_KEY`), `NEXT_PUBLIC_DEMO_MODE`.
 
