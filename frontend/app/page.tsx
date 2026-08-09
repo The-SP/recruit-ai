@@ -3,7 +3,14 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Sparkles, Zap, Shield, BarChart3 } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  MessageSquareText,
+  Shield,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +37,12 @@ const features = [
     description:
       "Same evaluation criteria applied to every candidate, every time.",
   },
+  {
+    icon: MessageSquareText,
+    title: "AI Interviews",
+    description:
+      "Invite a shortlisted candidate to an interview with questions generated from their resume and your job description.",
+  },
 ];
 
 export default function LandingPage() {
@@ -52,7 +65,7 @@ export default function LandingPage() {
             className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10 px-4 py-1.5 gap-2 text-sm font-medium shadow-sm transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>AI-Powered Resume Screening</span>
+            <span>AI screening and interviews</span>
           </Badge>
 
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
@@ -61,9 +74,9 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Upload your job description and resumes. Get a ranked shortlist with
-            detailed AI scoring in minutes — skills, experience, and education all
-            evaluated consistently.
+            Upload your job description and resumes. Get a ranked shortlist in
+            minutes. Then invite your top candidates to an AI interview, and read
+            the transcript with its hiring recommendation.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -82,7 +95,7 @@ export default function LandingPage() {
 
       {/* Feature cards */}
       <section className="px-6 py-12">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {features.map((f) => (
             <Card
               key={f.title}
@@ -103,7 +116,7 @@ export default function LandingPage() {
       {/* How it works */}
       <section className="px-6 py-12">
         <div className="max-w-5xl mx-auto">
-          <HowItWorks />
+          <HowItWorks showInterviewStep />
         </div>
       </section>
 
@@ -111,10 +124,10 @@ export default function LandingPage() {
       <section className="px-6 py-16">
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="p-8 space-y-4 border-primary/20 bg-primary/5">
-            <h3 className="text-xl font-bold">Sign in to save results</h3>
+            <h3 className="text-xl font-bold">Sign in to interview candidates</h3>
             <p className="text-sm text-muted-foreground">
-              Track all your evaluation runs, revisit results anytime, and see
-              cross-run stats on your dashboard.
+              AI interviews are available on a free account, along with saved run
+              history, cross-run stats, and candidate comparison.
             </p>
             <Button asChild className="w-full gap-2">
               <Link href="/login">
@@ -127,7 +140,7 @@ export default function LandingPage() {
             <h3 className="text-xl font-bold">Just want to try it?</h3>
             <p className="text-sm text-muted-foreground">
               No account needed. Submit a batch and get results via a shareable
-              link — no data saved to your profile.
+              link, with no data saved to your profile.
             </p>
             <Button asChild variant="outline" className="w-full gap-2">
               <Link href="/demo">

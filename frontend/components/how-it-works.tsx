@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 const steps = [
   {
     number: 1,
@@ -12,19 +14,45 @@ const steps = [
   {
     number: 3,
     title: "View Results",
-    description: "Receive an email when processing is complete. See ranked candidates with match scores",
+    description: "Receive an email when processing is complete. See ranked candidates with match scores.",
   },
 ];
 
-export function HowItWorks() {
+const interviewStep = {
+  number: 4,
+  title: "Interview",
+  description: "Invite top candidates to an AI interview and get a transcript with a hiring recommendation.",
+};
+
+/**
+ * Shared by the landing page and /demo.
+ *
+ * The interview step is opt-in and off by default because anonymous demo users
+ * cannot create interviews, so advertising it there would promise the one
+ * thing that flow deliberately excludes.
+ */
+export function HowItWorks({
+  showInterviewStep = false,
+}: {
+  showInterviewStep?: boolean;
+}) {
+  const visibleSteps = showInterviewStep ? [...steps, interviewStep] : steps;
+
   return (
     <div className="bg-card rounded-3xl p-8 max-w-3xl mx-auto shadow-sm border">
       <div className="flex items-center gap-2 mb-8">
         <span className="text-primary text-xl">✦</span>
         <h2 className="font-bold text-foreground tracking-tight text-lg">How it works</h2>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {steps.map((step) => (
+      {/* Four steps go 2x2 rather than 4-up: this card is max-w-3xl, so four
+          columns would leave ~150px per step. */}
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-8",
+          showInterviewStep ? "md:grid-cols-2" : "md:grid-cols-3"
+        )}
+      >
+        {visibleSteps.map((step) => (
           <div key={step.number} className="flex gap-4">
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shadow-sm shadow-primary/20">
               {step.number}

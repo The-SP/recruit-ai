@@ -48,7 +48,8 @@ export default function LoginPage() {
           </div>
           <h1 className="text-3xl font-bold">Welcome to Recruit AI</h1>
           <p className="text-muted-foreground">
-            Sign in to access your evaluation history and results.
+            Sign in to screen resumes, interview candidates, and keep every run
+            in one place.
           </p>
         </div>
 
