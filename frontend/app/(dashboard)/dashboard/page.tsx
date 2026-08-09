@@ -6,6 +6,7 @@ import {
   Clock,
   ExternalLink,
   Layers,
+  MessageSquareText,
   Plus,
   Users,
 } from "lucide-react";
@@ -91,7 +92,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           icon={Layers}
           label="Total Runs"
@@ -100,8 +101,14 @@ export default function DashboardPage() {
         />
         <StatCard
           icon={Users}
-          label="Candidates Evaluated"
+          label="Candidates"
           value={stats ? String(stats.total_candidates) : "—"}
+          loading={statsLoading}
+        />
+        <StatCard
+          icon={MessageSquareText}
+          label="Interviews Taken"
+          value={stats ? String(stats.interviews_completed) : "—"}
           loading={statsLoading}
         />
         <StatCard

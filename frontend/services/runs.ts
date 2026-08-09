@@ -64,6 +64,7 @@ export interface EvaluationRunListResponse {
 export interface DashboardStatsResponse {
   total_runs: number;
   total_candidates: number;
+  interviews_completed: number;
   last_active: string | null;
 }
 

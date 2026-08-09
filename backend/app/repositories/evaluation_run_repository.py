@@ -21,7 +21,12 @@ from app.models.evaluation_run import (
     ItemStatus,
     RunStatus,
 )
-from app.models.interview import Interview, InterviewTurn, TurnRole
+from app.models.interview import (
+    Interview,
+    InterviewStatus,
+    InterviewTurn,
+    TurnRole,
+)
 from app.repositories.interview_repository import InterviewRepository
 
 logger = init_logger(__name__)
@@ -347,6 +352,37 @@ class EvaluationRunRepository:
             select(func.coalesce(func.sum(EvaluationRun.total_count), 0))
             .where(EvaluationRun.user_id == user_id)
             .where(EvaluationRun.status != RunStatus.DRAFT.value)
+        )
+        return self.db.scalar(stmt) or 0
+
+    def count_completed_interviews_by_user(self, user_id: UUID) -> int:
+        """Interviews the candidate finished, across a user's non-draft runs.
+
+        Counts `assessed` as well as `completed`: assessment is an automatic
+        follow-on, so counting only `completed` would show a number that
+        silently drops as the worker catches up.
+        """
+        stmt = (
+            select(func.count())
+            .select_from(Interview)
+            .join(
+                EvaluationRunItem,
+                EvaluationRunItem.evaluation_id == Interview.evaluation_id,
+            )
+            .join(
+                EvaluationRun,
+                EvaluationRun.id == EvaluationRunItem.evaluation_run_id,
+            )
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .where(
+                Interview.status.in_(
+                    (
+                        InterviewStatus.COMPLETED.value,
+                        InterviewStatus.ASSESSED.value,
+                    )
+                )
+            )
         )
         return self.db.scalar(stmt) or 0
 

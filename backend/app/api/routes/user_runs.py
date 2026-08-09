@@ -530,5 +530,8 @@ def get_dashboard_stats(
     return DashboardStatsResponse(
         total_runs=run_repo.count_by_user(current_user.id),
         total_candidates=run_repo.sum_candidates_by_user(current_user.id),
+        interviews_completed=run_repo.count_completed_interviews_by_user(
+            current_user.id
+        ),
         last_active=run_repo.last_active_by_user(current_user.id),
     )

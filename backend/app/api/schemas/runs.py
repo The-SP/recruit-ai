@@ -69,4 +69,7 @@ class EvaluationRunListResponse(BaseModel):
 class DashboardStatsResponse(BaseModel):
     total_runs: int
     total_candidates: int
+    # Interviews the candidate actually finished. Opt-in per candidate, so this
+    # is expected to sit well below total_candidates.
+    interviews_completed: int
     last_active: datetime | None
