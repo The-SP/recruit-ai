@@ -4,7 +4,7 @@ One-time bootstrap: seed an env file into AWS SSM Parameter Store.
 Reads a `.env`-style file and writes each `KEY=value` as a parameter under a
 path prefix (default `/recruit-ai/prod/`), so `deploy/deploy.sh` can render
 `.env.prod` from Parameter Store on every deploy instead of it being hand-edited
-over SSH. See backend/docs/DEPLOY.md.
+over SSH. See backend/deploy/README.md.
 
 Run from a machine with `ssm:PutParameter` rights (NOT the read-only instance
 role). Uses the free default `alias/aws/ssm` KMS key for SecureStrings.

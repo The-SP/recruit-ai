@@ -79,6 +79,19 @@ vhost; certbot rewrites the live file in place to add the HTTPS server block
 and the HTTP -> HTTPS redirect. Copying this file over the live config after
 certbot has run will drop the TLS config; re-run certbot if that happens.
 
+**No script ever copies this file to the host.** `deploy.sh` does not touch
+nginx and neither does the GitHub Actions workflow, so a change here does not
+ship with a deploy — it is applied by hand:
+
+```bash
+sudo $EDITOR /etc/nginx/sites-available/recruitai.conf   # confirm the path first
+# make the same change inside the 443 server block certbot added
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The live file has two server blocks after certbot; per-location settings
+(`proxy_buffering off`, `client_max_body_size`) belong in the **443** one.
+
 ## Notes
 
 - Deploys are serialized by a `deploy-production` concurrency group, so two
