@@ -7,7 +7,7 @@ import json
 from collections.abc import Iterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,16 @@ from app.api.schemas.interview import (
 from app.core.file_upload import read_answer_audio_content
 from app.core.logger import init_logger
 from app.interview import engine
-from app.interview.service import apply_lazy_expiry, store_answer_audio
+from app.interview.service import (
+    apply_lazy_expiry,
+    get_interview_voice,
+    store_answer_audio,
+)
+from app.interview.speaker import (
+    VOICE_MIME_TYPE,
+    SynthesisError,
+    voice_response_headers,
+)
 from app.interview.transcriber import TranscriptionError, transcribe_answer
 from app.models.database import create_session
 from app.models.interview import Interview, InterviewMode, InterviewStatus
@@ -55,7 +64,7 @@ def _sse_frame(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _event_frame(event: engine.EngineEvent, content: str) -> str | None:
+def _event_frame(event: engine.EngineEvent, content: str, voice: bool) -> str | None:
     """Map one EngineEvent to its SSE frame (the thin side of the seam).
 
     Returns None for events with no candidate-facing frame; the protocol is
@@ -70,7 +79,12 @@ def _event_frame(event: engine.EngineEvent, content: str) -> str | None:
     if isinstance(event, engine.AnswerAccepted):
         return _sse_frame("ack", {"answer_seq": event.answer_seq, "content": content})
     if isinstance(event, engine.InterviewerTurn):
-        return _sse_frame("turn", build_turn_out(event.turn).model_dump(mode="json"))
+        # `voice` must be threaded through here, not defaulted: a live turn that
+        # arrived over SSE and the same turn refetched from GET have to agree
+        # about whether it can be spoken.
+        return _sse_frame(
+            "turn", build_turn_out(event.turn, voice).model_dump(mode="json")
+        )
     if isinstance(event, engine.StateChanged):
         return _sse_frame(
             "state",
@@ -127,6 +141,43 @@ def start_interview(
     return build_state_response(interview, turns)
 
 
+@router.get("/{token}/voice/{key}")
+def get_interview_voice_clip(
+    token: str, key: str, db: Session = Depends(get_db)
+) -> Response:
+    """The interviewer's speech for one turn, cached or synthesized on demand.
+
+    This is deliberately the one audio route on the candidate token surface.
+    The rule it appears to break -- no audio under /interviews/{token} -- is
+    about candidate *recordings*, which are recruiter-only evidence; the
+    interviewer's own voice is inherently candidate-facing.
+
+    Serving is a lazy cache rather than a strict lookup, which is what lets the
+    precompute task be a pure optimization: if it never ran, the first fetch
+    pays the latency and the interview is otherwise unaffected. `key` is
+    resolved against this interview's own script and turns, so an unknown key
+    costs a 404 rather than a model call, and each real key is synthesized at
+    most once before it is cached.
+
+    Deliberately `def`, not `async def`, like the answer routes: a cache miss is
+    a multi-second blocking model call, and on the event loop it would stall
+    every other request -- including other candidates' in-flight SSE streams.
+    """
+    interview = _load_by_token(db, token)
+
+    try:
+        content = get_interview_voice(db, interview, key)
+    except SynthesisError as e:
+        raise ServiceUnavailableError(
+            "We couldn't load the audio for this question. The question is on "
+            "screen — you can read it and answer normally."
+        ) from e
+
+    return Response(
+        content=content, media_type=VOICE_MIME_TYPE, headers=voice_response_headers()
+    )
+
+
 def _precheck_answer(token: str, after_seq: int, expected_mode: InterviewMode) -> UUID:
     """Check the mode gate and the engine's answer rules before streaming
     starts, so failures get real HTTP codes. Returns the interview id.
@@ -178,13 +229,14 @@ def _answer_stream(
             yield _sse_frame("error", {"detail": "Interview not found."})
             return
         interview_id = interview.id
+        voice = interview.voice_on
         for event in engine.submit_answer(db, interview, content, after_seq):
             if isinstance(event, engine.InterviewClosed):
                 # Routes dispatch, workers execute -- the same split as
                 # batch.py. Keeps app.worker out of the engine.
                 assess_interview.delay(str(event.interview_id))
                 continue
-            frame = _event_frame(event, content)
+            frame = _event_frame(event, content, voice)
             if frame is not None:
                 yield frame
 

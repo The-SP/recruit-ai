@@ -15,16 +15,26 @@ export interface InterviewTurnData {
   /** A recording is attached to this answer. The path never crosses the API;
    * recruiters fetch bytes from the JWT-gated endpoint. */
   has_audio?: boolean;
+  /** Which synthesized clip speaks this interviewer turn. A slot name, not a
+   * storage path, and only meaningful together with the invite token. Null on
+   * candidate turns and on every turn when the interview's voice is off. */
+  voice_key?: string | null;
 }
 
 /** How the candidate answers. Snapshotted per interview at creation, so it is
  * read from the interview, never from a client-side flag. */
 export type InterviewMode = "text" | "audio";
 
+/** Whether the interviewer's turns are read aloud. Snapshotted per interview
+ * exactly like InterviewMode, and read the same way — an invite minted while
+ * voice was on keeps its audio after the deployment flips it off. */
+export type InterviewVoice = "on" | "off";
+
 /** Candidate-facing state; mirrors InterviewStateResponse. */
 export interface InterviewState {
   status: string;
   answer_mode: InterviewMode;
+  voice_mode: InterviewVoice;
   job_title: string | null;
   company_name: string | null;
   question_number: number;
@@ -90,6 +100,7 @@ export interface InterviewDetail {
   access_token: string;
   model_name: string;
   answer_mode: InterviewMode;
+  voice_mode: InterviewVoice;
   questions_count: number;
   current_question_index: number;
   questions: InterviewQuestionData[];

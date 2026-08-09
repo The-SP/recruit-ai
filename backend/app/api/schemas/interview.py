@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.config import Config
 from app.interview import state
+from app.interview.speaker import voice_key_for_turn
 from app.models.interview import Interview, InterviewTurn
 from app.schemas.interview import InterviewScript
 
@@ -28,6 +29,11 @@ class TurnOut(BaseModel):
     # must not cross the API, and this model also feeds the candidate's SSE
     # `turn` frames. Recruiters fetch the bytes from the JWT-gated endpoint.
     has_audio: bool = False
+    # Which synthesized clip speaks this turn, for the candidate's player. A
+    # slot name, not a storage path -- and useless without the invite token,
+    # which is what makes it safe on a model the recruiter surface shares.
+    # None on candidate turns, and on every turn when voice is off.
+    voice_key: str | None = None
 
 
 class QuestionOut(BaseModel):
@@ -56,6 +62,9 @@ class InterviewStateResponse(BaseModel):
     # InterviewMode, from the row's creation-time snapshot. The client renders
     # the recorder or the textarea from this and nothing else.
     answer_mode: str
+    # InterviewVoice, same snapshot discipline: the client decides whether to
+    # play question audio from this, never from a build-time flag.
+    voice_mode: str
     job_title: str | None = None
     company_name: str | None = None
     question_number: int
@@ -85,6 +94,7 @@ class InterviewDetailResponse(BaseModel):
     access_token: str
     model_name: str
     answer_mode: str
+    voice_mode: str
     questions_count: int
     current_question_index: int
     questions: list[QuestionOut] = Field(default_factory=list)
@@ -119,7 +129,15 @@ def _questions_from_script(script_data: dict[str, Any]) -> list[QuestionOut]:
     ]
 
 
-def build_turn_out(turn: InterviewTurn) -> TurnOut:
+def build_turn_out(turn: InterviewTurn, voice: bool) -> TurnOut:
+    """One turn for the wire. `voice` is Interview.voice_on, passed as a bool
+    rather than the interview itself so this stays a pure turn mapper.
+
+    Required rather than defaulted: a caller that omitted it would emit turns
+    with no voice_key, so live SSE turns would lose their audio while the same
+    turns refetched from GET kept it. mypy enforcing that is worth more than a
+    default that is wrong every time it is used.
+    """
     return TurnOut(
         seq=turn.seq,
         role=turn.role,
@@ -128,6 +146,7 @@ def build_turn_out(turn: InterviewTurn) -> TurnOut:
         content=turn.content,
         created_at=turn.created_at,
         has_audio=turn.audio_path is not None,
+        voice_key=voice_key_for_turn(turn) if voice else None,
     )
 
 
@@ -135,15 +154,17 @@ def build_state_response(
     interview: Interview, turns: list[InterviewTurn]
 ) -> InterviewStateResponse:
     grounding = interview.grounding or {}
+    voice = interview.voice_on
     return InterviewStateResponse(
         status=interview.status,
         answer_mode=interview.answer_mode,
+        voice_mode=interview.voice_mode,
         job_title=grounding.get("job_title"),
         company_name=grounding.get("company_name"),
         question_number=state.question_number(interview),
         total_questions=state.total_questions(interview),
         time_remaining_seconds=state.time_remaining_seconds(interview),
-        turns=[build_turn_out(t) for t in turns],
+        turns=[build_turn_out(t, voice) for t in turns],
     )
 
 
@@ -164,6 +185,7 @@ def build_detail_response(
     interview: Interview, turns: list[InterviewTurn]
 ) -> InterviewDetailResponse:
     questions = _questions_from_script(interview.question_script)
+    voice = interview.voice_on
     return InterviewDetailResponse(
         interview_id=interview.id,
         status=interview.status,
@@ -171,10 +193,13 @@ def build_detail_response(
         access_token=interview.access_token,
         model_name=interview.model_name,
         answer_mode=interview.answer_mode,
+        voice_mode=interview.voice_mode,
         questions_count=len(questions),
         current_question_index=interview.current_question_index,
-        questions=questions,
-        turns=[build_turn_out(t) for t in turns],
+        # Recruiters get voice_key too: they have their own JWT-gated endpoint
+        # for the clips, so the key is actionable on this surface. (It was
+        # withheld here until that endpoint existed.)
+        turns=[build_turn_out(t, voice) for t in turns],
         assessment=interview.assessment,
         assessment_error=interview.assessment_error,
         expires_at=interview.expires_at,

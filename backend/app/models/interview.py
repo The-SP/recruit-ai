@@ -42,6 +42,17 @@ class InterviewMode(str, Enum):
     AUDIO = "audio"
 
 
+class InterviewVoice(str, Enum):
+    """Whether the interviewer's turns are read aloud. Deployment-level
+    (Config.INTERVIEW_VOICE), snapshotted per interview for the same reason
+    answer_mode is: synthesized audio either exists for an interview or it
+    doesn't, and an env flip must not leave a live interview asking for speech
+    nobody ever generated."""
+
+    OFF = "off"
+    ON = "on"
+
+
 class Interview(Base):
     """An AI interview for one scored candidate-job pair.
 
@@ -82,6 +93,13 @@ class Interview(Base):
         String(10), server_default=InterviewMode.TEXT.value
     )
 
+    # InterviewVoice, snapshotted from Config.INTERVIEW_VOICE at creation.
+    # Synthesized speech is addressed by a key derived from the turn, so there
+    # is nothing per-turn to record -- this flag is the whole schema cost.
+    voice_mode: Mapped[str] = mapped_column(
+        String(3), server_default=InterviewVoice.OFF.value
+    )
+
     # Progress state. Invariant: only ever updated in the same commit that
     # inserts the corresponding turn row (see InterviewRepository).
     current_question_index: Mapped[int] = mapped_column(default=0)
@@ -106,6 +124,16 @@ class Interview(Base):
         cascade="all, delete-orphan",
         order_by="InterviewTurn.seq",
     )
+
+    @property
+    def voice_on(self) -> bool:
+        """Whether this interview's turns are spoken.
+
+        One home for the predicate: the column stores InterviewVoice's value,
+        and comparing against `.value` by hand at each call site is how one of
+        them ends up subtly different from the rest.
+        """
+        return self.voice_mode == InterviewVoice.ON.value
 
     def __repr__(self) -> str:
         return (

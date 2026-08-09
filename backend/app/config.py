@@ -38,6 +38,17 @@ class Config:
     # Answer mode for this deployment: "text" (typed) or "audio" (spoken,
     # transcribed via the interview model).
     INTERVIEW_MODE: str = os.getenv("INTERVIEW_MODE", "text")
+    # Whether the interviewer's turns are read aloud: "on" or "off". Separate
+    # from INTERVIEW_MODE on purpose -- synthesis is by far the most expensive
+    # call in the pipeline, so spoken questions and spoken answers have to be
+    # affordable independently. Snapshotted onto each interview at creation.
+    INTERVIEW_VOICE: str = os.getenv("INTERVIEW_VOICE", "off")
+    # Must be a TTS model: langchain-google-genai only defaults the response
+    # modality to AUDIO when the model name ends in "-tts". There is no voice
+    # setting -- that package cannot carry speech_config (see the phase 3 plan).
+    INTERVIEW_TTS_MODEL_NAME: str = os.getenv(
+        "INTERVIEW_TTS_MODEL_NAME", "google_genai:gemini-2.5-flash-preview-tts"
+    )
 
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO

@@ -11,19 +11,24 @@ let playingElement: HTMLAudioElement | null = null;
 type PlayerState = "idle" | "loading" | "error";
 
 /**
- * Play control for one recorded answer, beside its transcript.
+ * Click-to-play control for one clip beside its transcript line.
  *
- * Audio is opt-in per answer: the transcript stays the reading surface, and
- * bytes are fetched lazily on the first play, then cached for as long as this
- * control is mounted.
+ * Serves both directions of interview audio on the recruiter surface: a
+ * candidate's recorded answer, and the interviewer's spoken question. Both are
+ * opt-in per turn — the transcript stays the reading surface — and both fetch
+ * lazily on first play, then cache for as long as the control is mounted.
+ *
+ * The candidate's own surface does NOT use this for questions: there, playback
+ * is sequential and auto-starting, which needs the single shared element in
+ * useInterviewVoice. Here every clip is an independent click.
  */
 export function TurnAudioPlayer({
-  seq,
   onFetch,
+  label = "Play recording",
 }: {
-  seq: number;
   /** Bound by the owning page; the shared transcript never calls a service. */
-  onFetch: (seq: number) => Promise<Blob>;
+  onFetch: () => Promise<Blob>;
+  label?: string;
 }) {
   const [state, setState] = useState<PlayerState>("idle");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -57,7 +62,7 @@ export function TurnAudioPlayer({
 
     setState("loading");
     try {
-      const blob = await onFetch(seq);
+      const blob = await onFetch();
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
       const element = new Audio(url);
@@ -91,7 +96,7 @@ export function TurnAudioPlayer({
       type="button"
       onClick={toggle}
       disabled={state === "loading"}
-      aria-label={isPlaying ? "Pause recording" : "Play recording"}
+      aria-label={isPlaying ? `Pause: ${label}` : label}
       className="inline-flex items-center gap-1.5 text-[11px] font-semibold opacity-80 hover:opacity-100 disabled:opacity-50 cursor-pointer"
     >
       {state === "loading" ? (
@@ -101,7 +106,7 @@ export function TurnAudioPlayer({
       ) : (
         <Play className="w-3.5 h-3.5" />
       )}
-      {isPlaying ? "Pause" : "Play recording"}
+      {isPlaying ? "Pause" : label}
     </button>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ export function InterviewTranscript({
   showTyping = false,
   autoScroll = true,
   onFetchTurnAudio,
+  renderQuestionAudio,
 }: {
   turns: InterviewTurnData[];
   showTyping?: boolean;
@@ -24,6 +25,13 @@ export function InterviewTranscript({
   /** Bound by the owning (recruiter) page to fetch one answer's recording.
    * Omitted on the candidate surface, which never serves audio back. */
   onFetchTurnAudio?: (seq: number) => Promise<Blob>;
+  /** The control that plays one interviewer turn aloud, supplied by the owning
+   * page. A render slot rather than a set of props because the two surfaces
+   * play questions genuinely differently -- the recruiter clicks independent
+   * clips, the candidate gets sequential autoplay from one shared element --
+   * and threading either one's playback state through here would put a flow's
+   * internals inside a component both flows share. */
+  renderQuestionAudio?: (turn: InterviewTurnData) => ReactNode;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +60,15 @@ export function InterviewTranscript({
               {turn.content}
               {isCandidate && turn.has_audio && onFetchTurnAudio && (
                 <div className="mt-2 pt-2 border-t border-primary-foreground/20">
-                  <TurnAudioPlayer seq={turn.seq} onFetch={onFetchTurnAudio} />
+                  <TurnAudioPlayer onFetch={() => onFetchTurnAudio(turn.seq)} />
+                </div>
+              )}
+              {/* Block-level wrapper, not an inline control: the bubble is
+                  whitespace-pre-wrap, so an inline button flows into the last
+                  line of the question and sits on top of the text. */}
+              {!isCandidate && turn.voice_key && renderQuestionAudio && (
+                <div className="mt-2 pt-2 border-t border-border/60">
+                  {renderQuestionAudio(turn)}
                 </div>
               )}
             </div>

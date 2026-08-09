@@ -20,6 +20,7 @@ import {
   InterviewAssessmentView,
 } from "@/components/interview/assessment-view";
 import { InterviewTranscript } from "@/components/interview/transcript";
+import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import {
   interviewStatusStyles,
 } from "@/lib/evaluation-styles";
 import type { ResumePanelState } from "@/lib/evaluation-types";
-import type { InterviewDetail } from "@/lib/interview-types";
+import type { InterviewDetail, InterviewTurnData } from "@/lib/interview-types";
 import { useInviteActions } from "@/lib/use-invite-actions";
 
 /**
@@ -54,6 +55,7 @@ export function RecruiterInterviewView({
   onReissue,
   onAssess,
   onFetchTurnAudio,
+  onFetchQuestionAudio,
 }: {
   backHref: string;
   candidateName: string | null;
@@ -65,6 +67,7 @@ export function RecruiterInterviewView({
   /** Bound by the page; passed straight through to the transcript so this
    * component stays service-free. */
   onFetchTurnAudio?: (seq: number) => Promise<Blob>;
+  onFetchQuestionAudio?: (key: string) => Promise<Blob>;
 }) {
   const {
     isWorking,
@@ -77,6 +80,18 @@ export function RecruiterInterviewView({
   const [resumePanel, setResumePanel] = useState<ResumePanelState | null>(null);
 
   const displayName = candidateName ?? resumeFilename ?? "Candidate";
+
+  // Independent click-to-play per question, unlike the candidate's queued
+  // autoplay. The transcript takes a render slot rather than either flow's
+  // playback state, so the two models never meet in shared code.
+  const renderQuestionAudio = onFetchQuestionAudio
+    ? (turn: InterviewTurnData) => (
+        <TurnAudioPlayer
+          onFetch={() => onFetchQuestionAudio(turn.voice_key!)}
+          label="Play question"
+        />
+      )
+    : undefined;
 
   const handleReissue = () => runAction(onReissue);
   const handleAssess = () => runAction(onAssess);
@@ -147,7 +162,8 @@ export function RecruiterInterviewView({
               {displayName} — Interview
             </h1>
             <p className="text-xs text-muted-foreground mt-1">
-              {interviewModeLabels[interview.answer_mode] ?? interview.answer_mode} ·{" "}
+              {interviewModeLabels[interview.answer_mode] ?? interview.answer_mode}
+              {interview.voice_mode === "on" && " · questions read aloud"} ·{" "}
               {interview.questions_count} questions · created{" "}
               {new Date(interview.created_at).toLocaleDateString()}
             </p>
@@ -368,6 +384,7 @@ export function RecruiterInterviewView({
                 turns={interview.turns}
                 autoScroll={false}
                 onFetchTurnAudio={onFetchTurnAudio}
+                renderQuestionAudio={renderQuestionAudio}
               />
             </CollapsibleContent>
           </Collapsible>
@@ -376,6 +393,7 @@ export function RecruiterInterviewView({
             turns={interview.turns}
             autoScroll={false}
             onFetchTurnAudio={onFetchTurnAudio}
+            renderQuestionAudio={renderQuestionAudio}
           />
         )}
       </div>

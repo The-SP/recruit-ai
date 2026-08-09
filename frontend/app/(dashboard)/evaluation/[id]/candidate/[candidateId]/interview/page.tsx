@@ -7,6 +7,7 @@ import type { InterviewDetail } from "@/lib/interview-types";
 import type { CandidateBreakdown } from "@/services/batch";
 import {
   assessRunCandidateInterview,
+  fetchInterviewQuestionAudio,
   fetchInterviewTurnAudio,
   getRunCandidateBreakdown,
   getRunCandidateInterview,
@@ -62,6 +63,11 @@ export default function RunCandidateInterviewPage({
     [runId, candidateId]
   );
 
+  const handleFetchQuestionAudio = useCallback(
+    (key: string) => fetchInterviewQuestionAudio(runId, candidateId, key),
+    [runId, candidateId]
+  );
+
   return (
     <RecruiterInterviewView
       backHref={`/evaluation/${runId}`}
@@ -72,6 +78,7 @@ export default function RunCandidateInterviewPage({
       onReissue={handleReissue}
       onAssess={handleAssess}
       onFetchTurnAudio={handleFetchTurnAudio}
+      onFetchQuestionAudio={handleFetchQuestionAudio}
     />
   );
 }

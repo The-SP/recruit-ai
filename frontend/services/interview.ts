@@ -16,6 +16,25 @@ export async function startInterview(token: string): Promise<InterviewState> {
   });
 }
 
+/**
+ * Fetch the interviewer's synthesized speech for one turn.
+ *
+ * apiFetch rather than apiRequest, which ends in res.json(): the endpoint
+ * returns audio bytes. And deliberately NOT a bare `<audio src>` — the
+ * interview router is included with `dependencies=[Depends(verify_api_key)]`
+ * (backend api/main.py), so the request needs an X-API-Key header that an
+ * <audio> element cannot send. Same shape as fetchInterviewTurnAudio.
+ *
+ * The clip is cached server-side after the first request, so a slow first call
+ * (synthesis) is followed by fast ones.
+ */
+export async function fetchVoiceClip(token: string, key: string): Promise<Blob> {
+  const res = await apiFetch(`/interviews/${token}/voice/${key}`, {
+    headers: authHeaders(),
+  });
+  return res.blob();
+}
+
 export interface AnswerStreamHandlers {
   /** content is the answer text the server committed. The audio path has no
    * other way to learn it; the typed path can use it instead of its own draft. */

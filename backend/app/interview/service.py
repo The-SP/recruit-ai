@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.exceptions import NotFoundError, ValidationError
 from app.config import Config
 from app.core.file_storage import (
+    file_exists,
     get_file_content,
     get_interview_audio_folder,
     save_uploaded_file,
@@ -14,8 +15,20 @@ from app.core.file_storage import (
 from app.core.logger import init_logger
 from app.interview.constants import ANSWER_AUDIO_EXTENSIONS
 from app.interview.question_generator import build_grounding, generate_script
+from app.interview.speaker import (
+    is_safe_voice_key,
+    resolve_voice_text,
+    synthesize_and_store,
+    voice_storage_path,
+)
 from app.models.evaluation_run import EvaluationRun
-from app.models.interview import Interview, InterviewMode, InterviewStatus, TurnRole
+from app.models.interview import (
+    Interview,
+    InterviewMode,
+    InterviewStatus,
+    InterviewVoice,
+    TurnRole,
+)
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
@@ -24,7 +37,7 @@ from app.repositories.evaluation_run_repository import (
 )
 from app.repositories.interview_repository import OVERDUE_STATUSES, InterviewRepository
 from app.repositories.job_repository import JobRepository
-from app.worker.interview_tasks import assess_interview
+from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
 
 logger = init_logger(__name__)
 
@@ -107,6 +120,22 @@ def _configured_mode() -> InterviewMode:
         return InterviewMode.TEXT
 
 
+def _configured_voice() -> InterviewVoice:
+    """The deployment's voice setting, or OFF if the env var is nonsense.
+
+    Degrading to a silent (but complete) interview beats refusing to mint
+    invites over a typo -- the questions are on screen either way.
+    """
+    try:
+        return InterviewVoice(Config.INTERVIEW_VOICE)
+    except ValueError:
+        logger.warning(
+            f"Invalid INTERVIEW_VOICE '{Config.INTERVIEW_VOICE}'; falling back to "
+            f"'{InterviewVoice.OFF.value}'"
+        )
+        return InterviewVoice.OFF
+
+
 def create_interview(
     db: Session, run: EvaluationRun, candidate_id: UUID
 ) -> tuple[Interview, bool]:
@@ -141,6 +170,7 @@ def create_interview(
     # generated opening tells the candidate how to answer, so both have to come
     # from the same read.
     mode = _configured_mode()
+    voice = _configured_voice()
 
     grounding = build_grounding(job, candidate, evaluation)
     script = generate_script(grounding, mode)
@@ -152,6 +182,7 @@ def create_interview(
             grounding=grounding,
             model_name=Config.INTERVIEW_MODEL_NAME,
             answer_mode=mode.value,
+            voice_mode=voice.value,
         )
     except IntegrityError:
         # Two clicks raced: both passed the check above while generation ran
@@ -167,6 +198,13 @@ def create_interview(
             "returning the interview that won"
         )
         return apply_lazy_expiry(db, existing), False
+
+    if voice is InterviewVoice.ON:
+        # Warm the cache for every slot whose text is verbatim from the frozen
+        # script, so the candidate never waits on the questions that matter.
+        # Routes dispatch, workers execute -- the same split as assessment. A
+        # failure here is invisible: the audio endpoint synthesizes on demand.
+        synthesize_interview_voice.delay(str(interview.id))
 
     return interview, True
 
@@ -261,6 +299,59 @@ def store_answer_audio(
         f"turn-{seq}.{extension}",
         content,
     )
+
+
+def get_interview_voice(db: Session, interview: Interview, key: str) -> bytes:
+    """One interviewer clip for the candidate: cached if present, synthesized
+    on demand if not.
+
+    The cache miss is what lets precompute be a pure optimization -- if the
+    task never ran, failed, or no worker was up, the interview still speaks;
+    the first fetch just pays the synthesis latency.
+
+    Raises NotFoundError when the key names nothing in this interview, which is
+    also the bound on what an invite token can be made to spend: text comes
+    only from this interview's own script or turns, and each real key is
+    synthesized at most once before it is cached. SynthesisError propagates for
+    the route to map to a 503.
+    """
+    if not interview.voice_on or not is_safe_voice_key(key):
+        raise NotFoundError("Interview audio", key)
+
+    # Cache hit short-circuits before any query or script parse. A stored clip
+    # was written through the resolver below, so its existence already proves
+    # the key was legitimate -- re-deriving that on every replay would spend a
+    # turns query and a script validation to learn what the file says. The key
+    # pattern is still checked first, above: it guards the filename this
+    # interpolates, and skipping the resolver skips nothing else.
+    path = voice_storage_path(interview.id, key)
+    if file_exists(path):
+        return get_file_content(path)
+
+    turns = InterviewRepository(db).get_turns(interview.id)
+    text = resolve_voice_text(interview, turns, key)
+    if text is None:
+        raise NotFoundError("Interview audio", key)
+
+    logger.info(f"Synthesizing interview {interview.id} voice key '{key}' on demand")
+    return synthesize_and_store(interview.id, key, text)
+
+
+def get_owned_interview_voice(
+    db: Session, run: EvaluationRun, candidate_id: UUID, key: str
+) -> bytes:
+    """One interviewer clip for the recruiter, resolved by run membership.
+
+    The same lazy path the candidate endpoint uses, so a recruiter reviewing an
+    interview can hear a question the candidate never played — at the cost of
+    synthesizing it then. That is bounded the same way: only keys belonging to
+    this interview resolve, and each is paid for once before it is cached.
+
+    Authorization is run-membership only, as everywhere else here; the user_id
+    filter lives in the route's owned-run loader.
+    """
+    interview = get_interview(db, run, candidate_id)
+    return get_interview_voice(db, interview, key)
 
 
 def get_turn_audio(

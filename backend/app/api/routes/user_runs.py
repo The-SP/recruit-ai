@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
-from app.api.exceptions import NotFoundError, ValidationError
+from app.api.exceptions import (
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.api.schemas.interview import (
     InterviewDetailResponse,
     InterviewSummaryResponse,
@@ -36,10 +40,16 @@ from app.core.job_description_parser import parse_job_description
 from app.interview.service import (
     create_interview,
     get_interview,
+    get_owned_interview_voice,
     get_turn_audio,
     list_interview_rows,
     reissue_interview,
     request_assessment,
+)
+from app.interview.speaker import (
+    VOICE_MIME_TYPE,
+    SynthesisError,
+    voice_response_headers,
 )
 from app.models.evaluation_run import EvaluationRun, RunStatus
 from app.models.user import User
@@ -493,6 +503,33 @@ def assess_owned_candidate_interview(
     return build_detail_response(interview, turns)
 
 
+@runs_router.get("/{run_id}/candidate/{candidate_id}/interview/voice/{key}")
+def get_owned_candidate_interview_voice(
+    run_id: UUID,
+    candidate_id: UUID,
+    key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Response:
+    """The interviewer's spoken question for one turn, for recruiter review.
+
+    The recruiter twin of the candidate's /interviews/{token}/voice/{key}: same
+    clips, same lazy synthesis, different door. A recruiter has no invite token,
+    so this resolves the interview through run membership and the JWT instead.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    try:
+        content = get_owned_interview_voice(db, run, candidate_id, key)
+    except SynthesisError as e:
+        raise ServiceUnavailableError(
+            "We couldn't load the audio for this question. Please try again."
+        ) from e
+
+    return Response(
+        content=content, media_type=VOICE_MIME_TYPE, headers=voice_response_headers()
+    )
+
+
 @runs_router.get("/{run_id}/candidate/{candidate_id}/interview/audio/{seq}")
 def get_owned_candidate_interview_audio(
     run_id: UUID,
@@ -504,10 +541,14 @@ def get_owned_candidate_interview_audio(
     """The recording behind one answer, so a recruiter can hear what a
     transcript flattens.
 
-    Recruiter-only by construction: there is no audio route on the candidate
-    token surface. The bytes are served directly rather than as a presigned URL
-    — files are small, the storage facade returns bytes for both backends, and
-    presigning would open a second auth path outside the JWT.
+    Recruiter-only by construction. The candidate token surface does serve
+    audio — the interviewer's synthesized questions, at
+    GET /interviews/{token}/voice/{key} — but never this: a candidate's own
+    recording is evidence collected about them, and the asymmetry is the point.
+
+    The bytes are served directly rather than as a presigned URL — files are
+    small, the storage facade returns bytes for both backends, and presigning
+    would open a second auth path outside the JWT.
     """
     run = _load_owned_run(db, run_id, current_user)
     content, mime_type = get_turn_audio(db, run, candidate_id, seq)

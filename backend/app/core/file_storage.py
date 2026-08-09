@@ -50,6 +50,12 @@ def delete_file(file_path: str) -> bool:
     return storage.delete(file_path)
 
 
+def file_exists(file_path: str) -> bool:
+    """Whether a file is present on the configured backend."""
+    storage = get_storage()
+    return storage.exists(file_path)
+
+
 def ensure_folder(folder_path: str) -> None:
     """Ensure a local folder exists. S3 prefixes are created when files are uploaded."""
     if Config.USE_S3:
@@ -114,7 +120,12 @@ def get_batch_folder(run_id: UUID) -> str:
 
 
 def get_interview_audio_folder(interview_id: UUID) -> str:
-    """Get the folder path for one interview's recorded answers."""
+    """Get the folder path for one interview's audio.
+
+    Holds both directions: candidate answer recordings (turn-{seq}.{ext}) and
+    synthesized interviewer speech (tts-{key}.wav). One folder on purpose, so
+    delete_interview_audio sweeps both.
+    """
     return str(INTERVIEW_AUDIO_BASE / str(interview_id))
 
 

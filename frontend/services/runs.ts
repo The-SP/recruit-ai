@@ -203,3 +203,23 @@ export async function fetchInterviewTurnAudio(
   );
   return res.blob();
 }
+
+/**
+ * Fetch the interviewer's spoken question for one turn.
+ *
+ * The recruiter twin of the candidate's /interviews/{token}/voice/{key}: same
+ * clips, resolved through run membership and the JWT instead of an invite
+ * token. Keyed by voice_key (a script slot or a turn seq), not by turn seq
+ * alone — see the backend speaker module for why the two differ.
+ */
+export async function fetchInterviewQuestionAudio(
+  runId: string,
+  candidateId: string,
+  key: string
+): Promise<Blob> {
+  const res = await apiFetch(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/voice/${key}`,
+    { headers: authHeaders() }
+  );
+  return res.blob();
+}

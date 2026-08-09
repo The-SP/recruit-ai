@@ -9,14 +9,18 @@ import {
   Mic,
   Send,
   Timer,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { InterviewCountdown } from "@/components/interview/countdown";
+import { QuestionSpeaker } from "@/components/interview/question-speaker";
 import { AnswerRecorder } from "@/components/interview/recorder";
 import { InterviewTranscript } from "@/components/interview/transcript";
+import { useInterviewVoice } from "@/components/interview/use-interview-voice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,6 +32,7 @@ import type {
 } from "@/lib/interview-types";
 import { ApiError } from "@/services/api";
 import {
+  fetchVoiceClip,
   getInterviewState,
   startInterview,
   submitAnswer,
@@ -47,6 +52,15 @@ function InterviewPageInner() {
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draft, setDraft] = useState("");
+
+  // Voice is read from the interview's own snapshot, never a build-time flag.
+  // The fetcher is bound here so the shared hook stays free of the token and
+  // of any service import.
+  const fetchClip = useCallback(
+    (key: string) => fetchVoiceClip(token!, key),
+    [token]
+  );
+  const voice = useInterviewVoice(fetchClip, state?.voice_mode === "on");
 
   // GET state is the source of truth: rendered on mount, refetched after any
   // stream error. SSE events only advance live state between fetches.
@@ -81,11 +95,20 @@ function InterviewPageInner() {
 
   const handleStart = async () => {
     if (!token) return;
+    // Synchronously inside the click, before any await: this is the user
+    // gesture that unlocks audio playback for the rest of the interview.
+    // Awaiting first would spend the gesture and every question would need a
+    // manual tap.
+    voice.prime();
     setIsStarting(true);
     setNotice(null);
     try {
       const s = await startInterview(token);
       setState(s);
+      // The greeting and the first question arrive together and are spoken in
+      // order. Only turns that arrive after mount are ever queued, so a
+      // refresh restores the transcript silently.
+      voice.enqueue(s.turns.map((t) => t.voice_key));
     } catch (err) {
       setNotice(err instanceof ApiError ? err.message : "Could not start the interview.");
     } finally {
@@ -114,6 +137,10 @@ function InterviewPageInner() {
     },
     onTurn: (turn: InterviewTurnData) => {
       setState((prev) => (prev ? { ...prev, turns: [...prev.turns, turn] } : prev));
+      // Speak the reply as it lands. The text frame is rendered immediately and
+      // the clip is fetched alongside it, so a cache miss delays only the audio
+      // — the candidate can read and answer without waiting for it.
+      voice.enqueue([turn.voice_key]);
     },
     onState: (s: InterviewStateEvent) => {
       setState((prev) => (prev ? { ...prev, ...s } : prev));
@@ -139,6 +166,8 @@ function InterviewPageInner() {
 
     setIsSubmitting(true);
     setNotice(null);
+    // Answering means they are done listening; talking over them is rude.
+    voice.stop();
     await submitAnswer(token, content, nextAfterSeq(state), streamHandlers());
   };
 
@@ -150,6 +179,7 @@ function InterviewPageInner() {
 
     setIsSubmitting(true);
     setNotice(null);
+    voice.stop();
     return submitAudioAnswer(token, blob, nextAfterSeq(state), streamHandlers());
   };
 
@@ -193,6 +223,7 @@ function InterviewPageInner() {
   // The interview's own snapshot, never an env var or a client flag: an invite
   // minted under one mode stays that mode even after the deployment flips.
   const isAudioMode = state.answer_mode === "audio";
+  const isVoiceMode = state.voice_mode === "on";
 
   // Intro screen
   if (state.status === "created") {
@@ -251,6 +282,16 @@ function InterviewPageInner() {
                   to continue
                 </span>
               </div>
+              {isVoiceMode && (
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-5 h-5 text-primary shrink-0" />
+                  <span>
+                    Questions are{" "}
+                    <span className="font-semibold text-foreground">read aloud</span> —
+                    turn your sound on, or mute them and read instead
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Recording notice: shown before any microphone prompt and before
@@ -343,6 +384,22 @@ function InterviewPageInner() {
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {isVoiceMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={voice.toggleMute}
+              aria-label={voice.muted ? "Unmute questions" : "Mute questions"}
+              title={voice.muted ? "Questions are muted" : "Mute spoken questions"}
+              className="h-9 w-9 rounded-full cursor-pointer"
+            >
+              {voice.muted ? (
+                <VolumeX className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-primary" />
+              )}
+            </Button>
+          )}
           {!isDone && (
             <>
               <Badge variant="outline" className="font-semibold">
@@ -365,7 +422,22 @@ function InterviewPageInner() {
 
       {/* Transcript */}
       <div className="flex-1 py-6">
-        <InterviewTranscript turns={state.turns} showTyping={isSubmitting} />
+        <InterviewTranscript
+          turns={state.turns}
+          showTyping={isSubmitting}
+          renderQuestionAudio={
+            isVoiceMode
+              ? (turn) => (
+                  <QuestionSpeaker
+                    voiceKey={turn.voice_key!}
+                    status={voice.status}
+                    isActive={voice.activeKey === turn.voice_key}
+                    onReplay={voice.replay}
+                  />
+                )
+              : undefined
+          }
+        />
       </div>
 
       {/* Composer or done note */}
@@ -377,7 +449,7 @@ function InterviewPageInner() {
           </p>
         </Card>
       ) : isAudioMode ? (
-        <AnswerRecorder onSubmit={handleSubmitAudio} />
+        <AnswerRecorder onSubmit={handleSubmitAudio} onRecordingStart={voice.stop} />
       ) : (
         <div className="space-y-3 pb-2">
           {notice && (

@@ -50,6 +50,7 @@ class InterviewRepository:
         grounding: dict[str, Any],
         model_name: str,
         answer_mode: str,
+        voice_mode: str,
     ) -> Interview:
         """Create an interview invite with a fresh token and expiry."""
         interview = Interview(
@@ -60,6 +61,7 @@ class InterviewRepository:
             grounding=grounding,
             model_name=model_name,
             answer_mode=answer_mode,
+            voice_mode=voice_mode,
             expires_at=default_expires_at(),
         )
         self.db.add(interview)

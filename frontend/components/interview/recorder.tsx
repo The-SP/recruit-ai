@@ -40,6 +40,10 @@ interface AnswerRecorderProps {
    * The recorder keeps the blob on failure so Retry re-sends the same audio
    * instead of making the candidate speak again. */
   onSubmit: (blob: Blob) => Promise<string | null>;
+  /** Fired the moment capture begins. The page uses it to silence the spoken
+   * question: an open mic with the interviewer still talking records the
+   * interviewer, and that audio is transcribed into the candidate's answer. */
+  onRecordingStart?: () => void;
 }
 
 function pickMimeType(): string | null {
@@ -55,7 +59,7 @@ function canRecordAudio(): boolean {
  * subscribe to; useSyncExternalStore still needs a subscribe function. */
 const subscribeNever = () => () => {};
 
-export function AnswerRecorder({ onSubmit }: AnswerRecorderProps) {
+export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderProps) {
   const [uiState, setUiState] = useState<RecorderState>("permission_needed");
   const [elapsed, setElapsed] = useState(0);
   // Non-null means the last submit failed; it is also what turns the submit
@@ -127,6 +131,10 @@ export function AnswerRecorder({ onSubmit }: AnswerRecorderProps) {
       setUiState("permission_needed");
       return;
     }
+
+    // Before the recorder opens, not after: anything still playing would be
+    // captured by the mic and transcribed as if the candidate had said it.
+    onRecordingStart?.();
 
     releaseRecording();
     const recorder = new MediaRecorder(stream, { mimeType });
