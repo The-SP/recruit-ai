@@ -40,11 +40,18 @@ echo "==> Deploying ref '${REF}' from ${BACKEND_DIR}"
 AWS_REGION="${AWS_REGION}" SSM_PREFIX="${SSM_PREFIX}" OUTPUT=".env.prod" \
   "${SCRIPT_DIR}/render-env.sh"
 
+# --profile tools is load-bearing: the `migrate` service sits in that profile,
+# and a plain `build` skips it. `run --rm migrate` would then reuse a stale
+# image from an earlier deploy and fail *silently* -- an old image computes an
+# old alembic head, finds the DB already there, and exits 0 with no "Running
+# upgrade" line -- swapping in new code against the old schema. The image is
+# layer-identical to api's, so building it costs nothing.
 echo "==> Building images"
-docker compose -f "${COMPOSE_FILE}" build
+docker compose -f "${COMPOSE_FILE}" --profile tools build
 
 # Migrate before the swap so new code never serves against the old schema.
 # A build or migration failure aborts here, with the old stack still up.
+# Depends on the --profile tools build above having refreshed this image.
 echo "==> Applying database migrations"
 docker compose -f "${COMPOSE_FILE}" run --rm migrate
 
