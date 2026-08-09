@@ -7,7 +7,12 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.file_storage import delete_batch_folder, ensure_folder, get_batch_folder
+from app.core.file_storage import (
+    delete_batch_folder,
+    delete_interview_audio,
+    ensure_folder,
+    get_batch_folder,
+)
 from app.core.logger import init_logger
 from app.models.evaluation import CandidateEvaluation
 from app.models.evaluation_run import (
@@ -17,6 +22,7 @@ from app.models.evaluation_run import (
     RunStatus,
 )
 from app.models.interview import Interview, InterviewTurn, TurnRole
+from app.repositories.interview_repository import InterviewRepository
 
 logger = init_logger(__name__)
 
@@ -370,7 +376,11 @@ class EvaluationRunRepository:
         if not run:
             return False
 
-        # Delete folder first (before DB record)
+        # Delete stored files first (before the DB record): the cascade removes
+        # interviews and their turns, after which nothing points at the
+        # recordings any more.
+        for interview_id in InterviewRepository(self.db).get_ids_for_run(run_id):
+            delete_interview_audio(interview_id)
         delete_batch_folder(run_id)
 
         self.db.delete(run)

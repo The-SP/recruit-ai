@@ -6,6 +6,7 @@ import {
   ListChecks,
   Loader2,
   MessageSquareText,
+  Mic,
   Send,
   Timer,
   X,
@@ -14,17 +15,23 @@ import { useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { InterviewCountdown } from "@/components/interview/countdown";
+import { AnswerRecorder } from "@/components/interview/recorder";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import type { InterviewState, InterviewTurnData } from "@/lib/interview-types";
+import type {
+  InterviewState,
+  InterviewStateEvent,
+  InterviewTurnData,
+} from "@/lib/interview-types";
 import { ApiError } from "@/services/api";
 import {
   getInterviewState,
   startInterview,
   submitAnswer,
+  submitAudioAnswer,
 } from "@/services/interview";
 
 const MAX_ANSWER_LENGTH = 5000;
@@ -86,48 +93,64 @@ function InterviewPageInner() {
     }
   };
 
+  // Shared by both composers. The answer bubble is rendered from the ack's
+  // content, which is the text the server actually committed — for a spoken
+  // answer that is the only place it exists, and for a typed one it beats
+  // trusting the local draft.
+  const streamHandlers = () => ({
+    onAck: (answerSeq: number, content: string) => {
+      const answerTurn: InterviewTurnData = {
+        seq: answerSeq,
+        role: "candidate" as const,
+        kind: "answer" as const,
+        question_index: null,
+        content,
+        created_at: new Date().toISOString(),
+      };
+      setState((prev) =>
+        prev ? { ...prev, turns: [...prev.turns, answerTurn] } : prev
+      );
+      setDraft("");
+    },
+    onTurn: (turn: InterviewTurnData) => {
+      setState((prev) => (prev ? { ...prev, turns: [...prev.turns, turn] } : prev));
+    },
+    onState: (s: InterviewStateEvent) => {
+      setState((prev) => (prev ? { ...prev, ...s } : prev));
+    },
+    onDone: () => {
+      setIsSubmitting(false);
+    },
+    onError: (message: string) => {
+      setIsSubmitting(false);
+      setNotice(message);
+      // Whatever happened, the server is the source of truth now.
+      fetchState();
+    },
+  });
+
+  const nextAfterSeq = (s: InterviewState) =>
+    s.turns.length > 0 ? s.turns[s.turns.length - 1].seq : 0;
+
   const handleSubmit = async () => {
     if (!token || !state || isSubmitting) return;
     const content = draft.trim();
     if (!content) return;
 
-    const afterSeq = state.turns.length > 0 ? state.turns[state.turns.length - 1].seq : 0;
     setIsSubmitting(true);
     setNotice(null);
+    await submitAnswer(token, content, nextAfterSeq(state), streamHandlers());
+  };
 
-    await submitAnswer(token, content, afterSeq, {
-      onAck: (answerSeq) => {
-        const answerTurn: InterviewTurnData = {
-          seq: answerSeq,
-          role: "candidate",
-          kind: "answer",
-          question_index: null,
-          content,
-          created_at: new Date().toISOString(),
-        };
-        setState((prev) =>
-          prev ? { ...prev, turns: [...prev.turns, answerTurn] } : prev
-        );
-        setDraft("");
-      },
-      onTurn: (turn) => {
-        setState((prev) =>
-          prev ? { ...prev, turns: [...prev.turns, turn] } : prev
-        );
-      },
-      onState: (s) => {
-        setState((prev) => (prev ? { ...prev, ...s } : prev));
-      },
-      onDone: () => {
-        setIsSubmitting(false);
-      },
-      onError: (message) => {
-        setIsSubmitting(false);
-        setNotice(message);
-        // Whatever happened, the server is the source of truth now.
-        fetchState();
-      },
-    });
+  // Resolves to an error message, or null once the answer is committed. The
+  // recorder keeps the blob until it sees null, so Retry re-sends the same
+  // recording rather than making the candidate speak again.
+  const handleSubmitAudio = async (blob: Blob) => {
+    if (!token || !state || isSubmitting) return "Not ready to submit yet.";
+
+    setIsSubmitting(true);
+    setNotice(null);
+    return submitAudioAnswer(token, blob, nextAfterSeq(state), streamHandlers());
   };
 
   // Missing token or fatal error
@@ -167,6 +190,9 @@ function InterviewPageInner() {
   const hasCompany = state.company_name && state.company_name !== "null";
   const totalMinutes = Math.round((state.time_remaining_seconds ?? 900) / 60);
   const isDone = state.status === "completed" || state.status === "assessed";
+  // The interview's own snapshot, never an env var or a client flag: an invite
+  // minted under one mode stays that mode even after the deployment flips.
+  const isAudioMode = state.answer_mode === "audio";
 
   // Intro screen
   if (state.status === "created") {
@@ -214,14 +240,51 @@ function InterviewPageInner() {
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <Send className="w-5 h-5 text-primary shrink-0" />
+                {isAudioMode ? (
+                  <Mic className="w-5 h-5 text-primary shrink-0" />
+                ) : (
+                  <Send className="w-5 h-5 text-primary shrink-0" />
+                )}
                 <span>
-                  Type each answer, then press{" "}
+                  {isAudioMode ? "Speak each answer" : "Type each answer"}, then press{" "}
                   <span className="font-semibold text-foreground">Done answering</span>{" "}
                   to continue
                 </span>
               </div>
             </div>
+
+            {/* Recording notice: shown before any microphone prompt and before
+                the timer starts, because that is the last moment a candidate
+                can decline. */}
+            {isAudioMode && (
+              <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-2 text-xs text-muted-foreground leading-relaxed">
+                <p className="font-bold text-foreground text-sm">
+                  Before you start: this interview is recorded
+                </p>
+                <ul className="space-y-1.5 list-disc pl-4">
+                  <li>
+                    You answer out loud, so your microphone will be used to record
+                    each answer.
+                  </li>
+                  <li>
+                    Recordings are transcribed to text by an AI system. The
+                    transcript is what the recruiter and an AI assessment review.
+                  </li>
+                  <li>
+                    Your recordings are kept, and the recruiter may listen to them
+                    alongside the transcript.
+                  </li>
+                  <li>
+                    The questions and the assessment are AI-generated; the recruiter
+                    reviews the results.
+                  </li>
+                </ul>
+                <p className="font-medium text-foreground pt-1">
+                  By starting, you agree to be recorded and transcribed, and to have
+                  your recording reviewed as described.
+                </p>
+              </div>
+            )}
 
             <Button
               onClick={handleStart}
@@ -313,6 +376,8 @@ function InterviewPageInner() {
             Your interview has been submitted. The team will review it and follow up.
           </p>
         </Card>
+      ) : isAudioMode ? (
+        <AnswerRecorder onSubmit={handleSubmitAudio} />
       ) : (
         <div className="space-y-3 pb-2">
           {notice && (

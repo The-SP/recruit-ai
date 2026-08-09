@@ -34,6 +34,14 @@ class TurnKind(str, Enum):
     CLOSING = "closing"
 
 
+class InterviewMode(str, Enum):
+    """How the candidate gives answers. Deployment-level (Config.INTERVIEW_MODE),
+    snapshotted per interview — never a per-invite or per-turn choice."""
+
+    TEXT = "text"
+    AUDIO = "audio"
+
+
 class Interview(Base):
     """An AI interview for one scored candidate-job pair.
 
@@ -68,6 +76,11 @@ class Interview(Base):
 
     # Audit: which model generated, asks, and assesses
     model_name: Mapped[str] = mapped_column(String(100))
+
+    # InterviewMode, snapshotted from Config.INTERVIEW_MODE at creation.
+    answer_mode: Mapped[str] = mapped_column(
+        String(10), server_default=InterviewMode.TEXT.value
+    )
 
     # Progress state. Invariant: only ever updated in the same commit that
     # inserts the corresponding turn row (see InterviewRepository).
@@ -105,8 +118,10 @@ class InterviewTurn(Base):
     """One turn of the transcript. Append-only: never updated, never deleted.
 
     This is also the audit trail the hiring-AI regulatory exposure calls for.
-    Content is ALWAYS text, which is what keeps the voice swap (Phase 2) from
-    touching this table.
+    Content is ALWAYS text — in audio mode it is the verbatim transcript, so
+    the transcript stays the primary record and the assessment input. The audio
+    columns are set-once evidence attached to that text, written by the same
+    request that created the turn; content itself is never rewritten.
     """
 
     __tablename__ = "interview_turns"
@@ -125,6 +140,13 @@ class InterviewTurn(Base):
     kind: Mapped[str] = mapped_column(String(20))  # TurnKind
     question_index: Mapped[int | None] = mapped_column(default=None)
     content: Mapped[str] = mapped_column(Text)
+
+    # Set only on candidate answer turns in audio mode; NULL on every
+    # interviewer turn, every text-mode answer, and all pre-Phase-2 rows. The
+    # MIME type is stored rather than derived from the extension so the serving
+    # endpoint cannot drift from what the browser actually recorded.
+    audio_path: Mapped[str | None] = mapped_column(Text, default=None)
+    audio_mime_type: Mapped[str | None] = mapped_column(String(30), default=None)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

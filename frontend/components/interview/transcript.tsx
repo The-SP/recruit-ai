@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
 import { cn } from "@/lib/utils";
 import type { InterviewTurnData } from "@/lib/interview-types";
 
@@ -13,12 +14,16 @@ export function InterviewTranscript({
   turns,
   showTyping = false,
   autoScroll = true,
+  onFetchTurnAudio,
 }: {
   turns: InterviewTurnData[];
   showTyping?: boolean;
   /** Off for static read-back views (e.g. inside a collapsible), where
    * scrolling to the bottom on mount would yank the viewport. */
   autoScroll?: boolean;
+  /** Bound by the owning (recruiter) page to fetch one answer's recording.
+   * Omitted on the candidate surface, which never serves audio back. */
+  onFetchTurnAudio?: (seq: number) => Promise<Blob>;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +50,11 @@ export function InterviewTranscript({
               )}
             >
               {turn.content}
+              {isCandidate && turn.has_audio && onFetchTurnAudio && (
+                <div className="mt-2 pt-2 border-t border-primary-foreground/20">
+                  <TurnAudioPlayer seq={turn.seq} onFetch={onFetchTurnAudio} />
+                </div>
+              )}
             </div>
           </div>
         );

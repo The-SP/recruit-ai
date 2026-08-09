@@ -6,10 +6,16 @@ from sqlalchemy.orm import Session
 
 from app.api.exceptions import NotFoundError, ValidationError
 from app.config import Config
+from app.core.file_storage import (
+    get_file_content,
+    get_interview_audio_folder,
+    save_uploaded_file,
+)
 from app.core.logger import init_logger
+from app.interview.constants import ANSWER_AUDIO_EXTENSIONS
 from app.interview.question_generator import build_grounding, generate_script
 from app.models.evaluation_run import EvaluationRun
-from app.models.interview import Interview, InterviewStatus, TurnRole
+from app.models.interview import Interview, InterviewMode, InterviewStatus, TurnRole
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
@@ -85,6 +91,22 @@ def _has_candidate_answers(repo: InterviewRepository, interview: Interview) -> b
     )
 
 
+def _configured_mode() -> InterviewMode:
+    """The deployment's answer mode, or TEXT if the env var is nonsense.
+
+    Degrading to typing beats refusing to mint invites over a typo, and text
+    mode works everywhere.
+    """
+    try:
+        return InterviewMode(Config.INTERVIEW_MODE)
+    except ValueError:
+        logger.warning(
+            f"Invalid INTERVIEW_MODE '{Config.INTERVIEW_MODE}'; falling back to "
+            f"'{InterviewMode.TEXT.value}'"
+        )
+        return InterviewMode.TEXT
+
+
 def create_interview(
     db: Session, run: EvaluationRun, candidate_id: UUID
 ) -> tuple[Interview, bool]:
@@ -115,8 +137,13 @@ def create_interview(
     if not job:
         raise NotFoundError("Job", str(run.job_id))
 
+    # Read the env var once, here: the mode is snapshotted onto the row and the
+    # generated opening tells the candidate how to answer, so both have to come
+    # from the same read.
+    mode = _configured_mode()
+
     grounding = build_grounding(job, candidate, evaluation)
-    script = generate_script(grounding)
+    script = generate_script(grounding, mode)
 
     try:
         interview = interview_repo.create(
@@ -124,6 +151,7 @@ def create_interview(
             question_script=script.model_dump(mode="json"),
             grounding=grounding,
             model_name=Config.INTERVIEW_MODEL_NAME,
+            answer_mode=mode.value,
         )
     except IntegrityError:
         # Two clicks raced: both passed the check above while generation ran
@@ -216,3 +244,38 @@ def request_assessment(
     assess_interview.delay(str(interview.id))
     logger.info(f"Dispatched manual assessment for interview {interview.id}")
     return interview
+
+
+def store_answer_audio(
+    interview_id: UUID, seq: int, content: bytes, mime_type: str
+) -> str:
+    """Persist one recorded answer and return its storage reference.
+
+    Owns the layout (`interviews/{interview_id}/turn-{seq}.{ext}`) so the
+    filename convention stays in the interview domain rather than in a route.
+    Writes through the file_storage facade, so USE_S3 picks the backend.
+    """
+    extension = ANSWER_AUDIO_EXTENSIONS[mime_type]
+    return save_uploaded_file(
+        get_interview_audio_folder(interview_id),
+        f"turn-{seq}.{extension}",
+        content,
+    )
+
+
+def get_turn_audio(
+    db: Session, run: EvaluationRun, candidate_id: UUID, seq: int
+) -> tuple[bytes, str]:
+    """The recording behind one answer turn, for recruiter playback.
+
+    Returns (bytes, mime_type). Like everything else here, authorization is
+    run-membership only — the user_id filter lives in the route's owned-run
+    loader, which is what keeps this off the candidate token surface.
+    """
+    interview = get_interview(db, run, candidate_id)
+
+    turn = InterviewRepository(db).get_turn_by_seq(interview.id, seq)
+    if turn is None or turn.audio_path is None or turn.audio_mime_type is None:
+        raise NotFoundError("Interview answer recording", f"seq {seq}")
+
+    return get_file_content(turn.audio_path), turn.audio_mime_type

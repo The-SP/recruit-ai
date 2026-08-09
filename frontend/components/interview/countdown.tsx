@@ -3,7 +3,7 @@
 import { Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn, formatClock } from "@/lib/utils";
 
 /**
  * Local 1s countdown seeded from the server's time_remaining_seconds; every
@@ -32,9 +32,6 @@ export function InterviewCountdown({ seconds }: { seconds: number | null }) {
 
   if (seconds == null) return null;
 
-  const mm = Math.floor(remaining / 60);
-  const ss = String(remaining % 60).padStart(2, "0");
-
   return (
     <span
       className={cn(
@@ -44,7 +41,7 @@ export function InterviewCountdown({ seconds }: { seconds: number | null }) {
       title="Time remaining"
     >
       <Clock className="w-3.5 h-3.5" />
-      {mm}:{ss}
+      {formatClock(remaining)}
     </span>
   );
 }

@@ -12,11 +12,19 @@ export interface InterviewTurnData {
   question_index: number | null;
   content: string;
   created_at: string;
+  /** A recording is attached to this answer. The path never crosses the API;
+   * recruiters fetch bytes from the JWT-gated endpoint. */
+  has_audio?: boolean;
 }
+
+/** How the candidate answers. Snapshotted per interview at creation, so it is
+ * read from the interview, never from a client-side flag. */
+export type InterviewMode = "text" | "audio";
 
 /** Candidate-facing state; mirrors InterviewStateResponse. */
 export interface InterviewState {
   status: string;
+  answer_mode: InterviewMode;
   job_title: string | null;
   company_name: string | null;
   question_number: number;
@@ -81,6 +89,7 @@ export interface InterviewDetail {
   invite_url: string;
   access_token: string;
   model_name: string;
+  answer_mode: InterviewMode;
   questions_count: number;
   current_question_index: number;
   questions: InterviewQuestionData[];

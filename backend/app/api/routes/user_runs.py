@@ -36,6 +36,7 @@ from app.core.job_description_parser import parse_job_description
 from app.interview.service import (
     create_interview,
     get_interview,
+    get_turn_audio,
     list_interview_rows,
     reissue_interview,
     request_assessment,
@@ -490,6 +491,33 @@ def assess_owned_candidate_interview(
     interview = request_assessment(db, run, candidate_id)
     turns = InterviewRepository(db).get_turns(interview.id)
     return build_detail_response(interview, turns)
+
+
+@runs_router.get("/{run_id}/candidate/{candidate_id}/interview/audio/{seq}")
+def get_owned_candidate_interview_audio(
+    run_id: UUID,
+    candidate_id: UUID,
+    seq: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Response:
+    """The recording behind one answer, so a recruiter can hear what a
+    transcript flattens.
+
+    Recruiter-only by construction: there is no audio route on the candidate
+    token surface. The bytes are served directly rather than as a presigned URL
+    — files are small, the storage facade returns bytes for both backends, and
+    presigning would open a second auth path outside the JWT.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    content, mime_type = get_turn_audio(db, run, candidate_id, seq)
+    return Response(
+        content=content,
+        media_type=mime_type,
+        # Immutable once written, and a recruiter replaying an answer shouldn't
+        # refetch from S3 on every click.
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @dashboard_router.get("/stats", response_model=DashboardStatsResponse)

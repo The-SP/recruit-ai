@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
+  interviewModeLabels,
   interviewStatusLabels,
   interviewStatusStyles,
 } from "@/lib/evaluation-styles";
@@ -52,6 +53,7 @@ export function RecruiterInterviewView({
   interview,
   onReissue,
   onAssess,
+  onFetchTurnAudio,
 }: {
   backHref: string;
   candidateName: string | null;
@@ -60,6 +62,9 @@ export function RecruiterInterviewView({
   interview: InterviewDetail | "loading" | "error" | null;
   onReissue: () => Promise<void>;
   onAssess: () => Promise<void>;
+  /** Bound by the page; passed straight through to the transcript so this
+   * component stays service-free. */
+  onFetchTurnAudio?: (seq: number) => Promise<Blob>;
 }) {
   const {
     isWorking,
@@ -142,6 +147,7 @@ export function RecruiterInterviewView({
               {displayName} — Interview
             </h1>
             <p className="text-xs text-muted-foreground mt-1">
+              {interviewModeLabels[interview.answer_mode] ?? interview.answer_mode} ·{" "}
               {interview.questions_count} questions · created{" "}
               {new Date(interview.created_at).toLocaleDateString()}
             </p>
@@ -358,11 +364,19 @@ export function RecruiterInterviewView({
               <ChevronDown className="w-3.5 h-3.5 transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4">
-              <InterviewTranscript turns={interview.turns} autoScroll={false} />
+              <InterviewTranscript
+                turns={interview.turns}
+                autoScroll={false}
+                onFetchTurnAudio={onFetchTurnAudio}
+              />
             </CollapsibleContent>
           </Collapsible>
         ) : (
-          <InterviewTranscript turns={interview.turns} autoScroll={false} />
+          <InterviewTranscript
+            turns={interview.turns}
+            autoScroll={false}
+            onFetchTurnAudio={onFetchTurnAudio}
+          />
         )}
       </div>
     </main>

@@ -66,9 +66,31 @@ export async function apiRequest<T>(
     config.headers = { ...auth, ...headers };
   }
 
+  const res = await apiFetch(endpoint, config);
+
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  return res.json();
+}
+
+/**
+ * The request envelope without the JSON parse: fetch, turn a transport failure
+ * into ApiError(0), turn a non-2xx into ApiError(status).
+ *
+ * For responses apiRequest can't finish — streams (SSE) and binary bodies —
+ * so those callers don't each re-implement the error mapping. Headers are
+ * passed through as given: callers that need auth pass authHeaders(), and a
+ * FormData body must NOT carry a Content-Type or the multipart boundary is lost.
+ */
+export async function apiFetch(
+  endpoint: string,
+  init: RequestInit = {}
+): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(apiUrl(endpoint), config);
+    res = await fetch(apiUrl(endpoint), init);
   } catch {
     throw new ApiError("Network error. Please check your connection.", 0);
   }
@@ -77,9 +99,5 @@ export async function apiRequest<T>(
     throw new ApiError(await errorMessage(res), res.status);
   }
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return res.json();
+  return res;
 }

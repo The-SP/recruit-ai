@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.logger import init_logger
 from app.interview.constants import INTERVIEW_INVITE_TTL_DAYS
 from app.models.evaluation_run import EvaluationRunItem
-from app.models.interview import Interview, InterviewStatus, InterviewTurn
+from app.models.interview import (
+    Interview,
+    InterviewStatus,
+    InterviewTurn,
+    TurnRole,
+)
 
 logger = init_logger(__name__)
 
@@ -44,6 +49,7 @@ class InterviewRepository:
         question_script: dict[str, Any],
         grounding: dict[str, Any],
         model_name: str,
+        answer_mode: str,
     ) -> Interview:
         """Create an interview invite with a fresh token and expiry."""
         interview = Interview(
@@ -53,6 +59,7 @@ class InterviewRepository:
             question_script=question_script,
             grounding=grounding,
             model_name=model_name,
+            answer_mode=answer_mode,
             expires_at=default_expires_at(),
         )
         self.db.add(interview)
@@ -178,6 +185,62 @@ class InterviewRepository:
         self.db.refresh(interview)
         return created
 
+    def get_turn_by_seq(self, interview_id: UUID, seq: int) -> InterviewTurn | None:
+        """One turn by its position. Both audio call sites -- attaching the
+        recording and serving it back -- need exactly this row, so neither
+        loads the whole transcript to find it."""
+        return self.db.scalars(
+            select(InterviewTurn).where(
+                InterviewTurn.interview_id == interview_id,
+                InterviewTurn.seq == seq,
+            )
+        ).first()
+
+    def attach_answer_audio(
+        self,
+        interview_id: UUID,
+        seq: int,
+        audio_path: str,
+        audio_mime_type: str,
+    ) -> bool:
+        """Set-once audio metadata on an already-committed candidate turn.
+
+        The only mutation this table allows, and deliberately not part of
+        append_turns_and_advance: where the recording lives is a transport
+        concern, and the engine that creates the turn must not learn about
+        storage. Called after the answer stream has drained.
+
+        Never raises. A missing turn, a non-candidate turn, or a turn that
+        already has audio means the recruiter loses playback for one answer;
+        blocking a committed interview on playback metadata would invert the
+        priorities.
+        """
+        turn = self.get_turn_by_seq(interview_id, seq)
+
+        if turn is None:
+            logger.warning(
+                f"Cannot attach audio: no turn seq={seq} "
+                f"for interview_id={interview_id}"
+            )
+            return False
+        if turn.role != TurnRole.CANDIDATE.value:
+            logger.warning(
+                f"Cannot attach audio: turn seq={seq} is a {turn.role} turn "
+                f"(interview_id={interview_id})"
+            )
+            return False
+        if turn.audio_path is not None:
+            logger.warning(
+                f"Cannot attach audio: turn seq={seq} already has audio "
+                f"(interview_id={interview_id})"
+            )
+            return False
+
+        turn.audio_path = audio_path
+        turn.audio_mime_type = audio_mime_type
+        self.db.commit()
+        return True
+
     def store_assessment(
         self, interview: Interview, assessment: dict[str, Any]
     ) -> Interview:
@@ -203,6 +266,23 @@ class InterviewRepository:
         self.db.refresh(interview)
         logger.info(f"Interview expired: id={interview.id}")
         return interview
+
+    def get_ids_for_run(self, run_id: UUID) -> list[UUID]:
+        """Every interview id reachable from a run, via its scored items.
+
+        Used when a run is deleted: the interview rows cascade away with the
+        evaluations, but their stored recordings have to be removed explicitly,
+        and after the cascade there is nothing left to find them by.
+        """
+        member_evaluation_ids = (
+            select(EvaluationRunItem.evaluation_id)
+            .where(EvaluationRunItem.evaluation_run_id == run_id)
+            .where(EvaluationRunItem.evaluation_id.is_not(None))
+        )
+        stmt = select(Interview.id).where(
+            Interview.evaluation_id.in_(member_evaluation_ids)
+        )
+        return list(self.db.scalars(stmt).all())
 
     def expire_overdue_for_run(self, run_id: UUID) -> int:
         """Bulk twin of interview.service.apply_lazy_expiry, for a whole run.

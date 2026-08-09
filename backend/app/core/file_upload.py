@@ -9,6 +9,10 @@ from uuid import UUID
 from fastapi import UploadFile
 
 from app.api.exceptions import ValidationError
+from app.interview.constants import (
+    ALLOWED_ANSWER_AUDIO_MIME_TYPES,
+    MAX_ANSWER_AUDIO_BYTES,
+)
 
 # The anonymous batch flow is a trial surface, not a workspace: it exists to show
 # that ranking works on a handful of resumes. Signed-in runs are uncapped.
@@ -93,6 +97,35 @@ async def read_pdf_content(file: UploadFile) -> tuple[bytes, int]:
     file_size = _bytes_to_kb(len(content))
 
     return content, file_size
+
+
+def read_answer_audio_content(file: UploadFile) -> tuple[bytes, str]:
+    """Read and validate one recorded interview answer.
+
+    Returns (content_bytes, base_mime_type) where the base type has the
+    browser's ";codecs=..." suffix stripped -- that is what names the stored
+    file and what the playback endpoint serves back.
+
+    Synchronous twin of read_pdf_content: its caller is a plain `def` route so
+    the blocking transcription and upload that follow land in the threadpool
+    rather than on the event loop.
+    """
+    content = file.file.read()
+
+    base_type = (file.content_type or "").split(";")[0].strip().lower()
+    if base_type not in ALLOWED_ANSWER_AUDIO_MIME_TYPES:
+        raise ValidationError(
+            f"Unsupported audio format '{file.content_type or 'unknown'}'. "
+            "Please record in a current version of Chrome, Edge, Firefox, or Safari."
+        )
+    if not content:
+        raise ValidationError("The recording was empty. Please record again.")
+    if len(content) > MAX_ANSWER_AUDIO_BYTES:
+        raise ValidationError(
+            "That recording is too large. Please keep answers under three minutes."
+        )
+
+    return content, base_type
 
 
 def _bytes_to_kb(size_bytes: int) -> int:

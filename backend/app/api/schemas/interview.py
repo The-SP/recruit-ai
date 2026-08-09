@@ -24,6 +24,10 @@ class TurnOut(BaseModel):
     question_index: int | None = None
     content: str
     created_at: datetime
+    # Whether a recording is attached. A flag, never the storage key: the path
+    # must not cross the API, and this model also feeds the candidate's SSE
+    # `turn` frames. Recruiters fetch the bytes from the JWT-gated endpoint.
+    has_audio: bool = False
 
 
 class QuestionOut(BaseModel):
@@ -49,6 +53,9 @@ class InterviewStateResponse(BaseModel):
     (subject), the assessment, or the access token."""
 
     status: str
+    # InterviewMode, from the row's creation-time snapshot. The client renders
+    # the recorder or the textarea from this and nothing else.
+    answer_mode: str
     job_title: str | None = None
     company_name: str | None = None
     question_number: int
@@ -77,6 +84,7 @@ class InterviewDetailResponse(BaseModel):
     invite_url: str
     access_token: str
     model_name: str
+    answer_mode: str
     questions_count: int
     current_question_index: int
     questions: list[QuestionOut] = Field(default_factory=list)
@@ -119,6 +127,7 @@ def build_turn_out(turn: InterviewTurn) -> TurnOut:
         question_index=turn.question_index,
         content=turn.content,
         created_at=turn.created_at,
+        has_audio=turn.audio_path is not None,
     )
 
 
@@ -128,6 +137,7 @@ def build_state_response(
     grounding = interview.grounding or {}
     return InterviewStateResponse(
         status=interview.status,
+        answer_mode=interview.answer_mode,
         job_title=grounding.get("job_title"),
         company_name=grounding.get("company_name"),
         question_number=state.question_number(interview),
@@ -160,6 +170,7 @@ def build_detail_response(
         invite_url=build_invite_url(interview.access_token),
         access_token=interview.access_token,
         model_name=interview.model_name,
+        answer_mode=interview.answer_mode,
         questions_count=len(questions),
         current_question_index=interview.current_question_index,
         questions=questions,

@@ -64,6 +64,11 @@ export const interviewStatusLabels: Record<string, string> = {
   expired: "Expired",
 };
 
+export const interviewModeLabels: Record<string, string> = {
+  text: "Text interview",
+  audio: "Voice interview",
+};
+
 export const recommendationStyles: Record<string, string> = {
   advance: "bg-success text-success-foreground border-success-edge",
   borderline: "bg-warning text-warning-foreground border-warning-edge",

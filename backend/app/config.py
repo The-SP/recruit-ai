@@ -35,6 +35,9 @@ class Config:
     INTERVIEW_QUESTION_COUNT_TOLERANCE: int = int(
         os.getenv("INTERVIEW_QUESTION_COUNT_TOLERANCE", "0")
     )
+    # Answer mode for this deployment: "text" (typed) or "audio" (spoken,
+    # transcribed via the interview model).
+    INTERVIEW_MODE: str = os.getenv("INTERVIEW_MODE", "text")
 
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO

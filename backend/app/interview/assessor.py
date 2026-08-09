@@ -15,7 +15,12 @@ from app.config import Config
 from app.core.logger import init_logger
 from app.core.model_factory import build_model
 from app.interview.prompting import json_block
-from app.models.interview import Interview, InterviewTurn, TurnRole
+from app.models.interview import (
+    Interview,
+    InterviewMode,
+    InterviewTurn,
+    TurnRole,
+)
 from app.schemas.interview import (
     AnswerQuality,
     InterviewAssessment,
@@ -56,7 +61,7 @@ Each question was designed to probe a specific subject:
 {questions}
 
 ## The transcript
-
+{transcription_note}
 {transcript}
 
 ## What to produce
@@ -89,6 +94,16 @@ Overall:
 Judge only what is in the transcript. Do not reward confident wording over
 substance, and never penalize or reward anything related to a protected
 characteristic."""
+
+# Injected only for audio-mode interviews. The transcriber's verbatim prompt
+# preserves disfluency on purpose, so without this the assessor would
+# systematically mark spoken answers down against typed ones.
+TRANSCRIPTION_NOTE = """
+Candidate answers in this transcript were transcribed verbatim from speech.
+Filler words, false starts, and transcription artifacts are normal — judge the
+substance of the answers, not spoken-language disfluency, and do not treat odd
+word choices that resemble mis-transcriptions as claims.
+"""
 
 
 def _render_questions(script: InterviewScript) -> str:
@@ -190,6 +205,11 @@ def assess_transcript(
         requirements=json_block(grounding.get("requirements")),
         resume_markdown=grounding.get("resume_markdown") or "Not available",
         questions=_render_questions(script),
+        transcription_note=(
+            TRANSCRIPTION_NOTE
+            if interview.answer_mode == InterviewMode.AUDIO.value
+            else ""
+        ),
         transcript=_render_transcript(turns) or "No turns recorded.",
     )
 

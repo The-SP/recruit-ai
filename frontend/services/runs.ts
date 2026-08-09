@@ -1,6 +1,6 @@
 import type { InterviewDetail, InterviewSummary } from "@/lib/interview-types";
 
-import { ApiError, apiRequest } from "./api";
+import { ApiError, apiFetch, apiRequest, authHeaders } from "./api";
 import type { CandidateBreakdown } from "./batch";
 
 export type RunStatus = "draft" | "pending" | "processing" | "completed" | "failed";
@@ -182,4 +182,23 @@ export async function assessRunCandidateInterview(
     `/evaluations/runs/${runId}/candidate/${candidateId}/interview/assess`,
     { method: "POST" }
   );
+}
+
+/**
+ * Fetch the recording behind one answer turn.
+ *
+ * apiFetch rather than apiRequest, which ends in res.json(): the endpoint
+ * returns audio bytes. It also can't be a bare <audio src>, because that
+ * request would carry no Authorization header.
+ */
+export async function fetchInterviewTurnAudio(
+  runId: string,
+  candidateId: string,
+  seq: number
+): Promise<Blob> {
+  const res = await apiFetch(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/audio/${seq}`,
+    { headers: authHeaders() }
+  );
+  return res.blob();
 }

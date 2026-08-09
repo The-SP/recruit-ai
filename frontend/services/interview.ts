@@ -4,7 +4,7 @@ import type {
   InterviewTurnData,
 } from "@/lib/interview-types";
 
-import { apiRequest, apiUrl, authHeaders, errorMessage } from "./api";
+import { ApiError, apiFetch, apiRequest, authHeaders } from "./api";
 
 export async function getInterviewState(token: string): Promise<InterviewState> {
   return apiRequest<InterviewState>(`/interviews/${token}`);
@@ -17,7 +17,9 @@ export async function startInterview(token: string): Promise<InterviewState> {
 }
 
 export interface AnswerStreamHandlers {
-  onAck: (answerSeq: number) => void;
+  /** content is the answer text the server committed. The audio path has no
+   * other way to learn it; the typed path can use it instead of its own draft. */
+  onAck: (answerSeq: number, content: string) => void;
   onTurn: (turn: InterviewTurnData) => void;
   onState: (state: InterviewStateEvent) => void;
   onDone: () => void;
@@ -27,34 +29,32 @@ export interface AnswerStreamHandlers {
 }
 
 /**
- * Submit one answer and stream the interviewer's reaction over SSE.
+ * Read one answer stream to completion, dispatching frames to the handlers.
  *
- * apiRequest can't be used here (it JSON-parses whole bodies), so this is a
- * raw fetch + a ~30-line SSE frame parser: split on blank lines, read
+ * Resolves to the error message if the answer failed, or null if it was
+ * accepted — so a caller that must react to the outcome (the recorder, which
+ * holds the blob until a submit succeeds) can await it directly instead of
+ * capturing it out of a callback.
+ *
+ * apiRequest can't be used for these responses (it JSON-parses whole bodies),
+ * so this is a ~30-line SSE frame parser: split on blank lines, read
  * `event:`/`data:` fields, ignore unknown event names (the protocol is
- * append-only across phases).
+ * append-only across phases). Shared by both submit functions so the typed and
+ * spoken paths can't drift.
  */
-export async function submitAnswer(
-  token: string,
-  content: string,
-  afterSeq: number,
+async function readAnswerStream(
+  response: Response,
   handlers: AnswerStreamHandlers
-): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(apiUrl(`/interviews/${token}/answers`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ content, after_seq: afterSeq }),
-    });
-  } catch {
-    handlers.onError("Network error. Please check your connection.", 0);
-    return;
-  }
+): Promise<string | null> {
+  let failure: string | null = null;
+  const fail = (message: string, status?: number) => {
+    failure = message;
+    handlers.onError(message, status);
+  };
 
-  if (!response.ok || !response.body) {
-    handlers.onError(await errorMessage(response), response.status);
-    return;
+  if (!response.body) {
+    fail("The response ended unexpectedly.", response.status);
+    return failure;
   }
 
   const reader = response.body.getReader();
@@ -77,9 +77,11 @@ export async function submitAnswer(
       return;
     }
     switch (event) {
-      case "ack":
-        handlers.onAck((parsed as { answer_seq: number }).answer_seq);
+      case "ack": {
+        const ack = parsed as { answer_seq: number; content: string };
+        handlers.onAck(ack.answer_seq, ack.content);
         break;
+      }
       case "turn":
         handlers.onTurn(parsed as InterviewTurnData);
         break;
@@ -92,9 +94,9 @@ export async function submitAnswer(
         break;
       case "error":
         sawTerminalEvent = true;
-        handlers.onError((parsed as { detail?: string }).detail ?? "Stream error");
+        fail((parsed as { detail?: string }).detail ?? "Stream error");
         break;
-      // Unknown events (Phase 2 additions) are ignored on purpose.
+      // Unknown events (later-phase additions) are ignored on purpose.
     }
   };
 
@@ -112,13 +114,91 @@ export async function submitAnswer(
     }
   } catch {
     if (!sawTerminalEvent) {
-      handlers.onError("Connection lost while receiving the response.");
+      fail("Connection lost while receiving the response.");
     }
-    return;
+    return failure;
   }
 
   // Stream ended without a done/error frame (e.g. server dropped mid-turn).
   if (!sawTerminalEvent) {
-    handlers.onError("The response ended unexpectedly.");
+    fail("The response ended unexpectedly.");
   }
+
+  return failure;
+}
+
+/**
+ * Open an answer stream and read it, mapping a pre-stream failure (network,
+ * 4xx, 5xx) onto the same handlers as a mid-stream one.
+ *
+ * Resolves to the error message, or null if the answer was accepted.
+ */
+async function submitAndRead(
+  endpoint: string,
+  init: RequestInit,
+  handlers: AnswerStreamHandlers
+): Promise<string | null> {
+  let response: Response;
+  try {
+    response = await apiFetch(endpoint, init);
+  } catch (err) {
+    const { message, status } =
+      err instanceof ApiError
+        ? err
+        : { message: "Something went wrong. Please try again.", status: 0 };
+    handlers.onError(message, status);
+    return message;
+  }
+
+  return readAnswerStream(response, handlers);
+}
+
+/** Submit one typed answer and stream the interviewer's reaction over SSE. */
+export async function submitAnswer(
+  token: string,
+  content: string,
+  afterSeq: number,
+  handlers: AnswerStreamHandlers
+): Promise<string | null> {
+  return submitAndRead(
+    `/interviews/${token}/answers`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ content, after_seq: afterSeq }),
+    },
+    handlers
+  );
+}
+
+/**
+ * Upload one recorded answer for transcription and stream the reaction.
+ *
+ * The caller keeps the blob until this resolves to null: a non-null result
+ * means nothing was committed server-side, so retrying re-sends the same
+ * recording rather than making the candidate speak again.
+ */
+export async function submitAudioAnswer(
+  token: string,
+  blob: Blob,
+  afterSeq: number,
+  handlers: AnswerStreamHandlers
+): Promise<string | null> {
+  const form = new FormData();
+  // As a File so the part carries a filename; the server reads content_type
+  // from the blob's own type, which is what MediaRecorder actually produced.
+  form.append("audio", new File([blob], "answer", { type: blob.type }));
+  form.append("after_seq", String(afterSeq));
+
+  return submitAndRead(
+    `/interviews/${token}/answers-audio`,
+    {
+      method: "POST",
+      // authHeaders() only: setting Content-Type by hand drops the multipart
+      // boundary the browser generates, and the upload silently fails to parse.
+      headers: authHeaders(),
+      body: form,
+    },
+    handlers
+  );
 }

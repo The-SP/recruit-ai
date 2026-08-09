@@ -18,6 +18,7 @@ from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS, MAX_GAP_PROBES
 from app.interview.prompting import json_block
 from app.models.candidate import Candidate
 from app.models.evaluation import CandidateEvaluation
+from app.models.interview import InterviewMode
 from app.models.job import Job
 from app.schemas.interview import InterviewScript, QuestionFocus
 from app.schemas.job_utils import build_job_requirements_schema
@@ -80,7 +81,7 @@ Rules for every question:
 Also write:
 - `opening`: a two-sentence greeting that names the role and sets expectations
   ({question_count} questions, roughly {time_limit_minutes} minutes, answers
-  typed). Do not ask a question in the opening.
+  {answer_medium}). Do not ask a question in the opening.
 - `closing`: two sentences thanking the candidate and saying the team will
   review and follow up. Do not promise a decision or a timeline.
 
@@ -182,13 +183,19 @@ def _invoke(prompt: str) -> InterviewScript:
     return script
 
 
-def generate_script(grounding: dict[str, Any]) -> InterviewScript:
+def generate_script(grounding: dict[str, Any], mode: InterviewMode) -> InterviewScript:
     """Generate the interview backbone from a grounding snapshot.
 
     Regenerates once if the first attempt violates the count or gap-probe
     constraints, then raises.
+
+    `mode` only reaches the opening greeting, which tells the candidate how to
+    answer. The script is frozen at creation alongside the mode snapshot, so
+    the greeting can never contradict the composer the candidate is looking at.
     """
+    answer_medium = "spoken aloud" if mode is InterviewMode.AUDIO else "typed"
     prompt = GENERATION_PROMPT.format(
+        answer_medium=answer_medium,
         job_title=grounding.get("job_title") or "Not specified",
         company_name=grounding.get("company_name") or "Not specified",
         job_summary=grounding.get("job_summary") or "Not provided",
