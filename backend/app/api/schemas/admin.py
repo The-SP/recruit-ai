@@ -7,9 +7,10 @@ from pydantic import BaseModel
 class AdminStatsResponse(BaseModel):
     """Deployment-wide counters for the admin overview.
 
-    Everything here comes from Postgres. LLM budget and circuit-breaker state
-    live in Redis and stay on the Makefile (`make budget-status`,
-    `make circuit-status`) -- see the note in api/routes/admin.py.
+    Most of this comes from Postgres. budget_units_used/limit and
+    circuit_breaker_active are reads of Redis state -- see the note in
+    api/routes/admin.py for why reading them here is fine while a reset
+    button would not be.
     """
 
     total_users: int
@@ -23,6 +24,14 @@ class AdminStatsResponse(BaseModel):
     # is the only measure of trial usage.
     anonymous_runs: int
     owned_runs: int
+    # Today's global LLM budget, read straight from core/rate_limit.py
+    budget_units_used: int
+    budget_units_limit: int
+    # Completed or assessed interviews, across every user's non-draft runs.
+    completed_interviews: int
+    # None if no non-draft run has ever been created.
+    last_run_at: datetime | None
+    circuit_breaker_active: bool
 
 
 class AdminUserRow(BaseModel):

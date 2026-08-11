@@ -4,8 +4,9 @@ import { apiRequest } from "./api";
  * Read-only cross-tenant views, gated server-side by require_admin.
  *
  * There is no write counterpart on purpose: budget and circuit-breaker
- * controls stay on the backend Makefile (`make budget-status`,
+ * controls stay on the backend Makefile (`make budget-reset`,
  * `make circuit-reset`) rather than becoming buttons here.
+ * budget_units_used/limit is a read of that same counter, not a control.
  */
 
 export interface AdminStatsResponse {
@@ -18,6 +19,11 @@ export interface AdminStatsResponse {
   total_candidates: number;
   anonymous_runs: number;
   owned_runs: number;
+  budget_units_used: number;
+  budget_units_limit: number;
+  completed_interviews: number;
+  last_run_at: string | null;
+  circuit_breaker_active: boolean;
 }
 
 export interface AdminUserRow {

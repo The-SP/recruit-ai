@@ -5,13 +5,17 @@ Two things this router deliberately does not do:
 1. **It never writes.** No user edits, no deactivation, no deleting other
    people's runs. A read-only router makes the privilege boundary trivially
    auditable, which matters in a repo with no test suite.
-2. **It does not surface LLM budget or circuit-breaker state.** Those already
-   work as `make budget-status` / `budget-reset` / `circuit-status` /
-   `circuit-reset` / `rate-limit-status` / `rate-limit-clear`, and
-   scripts/llm_budget.py says outright that there is deliberately no HTTP
+2. **It does not surface any LLM budget or circuit-breaker *mutation*.**
+   Those stay on `make budget-reset` / `circuit-reset` / `rate-limit-clear`,
+   and scripts/llm_budget.py says outright that there is deliberately no HTTP
    endpoint for them. Putting a reset button in a browser converts an
    SSH-gated tool into a mutation surface where an admin JWT can un-throttle
-   Gemini spend.
+   Gemini spend. `AdminStatsResponse.budget_units_used/limit` and
+   `circuit_breaker_active` are the exceptions, and both are read-only:
+   `get_admin_stats` calls `core.rate_limit.global_usage()` (the same read
+   `make budget-status` uses) and `worker.circuit_breaker.is_circuit_breaker_active()`
+   (the same read `make circuit-status` uses). Nothing here can reset, raise,
+   or otherwise touch either.
 
 The gap this closes is that nothing else in the app can see across users at
 all: every other aggregate query is scoped by user_id or run id.
@@ -33,9 +37,11 @@ from app.api.schemas.admin import (
     AdminUserRow,
 )
 from app.auth.jwt import require_admin
+from app.core.rate_limit import global_usage
 from app.models.evaluation_run import RunStatus
 from app.repositories.evaluation_run_repository import EvaluationRunRepository
 from app.repositories.user_repository import UserRepository
+from app.worker.circuit_breaker import is_circuit_breaker_active
 
 # The guard sits on the router, not on each handler, so an endpoint added later
 # cannot forget it.
@@ -55,6 +61,7 @@ def get_admin_stats(db: Session = Depends(get_db)) -> AdminStatsResponse:
     now = datetime.now()
     total_runs = runs.count_all()
     anonymous_runs = runs.count_anonymous()
+    budget_used, budget_limit = global_usage()
 
     return AdminStatsResponse(
         total_users=users.count(),
@@ -66,6 +73,11 @@ def get_admin_stats(db: Session = Depends(get_db)) -> AdminStatsResponse:
         total_candidates=runs.sum_candidates_all(),
         anonymous_runs=anonymous_runs,
         owned_runs=total_runs - anonymous_runs,
+        budget_units_used=budget_used,
+        budget_units_limit=budget_limit,
+        completed_interviews=runs.count_completed_interviews_all(),
+        last_run_at=runs.last_created_at_all(),
+        circuit_breaker_active=is_circuit_breaker_active(),
     )
 
 

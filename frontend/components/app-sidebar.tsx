@@ -11,6 +11,7 @@ import {
   Plus,
   Shield,
   User,
+  Users,
 } from "lucide-react";
 
 import {
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
 // authorization: every /admin endpoint is gated by require_admin server-side.
 const adminNavItems: NavItem[] = [
   { label: "Overview", href: "/admin", icon: Shield },
+  { label: "Users", href: "/admin/users", icon: Users },
   { label: "All Runs", href: "/admin/runs", icon: Layers },
 ];
 

@@ -352,12 +352,13 @@ class EvaluationRunRepository:
         )
         return self.db.scalar(stmt) or 0
 
-    def count_completed_interviews_by_user(self, user_id: UUID) -> int:
-        """Interviews the candidate finished, across a user's non-draft runs.
+    def _completed_interviews_stmt(self, user_id: UUID | None) -> Any:
+        """Shared query for count_completed_interviews_by_user/_all.
 
         Counts `assessed` as well as `completed`: assessment is an automatic
         follow-on, so counting only `completed` would show a number that
-        silently drops as the worker catches up.
+        silently drops as the worker catches up. user_id=None counts across
+        every user (admin-only cross-tenant read).
         """
         stmt = (
             select(func.count())
@@ -370,7 +371,6 @@ class EvaluationRunRepository:
                 EvaluationRun,
                 EvaluationRun.id == EvaluationRunItem.evaluation_run_id,
             )
-            .where(EvaluationRun.user_id == user_id)
             .where(EvaluationRun.status != RunStatus.DRAFT.value)
             .where(
                 Interview.status.in_(
@@ -381,7 +381,13 @@ class EvaluationRunRepository:
                 )
             )
         )
-        return self.db.scalar(stmt) or 0
+        if user_id is not None:
+            stmt = stmt.where(EvaluationRun.user_id == user_id)
+        return stmt
+
+    def count_completed_interviews_by_user(self, user_id: UUID) -> int:
+        """Interviews the candidate finished, across a user's non-draft runs."""
+        return self.db.scalar(self._completed_interviews_stmt(user_id)) or 0
 
     def last_active_by_user(self, user_id: UUID) -> datetime | None:
         """Return created_at of the most recent completed run for a user."""
@@ -486,6 +492,23 @@ class EvaluationRunRepository:
             EvaluationRun.status != RunStatus.DRAFT.value
         )
         return self.db.scalar(stmt) or 0
+
+    def count_completed_interviews_all(self) -> int:
+        """Cross-tenant version of count_completed_interviews_by_user."""
+        return self.db.scalar(self._completed_interviews_stmt(None)) or 0
+
+    def last_created_at_all(self) -> datetime | None:
+        """created_at of the most recent non-draft run, any owner.
+
+        A draft is an upload in progress, not a submitted run, so it is
+        excluded for the same reason list_all/count_all exclude it.
+        """
+        stmt = (
+            select(func.max(EvaluationRun.created_at))
+            .select_from(EvaluationRun)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+        )
+        return self.db.scalar(stmt)
 
     def count_anonymous(self) -> int:
         """Non-draft runs with no owner -- the demo-flow usage signal."""
