@@ -19,4 +19,7 @@ class User(Base):
         String, unique=True, index=True, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

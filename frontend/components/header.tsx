@@ -7,7 +7,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 
-const AUTH_PREFIXES = ["/dashboard", "/history", "/profile", "/evaluation/"];
+const AUTH_PREFIXES = ["/dashboard", "/history", "/profile", "/evaluation/", "/admin"];
 
 function UserAvatar({ name, avatarUrl }: { name: string | null; avatarUrl: string | null }) {
   if (avatarUrl) {

@@ -27,6 +27,8 @@ from app.models.interview import (
     InterviewTurn,
     TurnRole,
 )
+from app.models.job import Job
+from app.models.user import User
 from app.repositories.interview_repository import InterviewRepository
 
 logger = init_logger(__name__)
@@ -45,6 +47,13 @@ class InterviewRow(NamedTuple):
     expires_at: datetime
     completed_at: datetime | None
     assessed_at: datetime | None
+
+
+class RunRollup(NamedTuple):
+    """Per-user run totals, as read by rollup_by_user for the admin user list."""
+
+    run_count: int
+    last_run_at: datetime
 
 
 class EvaluationRunRepository:
@@ -384,6 +393,130 @@ class EvaluationRunRepository:
             .limit(1)
         )
         return self.db.scalar(stmt)
+
+    # -----------------------------------------------------------------------
+    # Cross-tenant reads (admin only)
+    #
+    # Everything above this line is scoped to one user or one run, which is the
+    # authorization model for the product surfaces. Nothing here filters by
+    # user_id, so these must only ever be reached through a route behind
+    # require_admin.
+    # -----------------------------------------------------------------------
+
+    def _apply_search(self, stmt: Any, search: str | None) -> Any:
+        """Filter by job title or either email field (owner or anonymous contact).
+
+        Joins Job for the title match since EvaluationRun has no title column
+        of its own; User is already reachable for the owner email match.
+        """
+        if not search:
+            return stmt
+        pattern = f"%{search}%"
+        return (
+            stmt.outerjoin(EvaluationRun.job)
+            .outerjoin(EvaluationRun.user)
+            .where(
+                Job.title.ilike(pattern)
+                | User.email.ilike(pattern)
+                | EvaluationRun.email.ilike(pattern)
+            )
+        )
+
+    def list_all(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        status: RunStatus | None = None,
+        search: str | None = None,
+    ) -> list[EvaluationRun]:
+        """Every run regardless of owner, newest first.
+
+        Drafts are excluded unless explicitly asked for. A draft is an artifact
+        of the upload flow rather than a submitted run, so the unfiltered view
+        would otherwise be dominated by abandoned demo uploads -- but they are
+        real signal on their own, hence `?status=draft` still reaching them.
+        """
+        stmt = select(EvaluationRun).options(
+            joinedload(EvaluationRun.job), joinedload(EvaluationRun.user)
+        )
+        if status is not None:
+            stmt = stmt.where(EvaluationRun.status == status.value)
+        else:
+            stmt = stmt.where(EvaluationRun.status != RunStatus.DRAFT.value)
+        stmt = self._apply_search(stmt, search)
+        stmt = (
+            stmt.order_by(EvaluationRun.created_at.desc()).limit(limit).offset(offset)
+        )
+        return list(self.db.scalars(stmt).unique().all())
+
+    def count_all(
+        self, status: RunStatus | None = None, search: str | None = None
+    ) -> int:
+        stmt = select(func.count(EvaluationRun.id.distinct())).select_from(
+            EvaluationRun
+        )
+        if status is not None:
+            stmt = stmt.where(EvaluationRun.status == status.value)
+        else:
+            stmt = stmt.where(EvaluationRun.status != RunStatus.DRAFT.value)
+        stmt = self._apply_search(stmt, search)
+        return self.db.scalar(stmt) or 0
+
+    def count_by_status(self) -> dict[str, int]:
+        """Run counts keyed by status, drafts included.
+
+        Unlike list_all, this does not drop drafts: the count of abandoned
+        uploads is the point of showing the breakdown.
+        """
+        stmt = select(EvaluationRun.status, func.count()).group_by(EvaluationRun.status)
+        return {status: count for status, count in self.db.execute(stmt)}
+
+    def count_since(self, since: datetime) -> int:
+        """Non-draft runs created at or after `since`."""
+        stmt = (
+            select(func.count())
+            .select_from(EvaluationRun)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .where(EvaluationRun.created_at >= since)
+        )
+        return self.db.scalar(stmt) or 0
+
+    def sum_candidates_all(self) -> int:
+        stmt = select(func.coalesce(func.sum(EvaluationRun.total_count), 0)).where(
+            EvaluationRun.status != RunStatus.DRAFT.value
+        )
+        return self.db.scalar(stmt) or 0
+
+    def count_anonymous(self) -> int:
+        """Non-draft runs with no owner -- the demo-flow usage signal."""
+        stmt = (
+            select(func.count())
+            .select_from(EvaluationRun)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .where(EvaluationRun.user_id.is_(None))
+        )
+        return self.db.scalar(stmt) or 0
+
+    def rollup_by_user(self) -> dict[UUID, RunRollup]:
+        """Run count and latest run time per user, in one grouped query.
+
+        The admin user list needs both per row; doing it as a map keeps that
+        page at two queries instead of two per user.
+        """
+        stmt = (
+            select(
+                EvaluationRun.user_id,
+                func.count().label("run_count"),
+                func.max(EvaluationRun.created_at).label("last_run_at"),
+            )
+            .where(EvaluationRun.user_id.is_not(None))
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .group_by(EvaluationRun.user_id)
+        )
+        return {
+            row.user_id: RunRollup(run_count=row.run_count, last_run_at=row.last_run_at)
+            for row in self.db.execute(stmt)
+        }
 
     def get_by_job(self, job_id: UUID, limit: int = 10) -> list[EvaluationRun]:
         stmt = (

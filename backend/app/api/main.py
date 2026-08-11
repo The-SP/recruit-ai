@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.api.dependencies import verify_api_key
 from app.api.exceptions import register_exception_handlers
 from app.api.routes import (
+    admin,
     auth,
     batch,
     candidates,
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     # Authenticated user routes (JWT Bearer) — registered before evaluations to avoid path conflict
     app.include_router(user_runs.runs_router)
     app.include_router(user_runs.dashboard_router)
+    app.include_router(admin.router)
     app.include_router(jobs.router, dependencies=api_key_auth)
     app.include_router(candidates.router, dependencies=api_key_auth)
     app.include_router(evaluations.router, dependencies=api_key_auth)

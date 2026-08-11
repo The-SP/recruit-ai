@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.logger import init_logger
@@ -28,6 +29,28 @@ class UserRepository:
         self.db.refresh(user)
         logger.info(f"Created user: id={user.id}, email={user.email}")
         return user
+
+    def list_all(
+        self, limit: int = 50, offset: int = 0, search: str | None = None
+    ) -> list[User]:
+        """Every user, newest first. Cross-tenant: admin reads only."""
+        stmt = select(User)
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(User.full_name.ilike(pattern) | User.email.ilike(pattern))
+        stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
+        return list(self.db.scalars(stmt).all())
+
+    def count(self, search: str | None = None) -> int:
+        stmt = select(func.count()).select_from(User)
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(User.full_name.ilike(pattern) | User.email.ilike(pattern))
+        return self.db.scalar(stmt) or 0
+
+    def count_since(self, since: datetime) -> int:
+        stmt = select(func.count()).select_from(User).where(User.created_at >= since)
+        return self.db.scalar(stmt) or 0
 
     def get_or_create(self, userinfo: dict[str, Any]) -> User:
         google_id: str = userinfo["sub"]

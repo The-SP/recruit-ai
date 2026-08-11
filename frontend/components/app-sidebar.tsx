@@ -6,8 +6,10 @@ import {
   Briefcase,
   History,
   LayoutDashboard,
+  Layers,
   LogOut,
   Plus,
+  Shield,
   User,
 } from "lucide-react";
 
@@ -17,6 +19,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -27,12 +30,46 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 
-const navItems = [
+type NavItem = { label: string; href: string; icon: React.ElementType };
+
+const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "New Evaluation", href: "/dashboard/new", icon: Plus },
   { label: "History", href: "/history", icon: History },
   { label: "Profile", href: "/profile", icon: User },
 ];
+
+// Rendered only for users with is_admin. Hiding these is convenience, not
+// authorization: every /admin endpoint is gated by require_admin server-side.
+const adminNavItems: NavItem[] = [
+  { label: "Overview", href: "/admin", icon: Shield },
+  { label: "All Runs", href: "/admin/runs", icon: Layers },
+];
+
+function NavItems({ items }: { items: NavItem[] }) {
+  const pathname = usePathname();
+
+  return (
+    <SidebarMenu>
+      {items.map((item) => {
+        const isExact = item.href === "/dashboard" || item.href === "/admin";
+        const isActive = isExact
+          ? pathname === item.href
+          : pathname.startsWith(item.href);
+        return (
+          <SidebarMenuItem key={item.href}>
+            <SidebarMenuButton asChild isActive={isActive}>
+              <Link href={item.href} className="flex items-center gap-3">
+                <item.icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
+}
 
 function UserInitials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -45,7 +82,6 @@ function UserInitials(name: string | null | undefined): string {
 }
 
 export function AppSidebar() {
-  const pathname = usePathname();
   const { user, logout } = useAuth();
 
   return (
@@ -64,26 +100,18 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive =
-                  item.href === "/dashboard"
-                    ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.href} className="flex items-center gap-3">
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+            <NavItems items={navItems} />
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {user?.is_admin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <NavItems items={adminNavItems} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="px-3 py-3">

@@ -55,3 +55,18 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    """Gate the read-only /admin router on the hand-set users.is_admin flag.
+
+    Layered on get_current_active_user rather than get_current_user, so a
+    deactivated admin is rejected by the existing 400 before the flag is read.
+
+    This is the authorization boundary for cross-tenant reads. The frontend
+    also hides the Admin nav group and redirects, but that is convenience --
+    the detail string below is what a typed URL should end up rendering.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
