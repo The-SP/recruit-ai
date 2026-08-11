@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Form, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, enforce_cooldown, get_db
 from app.api.exceptions import (
     NotFoundError,
     ServiceUnavailableError,
@@ -37,6 +37,13 @@ from app.core.file_upload import (
     validate_pdf_filename,
 )
 from app.core.job_description_parser import parse_job_description
+from app.core.rate_limit import (
+    COST_ASSESSMENT,
+    COST_JD_PARSE,
+    COST_RESUME,
+    interview_invite_cost,
+    refund,
+)
 from app.interview.service import (
     create_interview,
     get_interview,
@@ -68,6 +75,15 @@ from app.worker.tasks import process_evaluation_run
 
 runs_router = APIRouter(prefix="/evaluations/runs", tags=["evaluation-runs"])
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+_RETRY_COOLDOWN_MESSAGE = (
+    "This run was retried a moment ago. Give the current attempt time to "
+    "finish before retrying again."
+)
+_ASSESS_COOLDOWN_MESSAGE = (
+    "An assessment for this interview was just requested. Give it a moment to "
+    "finish before requesting another."
+)
 
 
 def _build_run_summary(run: object) -> EvaluationRunSummary:
@@ -101,6 +117,11 @@ async def create_evaluation_run(
     if not files:
         raise ValidationError("At least one PDF file is required")
 
+    # Signed-in runs have no resume cap (that is the point of an account), so
+    # the hourly unit budget is the only thing bounding this endpoint. Charged
+    # before the JD parse, which is itself a model call.
+    enforce_budget(COST_JD_PARSE + len(files) * COST_RESUME)
+
     jd = parse_job_description(job_text)
     if not jd.is_job_description:
         raise ValidationError(
@@ -117,6 +138,9 @@ async def create_evaluation_run(
     uploaded, failed, errors = await process_uploaded_files(
         run.id, run.folder_path, files, item_repo, run_repo
     )
+
+    # The JD parse already spent, so only unused resume units come back.
+    refund((len(files) - uploaded) * COST_RESUME)
 
     if uploaded == 0:
         run_repo.delete(run.id)
@@ -254,6 +278,8 @@ async def add_candidates(
             "The run must be completed or failed."
         )
 
+    enforce_budget(len(files) * COST_RESUME)
+
     item_repo = EvaluationRunItemRepository(db)
     uploaded_items: list[tuple[str, UUID]] = []
     failed = 0
@@ -281,6 +307,8 @@ async def add_candidates(
     uploaded = len(uploaded_items)
     if duplicate_files:
         errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
+
+    refund((len(files) - uploaded) * COST_RESUME)
 
     if uploaded == 0:
         raise ValidationError(
@@ -333,6 +361,9 @@ def retry_failed(
     failed_items = item_repo.get_failed_items(run.id)
     if not failed_items:
         raise ValidationError("No failed items to retry.")
+
+    enforce_cooldown(f"retry:{run.id}", _RETRY_COOLDOWN_MESSAGE)
+    enforce_budget(len(failed_items) * COST_RESUME)
 
     item_repo.mark_items_as_pending([item.id for item in failed_items])
     run_repo.mark_reopened(run.id)
@@ -446,8 +477,15 @@ def create_owned_candidate_interview(
     second one. Question generation runs synchronously, so expect a few seconds.
     """
     run = _load_owned_run(db, run_id, current_user)
+
+    cost = interview_invite_cost()
+    enforce_budget(cost)
+
     interview, created = create_interview(db, run, candidate_id)
     if not created:
+        # Idempotent hit: no script was generated and no TTS queued, so the
+        # units go back.
+        refund(cost)
         response.status_code = 200
     return build_summary_response(interview)
 
@@ -498,6 +536,12 @@ def assess_owned_candidate_interview(
     """Manually dispatch assessment: retry after a failure, or assess the
     partial transcript of an expired interview."""
     run = _load_owned_run(db, run_id, current_user)
+
+    # This route re-dispatches on purpose, so repeat clicks each cost a real
+    # assessment call. Cooldown plus budget, same pairing as retry.
+    enforce_cooldown(f"assess:{run.id}:{candidate_id}", _ASSESS_COOLDOWN_MESSAGE)
+    enforce_budget(COST_ASSESSMENT)
+
     interview = request_assessment(db, run, candidate_id)
     turns = InterviewRepository(db).get_turns(interview.id)
     return build_detail_response(interview, turns)

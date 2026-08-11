@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, get_db
 from app.api.exceptions import (
     ConflictError,
     NotFoundError,
@@ -26,6 +26,7 @@ from app.api.schemas.interview import (
 )
 from app.core.file_upload import read_answer_audio_content
 from app.core.logger import init_logger
+from app.core.rate_limit import COST_ANSWER_AUDIO, COST_ANSWER_TEXT
 from app.interview import engine
 from app.interview.service import (
     apply_lazy_expiry,
@@ -178,7 +179,9 @@ def get_interview_voice_clip(
     )
 
 
-def _precheck_answer(token: str, after_seq: int, expected_mode: InterviewMode) -> UUID:
+def _precheck_answer(
+    token: str, after_seq: int, expected_mode: InterviewMode, cost: int
+) -> UUID:
     """Check the mode gate and the engine's answer rules before streaming
     starts, so failures get real HTTP codes. Returns the interview id.
 
@@ -189,6 +192,12 @@ def _precheck_answer(token: str, after_seq: int, expected_mode: InterviewMode) -
 
     The audio route calls this before reading bytes or transcribing: a stale
     after_seq or a finished interview must cost zero STT quota.
+
+    The budget check lands LAST, after both gates pass, for that same
+    reason: an invalid answer must not spend the candidate's budget. Both
+    callers build their StreamingResponse only after this returns, so a
+    RateLimitError here reaches the exception handler as a real 429 rather
+    than an SSE error frame.
     """
     db = create_session()
     try:
@@ -201,6 +210,7 @@ def _precheck_answer(token: str, after_seq: int, expected_mode: InterviewMode) -
                 )
             )
         engine.validate_answerable(db, interview, after_seq)
+        enforce_budget(cost)
         return interview.id
     finally:
         db.close()
@@ -266,7 +276,7 @@ def _answer_stream(
 @router.post("/{token}/answers")
 def submit_answer(token: str, body: AnswerRequest) -> StreamingResponse:
     """Accept one typed answer and stream the interviewer's reaction (SSE)."""
-    _precheck_answer(token, body.after_seq, InterviewMode.TEXT)
+    _precheck_answer(token, body.after_seq, InterviewMode.TEXT, COST_ANSWER_TEXT)
 
     return StreamingResponse(
         _answer_stream(token, body.content, body.after_seq),
@@ -294,7 +304,9 @@ def submit_audio_answer(
     other request — including other candidates' in-flight SSE streams — for the
     duration of each transcription.
     """
-    interview_id = _precheck_answer(token, after_seq, InterviewMode.AUDIO)
+    interview_id = _precheck_answer(
+        token, after_seq, InterviewMode.AUDIO, COST_ANSWER_AUDIO
+    )
 
     content, mime_type = read_answer_audio_content(audio)
 

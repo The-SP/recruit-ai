@@ -49,6 +49,22 @@ class ServiceUnavailableError(Exception):
         super().__init__(self.message)
 
 
+class RateLimitError(Exception):
+    """Raised when a caller (or the deployment) is out of LLM budget.
+
+    429 rather than 503: the request was well-formed and the service is
+    healthy -- the allowance is spent. `retry_after` is seconds until the
+    budget actually frees up (UTC midnight for the daily ceiling, the
+    remaining wait for a cooldown), deliberately not the Redis key's TTL,
+    which outlives the day it covers so the counter can be inspected later.
+    """
+
+    def __init__(self, message: str, retry_after: int):
+        self.message = message
+        self.retry_after = max(1, retry_after)
+        super().__init__(self.message)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers."""
 
@@ -73,6 +89,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: ServiceUnavailableError
     ) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": exc.message})
+
+    @app.exception_handler(RateLimitError)
+    async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+        # retry_after rides in the body as well as the header because
+        # CORSMiddleware does not expose response headers to JS by default.
+        # main.py adds it to expose_headers too; the body is what the frontend
+        # actually reads, and it works for the SSE fetch path as well.
+        return JSONResponse(
+            status_code=429,
+            content={"detail": exc.message, "retry_after": exc.retry_after},
+            headers={"Retry-After": str(exc.retry_after)},
+        )
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(

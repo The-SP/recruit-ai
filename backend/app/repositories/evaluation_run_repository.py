@@ -224,18 +224,6 @@ class EvaluationRunRepository:
             self.db.commit()
             logger.error(f"Failed evaluation run: id={run_id}, error={error}")
 
-    def get_all(self, limit: int = 50, offset: int = 0) -> list[EvaluationRun]:
-        """List all non-draft evaluation runs, newest first, with job eagerly loaded."""
-        stmt = (
-            select(EvaluationRun)
-            .where(EvaluationRun.status != RunStatus.DRAFT.value)
-            .options(joinedload(EvaluationRun.job))
-            .order_by(EvaluationRun.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-        return list(self.db.scalars(stmt).unique().all())
-
     def get_by_user(
         self,
         user_id: UUID,

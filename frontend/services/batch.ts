@@ -112,20 +112,6 @@ export interface CandidateBreakdown {
   resume_markdown?: string | null;
 }
 
-export interface HistoryItem {
-  token: string;
-  job_title: string | null;
-  company_name: string | null;
-  candidate_count: number;
-  status: "pending" | "processing" | "completed" | "failed";
-  created_at: string;
-}
-
-export interface HistoryListResponse {
-  items: HistoryItem[];
-  total: number;
-}
-
 export interface AddCandidatesResponse {
   uploaded: number;
   failed: number;
@@ -172,10 +158,6 @@ export async function getCandidateBreakdown(
   return apiRequest<CandidateBreakdown>(
     `/batch/status/${token}/candidate/${candidateId}`
   );
-}
-
-export async function getHistory(limit = 50): Promise<HistoryListResponse> {
-  return apiRequest<HistoryListResponse>(`/batch/history?limit=${limit}`);
 }
 
 export async function addCandidatesToBatch(

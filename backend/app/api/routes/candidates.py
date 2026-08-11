@@ -3,11 +3,12 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.candidates import CandidateListResponse, CandidateResponse
 from app.core.file_storage import delete_file, save_uploaded_file
 from app.core.file_upload import read_pdf_content, validate_pdf_filename
+from app.core.rate_limit import COST_RESUME
 from app.core.resume_parser import parse_resume
 from app.repositories.candidate_repository import CandidateRepository
 
@@ -23,6 +24,9 @@ async def create_candidate(
     """Upload a resume PDF and create a candidate."""
     filename = validate_pdf_filename(file.filename)
     content, _ = await read_pdf_content(file)
+
+    # After the cheap filename/PDF validation, before parse_resume's model call.
+    enforce_budget(COST_RESUME)
 
     # Save uploaded file
     unique_filename = f"{uuid4()}_{filename}"

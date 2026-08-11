@@ -3,11 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.evaluations import RankingItem, RankingsResponse
 from app.api.schemas.jobs import JobCreateRequest, JobListResponse, JobResponse
 from app.core.job_description_parser import parse_job_description
+from app.core.rate_limit import COST_JD_PARSE
 from app.models.job import Job
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
@@ -36,6 +37,8 @@ def _model_to_response(job: Job) -> JobResponse:
 @router.post("", response_model=JobResponse, status_code=201)
 def create_job(request: JobCreateRequest, db: Session = Depends(get_db)) -> JobResponse:
     """Create a job from raw text description."""
+    enforce_budget(COST_JD_PARSE)
+
     jd = parse_job_description(request.text)
 
     if not jd.is_job_description:

@@ -47,6 +47,10 @@ make migrate-create m="description"  # Create new migration
 make migrate-down     # Downgrade one migration
 make circuit-status   # Check circuit breaker status
 make circuit-reset    # Reset circuit breaker (after rate limit hits)
+make budget-status    # Today's global LLM budget usage
+make budget-reset     # Clear today's budget counter (unblock a demo)
+make rate-limit-status              # Budget key + any active cooldowns
+make rate-limit-clear KEY=retry:<run-id>   # Release a stuck cooldown
 make seed-ssm         # Seed SSM Parameter Store from an env file (prod bootstrap)
 ```
 
@@ -82,12 +86,23 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
   **Router order is load-bearing:** `user_runs.runs_router` is registered *before* `evaluations.router` so `/evaluations/runs` isn't captured by `/evaluations/{evaluation_id}`.
 
+  `api/exceptions.py` also carries `RateLimitError` (429), and `api/dependencies.py` carries `enforce_budget` / `enforce_cooldown` alongside `verify_api_key` (the matching `refund` lives in `core/rate_limit.py`). See the `rate_limit.py` notes under `core/`.
+
+  **`GET /health` and `GET /health/detailed` differ on purpose.** `/health` is unauthenticated and dependency-free because the prod container healthcheck polls it. `/detailed` reaches the model, so it requires the api key, caches its LLM verdict for 300s, and charges the budget on a cache miss. The key check is weak on its own (it ships to browsers as `NEXT_PUBLIC_API_KEY` and no-ops when unset), so the cache and the budget check are the load-bearing parts.
+
 - **`auth/`** — `jwt.py` (HS256 via `joserfc`, 7-day expiry; the `sub` claim is the **Google ID**, not the user UUID) and `oauth.py` (authlib Google OIDC client). `SessionMiddleware` in `api/main.py` is required for OAuth state.
 
-- **`core/`** — `resume_parser.py` (PDF → markdown + structured data via Gemini), `job_description_parser.py` (text → structured requirements, validates input is a real JD), `file_upload.py` (PDF validation), `file_storage.py`, `model_factory.py`, `logger.py`.
+- **`core/`** — `resume_parser.py` (PDF → markdown + structured data via Gemini), `job_description_parser.py` (text → structured requirements, validates input is a real JD), `file_upload.py` (PDF validation), `file_storage.py`, `model_factory.py`, `rate_limit.py`, `redis_client.py`, `logger.py`.
 
   - `file_storage.py` is a façade over `core/storage/` (`base.py` ABC, `local.py`, `s3.py`), selected by the `USE_S3` env var. Prefer the façade functions over instantiating a backend directly.
   - `model_factory.py` — **all LLM call sites go through `build_model()`**, never `init_chat_model` directly. It round-robins across `GOOGLE_API_KEYS` using a Redis `INCR` cursor, so rotation stays consistent across separate Celery worker processes.
+  - `redis_client.py` provides `get_redis()`, the single Redis client for the process. Use it instead of `Redis.from_url`; four modules used to build their own, and the health check rebuilt one on every request.
+
+- **`rate_limit.py`** (in `core/`) bounds Gemini spend. It counts **units of LLM work, not requests** (a batch submit with 5 resumes is ~21 provider calls, a status poll is 0), priced in one cost table. There is exactly **one bucket**: a global daily ceiling shared by every caller, with no per-user, per-IP, or per-token buckets and no IP addresses read anywhere. `enforce_budget(cost)` is an explicit call at the top of each handler, after cheap validation and before any model call or Celery dispatch, so a rejected request costs zero quota.
+
+  Two invariants worth not breaking: `interview.py`'s `_precheck_answer` charges **last**, after the mode gate and `engine.validate_answerable`, so a throttled answer is a real 429 rather than an SSE `error` frame; and the limiter complements rather than replaces `worker/circuit_breaker.py`, which is reactive and latches. See [backend/docs/rate-limiting.md](backend/docs/rate-limiting.md) for the cost table, the one-bucket trade-off, refunds, cooldowns, the 429 contract, and operations.
+
+  **Anonymous run history was deleted, not hardened.** There is deliberately no endpoint listing batch runs: access tokens *are* the authorization model for that surface, so returning a set of them to an unidentified caller is a full authorization bypass. There is no server-side identity to scope such a query by. If the demo flow ever needs history, build it from the tokens the browser already visited in `localStorage`.
 
 - **`evaluation/`** — Three-component scoring engine orchestrated by `composite_scorer.py`:
   - `skill_scorer.py` (45% weight) — LangChain agent evaluates skill matches. Match types: Exact (1.0), Partial (0.65), None (0.0). Skill tiers weight Critical 0.30 / Required 0.55 / Preferred 0.15, renormalized over the tiers the JD actually has; Critical is additionally a gate — the score is multiplied by `0.5 ** critical_gaps`.
@@ -138,6 +153,8 @@ Next.js App Router. Routes:
 
 Auth-gated routes live in the `app/(dashboard)/` route group. **There is no `middleware.ts`** — gating is client-side in `components/dashboard-layout.tsx`, which redirects to `/login` when `useAuth()` resolves with no user. `contexts/auth-context.tsx` holds the session; the JWT is stored in `localStorage` and attached by `services/api.ts` on every request.
 
+`services/api.ts` funnels every non-2xx into `ApiError(message, status, retryAfter?)`, and callers render `err.message` directly, so backend `detail` strings are user-facing copy. `retryAfter` is populated from a 429's body (not the header, which CORS hides by default). The interview page skips its state refetch on a 429: nothing changed server-side, and the draft is preserved because it is only cleared on `ack`.
+
 **Two parallel data models, one shared UI.** `services/batch.ts` covers the anonymous token flow and `services/runs.ts` the authenticated one; they return different shapes. The structural `EvaluationItem` type in `lib/evaluation-types.ts` reconciles them so everything in `components/evaluation/` (results table, breakdown panel, compare bar, resume sheet, stats) serves both pages. When touching results UI, keep it working for both.
 
 The shared components are flow-agnostic on purpose: they never call `useAuth()` or import a service, so flow identity arrives only as props (bound callbacks, or `interviewLocked` for the anonymous page). Interview functions live in `services/runs.ts` only.
@@ -146,7 +163,9 @@ The shared components are flow-agnostic on purpose: they never call `useAuth()` 
 
 ## Configuration
 
-Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `API_KEY` (empty disables the header check), `EMAIL_PROVIDER` (console|gmail|resend), `INTERVIEW_MODEL_NAME` / `INTERVIEW_GOOGLE_API_KEY` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` / `INTERVIEW_MODE` (text|audio), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`.
+Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `API_KEY` (empty disables the header check), `EMAIL_PROVIDER` (console|gmail|resend), `INTERVIEW_MODEL_NAME` / `INTERVIEW_GOOGLE_API_KEY` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` / `INTERVIEW_MODE` (text|audio), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`, `RATE_LIMIT_ENABLED` (on|log|off) / `RATE_LIMIT_DAILY_GLOBAL_UNITS`.
+
+**Rate limiting is only two env vars**, and both **default to their production values in code** (unlike `INTERVIEW_MODE` and `INTERVIEW_QUESTION_COUNT`, which default to the dev-friendly value): those are cost *reducers* where an unseeded deploy is merely expensive, these are cost *guards* where it would be silently unprotected. Set `RATE_LIMIT_ENABLED=off` in a local `.env` if the limits get in the way. `RATE_LIMIT_DAILY_GLOBAL_UNITS` defaults to **100**, roughly 16 anonymous trial runs a day: **raise it before demoing to an audience**. See [backend/docs/rate-limiting.md](backend/docs/rate-limiting.md#7-configuration).
 
 Frontend: `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`), `NEXT_PUBLIC_API_KEY` (optional, must match backend `API_KEY`), `NEXT_PUBLIC_DEMO_MODE`.
 

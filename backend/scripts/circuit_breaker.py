@@ -8,12 +8,10 @@ Usage:
 
 import sys
 
-from redis import Redis
-
-from app.config import Config
+from app.core.redis_client import get_redis
 from app.worker.circuit_breaker import CIRCUIT_BREAKER_KEY
 
-redis_client = Redis.from_url(Config.REDIS_URL)
+redis_client = get_redis()
 
 
 def check_status():

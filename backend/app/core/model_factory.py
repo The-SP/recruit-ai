@@ -1,11 +1,10 @@
 from typing import Any, cast
 
 from langchain.chat_models import init_chat_model
-from redis import Redis
 
 from app.config import Config
+from app.core.redis_client import get_redis
 
-_redis = Redis.from_url(Config.REDIS_URL)
 _CURSOR_KEY = "google_api_key_cursor"
 
 
@@ -19,7 +18,7 @@ def _next_api_key() -> str | None:
     keys = Config.GOOGLE_API_KEYS
     if not keys:
         return None
-    idx = cast(int, _redis.incr(_CURSOR_KEY)) % len(keys)
+    idx = cast(int, get_redis().incr(_CURSOR_KEY)) % len(keys)
     return keys[idx]
 
 

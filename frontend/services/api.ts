@@ -6,7 +6,11 @@ const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 export class ApiError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
+    /** Seconds to wait before retrying, from a 429. The backend sends this in
+     * the body as well as the Retry-After header because CORS hides response
+     * headers by default. Undefined for every other status. */
+    public retryAfter?: number
   ) {
     super(message);
     this.name = "ApiError";
@@ -29,20 +33,37 @@ export function authHeaders(): Record<string, string> {
   };
 }
 
-/** Best-effort `detail` extraction from a failed response body, matching the
- * message apiRequest would have thrown. Consumes the body. */
-export async function errorMessage(res: Response): Promise<string> {
+/** Best-effort `detail` + `retry_after` extraction from a failed response body,
+ * matching the error apiRequest would have thrown. Consumes the body, so both
+ * fields come out of a single read. */
+export async function errorDetails(
+  res: Response
+): Promise<{ message: string; retryAfter?: number }> {
+  let message = `Request failed with status ${res.status}`;
+  let retryAfter: number | undefined;
+
   try {
     const data = await res.json();
     if (data.detail) {
-      return typeof data.detail === "string"
-        ? data.detail
-        : JSON.stringify(data.detail);
+      message =
+        typeof data.detail === "string"
+          ? data.detail
+          : JSON.stringify(data.detail);
+    }
+    if (typeof data.retry_after === "number") {
+      retryAfter = data.retry_after;
     }
   } catch {
     // Response body is not JSON, use default message
   }
-  return `Request failed with status ${res.status}`;
+
+  if (retryAfter === undefined) {
+    // Header fallback: only readable when the server exposes it via CORS.
+    const header = Number(res.headers.get("Retry-After"));
+    if (Number.isFinite(header) && header > 0) retryAfter = header;
+  }
+
+  return { message, retryAfter };
 }
 
 export async function apiRequest<T>(
@@ -96,7 +117,8 @@ export async function apiFetch(
   }
 
   if (!res.ok) {
-    throw new ApiError(await errorMessage(res), res.status);
+    const { message, retryAfter } = await errorDetails(res);
+    throw new ApiError(message, res.status, retryAfter);
   }
 
   return res;

@@ -6,11 +6,10 @@ Provides utilities to detect, activate, and check rate limit circuit breaker sta
 
 from uuid import UUID
 
-from redis import Redis
 from sqlalchemy.orm import Session
 
-from app.config import Config
 from app.core.logger import init_logger
+from app.core.redis_client import get_redis
 from app.models.database import create_session
 from app.repositories.evaluation_run_repository import (
     EvaluationRunItemRepository,
@@ -18,8 +17,6 @@ from app.repositories.evaluation_run_repository import (
 )
 
 logger = init_logger(__name__)
-
-redis_client = Redis.from_url(Config.REDIS_URL)
 
 # Global circuit breaker key
 CIRCUIT_BREAKER_KEY = "rate_limit_circuit_breaker"
@@ -38,7 +35,7 @@ def is_rate_limit_error(error: Exception | str) -> bool:
 
 def is_circuit_breaker_active() -> bool:
     """Check if rate limit circuit breaker is currently active."""
-    return redis_client.get(CIRCUIT_BREAKER_KEY) is not None
+    return get_redis().get(CIRCUIT_BREAKER_KEY) is not None
 
 
 def activate_circuit_breaker() -> bool:
@@ -52,9 +49,7 @@ def activate_circuit_breaker() -> bool:
         False if it was already active.
     """
     # nx=True ensures we only set it if it doesn't exist
-    was_set = redis_client.set(
-        CIRCUIT_BREAKER_KEY, "1", nx=True, ex=CIRCUIT_BREAKER_TTL
-    )
+    was_set = get_redis().set(CIRCUIT_BREAKER_KEY, "1", nx=True, ex=CIRCUIT_BREAKER_TTL)
     if was_set:
         logger.error(
             "🚨 Circuit breaker activated - tasks blocked for 24h or until manual reset"

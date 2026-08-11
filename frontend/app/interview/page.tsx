@@ -148,10 +148,15 @@ function InterviewPageInner() {
     onDone: () => {
       setIsSubmitting(false);
     },
-    onError: (message: string) => {
+    onError: (message: string, status?: number) => {
       setIsSubmitting(false);
       setNotice(message);
-      // Whatever happened, the server is the source of truth now.
+      // A 429 means we were throttled before the answer was ever processed, so
+      // nothing changed server-side and the draft is still intact (it is only
+      // cleared on `ack`). Refetching would just add a round trip on a
+      // connection we have already been asked to ease up on.
+      if (status === 429) return;
+      // Whatever else happened, the server is the source of truth now.
       fetchState();
     },
   });

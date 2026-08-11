@@ -50,6 +50,15 @@ class Config:
         "INTERVIEW_TTS_MODEL_NAME", "google_genai:gemini-2.5-flash-preview-tts"
     )
 
+    # LLM rate limiting. Other limits are constants in core/rate_limit.py.
+    # "on" enforces, "log" counts without rejecting, "off" skips Redis.
+    RATE_LIMIT_ENABLED: str = os.getenv("RATE_LIMIT_ENABLED", "on")
+    # Ceiling across all callers per UTC day. ~16 anonymous trial runs
+    # (6 units each). Raise before a demo.
+    RATE_LIMIT_DAILY_GLOBAL_UNITS: int = int(
+        os.getenv("RATE_LIMIT_DAILY_GLOBAL_UNITS", "100")
+    )
+
     LOG_LEVEL: int = getattr(
         logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
     )

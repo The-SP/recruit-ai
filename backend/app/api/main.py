@@ -48,6 +48,10 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Response headers are hidden from JS cross-origin unless named here.
+        # The 429 handler also puts retry_after in the body, which is what the
+        # frontend reads; this makes the standard header usable too.
+        expose_headers=["Retry-After"],
     )
 
     # Exception handlers

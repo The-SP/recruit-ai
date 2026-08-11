@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, enforce_cooldown, get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.batch import (
     BatchCreateRequest,
@@ -22,8 +22,6 @@ from app.api.schemas.public import (
     CandidateBreakdownResponse,
     CandidateResult,
     CreateBatchResponse,
-    HistoryItem,
-    HistoryListResponse,
     JobSummary,
     ProgressInfo,
     RetryFailedResponse,
@@ -39,6 +37,7 @@ from app.core.file_upload import (
     validate_pdf_filename,
 )
 from app.core.job_description_parser import parse_job_description
+from app.core.rate_limit import COST_JD_PARSE, COST_RESUME, refund
 from app.models.evaluation_run import RunStatus
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
@@ -53,6 +52,11 @@ from app.schemas.skill_evaluation import SkillScoreResult
 from app.worker.tasks import process_evaluation_run
 
 router = APIRouter(prefix="/batch", tags=["batch"])
+
+_RETRY_COOLDOWN_MESSAGE = (
+    "This batch was retried a moment ago. Give the current attempt time to "
+    "finish before retrying again."
+)
 
 
 # =============================================================================
@@ -84,6 +88,12 @@ async def submit_batch(
         raise ValidationError("At least one PDF file is required")
 
     enforce_anonymous_resume_cap(0, len(files))
+
+    # Charged before the JD parse below, which is itself an LLM call: a
+    # throttled caller must not get a free model invocation on the way to a
+    # 429. Same ordering rule as the cap above.
+    cost = COST_JD_PARSE + len(files) * COST_RESUME
+    enforce_budget(cost)
 
     # Parse job description
     jd = parse_job_description(job_text)
@@ -131,6 +141,11 @@ async def submit_batch(
 
     if duplicate_files:
         errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
+
+    # Give back units for resumes that never made it to a worker (rejected PDFs,
+    # duplicates). The JD parse is deliberately NOT refunded: that model call
+    # already happened above. Covers the partial case too, not just uploaded==0.
+    refund((len(files) - uploaded) * COST_RESUME)
 
     # Check if we have any valid files
     if uploaded == 0:
@@ -269,6 +284,8 @@ async def add_candidates_to_batch(
             "The run must be completed or failed."
         )
 
+    enforce_budget(len(files) * COST_RESUME)
+
     item_repo = EvaluationRunItemRepository(db)
     uploaded_items: list[tuple[str, UUID]] = []  # (filename, item_id)
     failed = 0
@@ -300,6 +317,9 @@ async def add_candidates_to_batch(
 
     if duplicate_files:
         errors.append(f"{', '.join(duplicate_files)}: already exists in this batch")
+
+    # Give back units for resumes no worker will ever see.
+    refund((len(files) - uploaded) * COST_RESUME)
 
     if uploaded == 0:
         raise ValidationError(
@@ -362,6 +382,12 @@ def retry_all_failed(
     if not failed_items:
         raise ValidationError("No failed items to retry in this batch.")
 
+    # Cooldown as well as budget: retry is the one control a frustrated user
+    # clicks repeatedly, and a unit budget alone would let a hundred scripted
+    # clicks through as long as units remain.
+    enforce_cooldown(f"retry:{run.id}", _RETRY_COOLDOWN_MESSAGE)
+    enforce_budget(len(failed_items) * COST_RESUME)
+
     failed_item_ids = [item.id for item in failed_items]
     item_repo.mark_items_as_pending(failed_item_ids)
     run_repo.mark_reopened(run.id)
@@ -414,6 +440,9 @@ def retry_single_failed(
         raise ValidationError(
             f"Item is not in a failed state (current status: '{item.status}')."
         )
+
+    enforce_cooldown(f"retry:{run.id}", _RETRY_COOLDOWN_MESSAGE)
+    enforce_budget(COST_RESUME)
 
     item_repo.mark_items_as_pending([item_id])
     run_repo.mark_reopened(run.id)
@@ -496,29 +525,14 @@ def get_candidate_breakdown(
     )
 
 
-@router.get("/history", response_model=HistoryListResponse)
-def get_history(
-    limit: int = 50,
-    db: Session = Depends(get_db),
-) -> HistoryListResponse:
-    """List past evaluation runs for the history page."""
-    run_repo = EvaluationRunRepository(db)
-    runs = run_repo.get_all(limit=limit)
-    items = [
-        HistoryItem(
-            token=run.access_token,
-            job_title=run.job.title if run.job else None,
-            company_name=run.job.company_name if run.job else None,
-            candidate_count=run.total_count,
-            status=run.status,
-            created_at=run.created_at,
-        )
-        for run in runs
-        if run.access_token is not None
-    ]
-    return HistoryListResponse(items=items, total=len(items))
-
-
+# There is deliberately no anonymous "list past runs" endpoint. Access tokens
+# ARE the authorization model for this surface -- holding one grants results,
+# add-candidates, and both retries on that run -- so any endpoint that returns
+# a set of them to an unidentified caller is a full authorization bypass, not a
+# listing. There is no server-side identity to scope such a query by. If the
+# demo flow ever needs run history, build it from the tokens the browser has
+# already visited in localStorage.
+#
 # =============================================================================
 # Internal Multi-Step API
 # =============================================================================
@@ -558,7 +572,11 @@ def get_batch(run_id: UUID, db: Session = Depends(get_db)) -> BatchRunResponse:
 async def upload_files(
     run_id: UUID, files: list[UploadFile], db: Session = Depends(get_db)
 ) -> BatchFilesUploadResponse:
-    """Upload one or more PDF files to a draft batch."""
+    """Upload one or more PDF files to a draft batch.
+
+    Deliberately uncharged: uploading to a draft spends no LLM quota. The whole
+    run is charged at /{run_id}/start, which is what actually dispatches work.
+    """
     run_repo = EvaluationRunRepository(db)
     run = run_repo.get_by_id(run_id)
 
@@ -688,6 +706,9 @@ def start_batch(run_id: UUID, db: Session = Depends(get_db)) -> BatchRunResponse
 
     if run.total_count == 0:
         raise ValidationError("Cannot start batch with no files")
+
+    # The draft's uploads were free; this is where the run's resumes get billed.
+    enforce_budget(run.total_count * COST_RESUME)
 
     item_repo = EvaluationRunItemRepository(db)
     item_repo.mark_uploaded_as_pending(run_id)

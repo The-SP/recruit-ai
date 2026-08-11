@@ -3,12 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import enforce_budget, get_db
 from app.api.exceptions import NotFoundError, ValidationError
 from app.api.schemas.evaluations import (
     EvaluationCreateRequest,
     EvaluationResponse,
 )
+from app.core.rate_limit import COST_COMPOSITE_SCORE
 from app.evaluation.composite_scorer import calculate_composite_score
 from app.models.job import Job
 from app.repositories.candidate_repository import CandidateRepository
@@ -54,6 +55,9 @@ def create_evaluation(
 
     # Convert to JD response for scorer
     jd = _job_to_jd_response(job)
+
+    # Charged after both lookups so a bad candidate/job id is free.
+    enforce_budget(COST_COMPOSITE_SCORE)
 
     # Run composite scoring
     result = calculate_composite_score(jd=jd, resume_markdown=candidate.resume_markdown)

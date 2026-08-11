@@ -43,6 +43,18 @@ circuit-status:  ## Check circuit breaker status
 circuit-reset:  ## Reset circuit breaker manually
 	@uv run -m scripts.circuit_breaker reset
 
+budget-status:  ## Show today's global LLM budget usage
+	@uv run -m scripts.llm_budget status
+
+budget-reset:  ## Clear today's global LLM budget counter
+	@uv run -m scripts.llm_budget reset
+
+rate-limit-status:  ## Show the daily budget key and any active cooldowns
+	@uv run -m scripts.llm_budget keys
+
+rate-limit-clear:  ## Release stuck cooldowns (usage: make rate-limit-clear [KEY=retry:<run-id>])
+	@uv run -m scripts.llm_budget clear $(KEY)
+
 lint:  ## Lint code
 	@echo "Running linter..."
 	uv run ruff check .
