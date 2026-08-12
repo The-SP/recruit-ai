@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowDown, ArrowUp, ChevronDown, ChevronUp, FileText, Loader2,
+  ArrowDown, ArrowUp, ChevronDown, ChevronUp, FileText, Loader2, Trash2,
 } from "lucide-react";
 import React from "react";
 
@@ -58,6 +58,9 @@ interface ResultsTableProps<T extends EvaluationItem> {
   // Anonymous page: interviews are login-only, so it passes this instead of
   // the callbacks above and each row shows a sign-in upsell.
   interviewLocked?: boolean;
+  // Optional: removes one candidate from the run. Owned runs only -- the
+  // anonymous page omits it, and the row action disappears with it.
+  onDeleteCandidate?: (item: T) => void;
 }
 
 export function ResultsTable<T extends EvaluationItem>({
@@ -86,6 +89,7 @@ export function ResultsTable<T extends EvaluationItem>({
   onAssessInterview,
   getInterviewHref,
   interviewLocked,
+  onDeleteCandidate,
 }: ResultsTableProps<T>) {
   return (
     <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
@@ -222,6 +226,20 @@ export function ResultsTable<T extends EvaluationItem>({
                           title="View resume"
                         >
                           <FileText className="w-4 h-4" />
+                        </button>
+                      )}
+                      {onDeleteCandidate && (
+                        <button
+                          onClick={(e) => {
+                            // The row itself toggles the breakdown panel.
+                            e.stopPropagation();
+                            onDeleteCandidate(item);
+                          }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-error-foreground hover:bg-error transition-colors cursor-pointer"
+                          title="Remove candidate from this run"
+                          aria-label={`Remove ${item.candidate_name ?? item.filename} from this run`}
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                       {rowAction != null

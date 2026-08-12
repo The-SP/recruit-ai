@@ -125,6 +125,23 @@ export async function retryFailedRun(runId: string): Promise<RetryFailedResponse
   );
 }
 
+// Deletion exists only here, never in services/batch.ts: the anonymous flow is
+// authorized by a shareable token, so a forwarded link must not destroy a run.
+export async function deleteEvaluationRun(runId: string): Promise<void> {
+  return apiRequest<void>(`/evaluations/runs/${runId}`, { method: "DELETE" });
+}
+
+// Keyed by item_id, not candidate_id: a failed row has no candidate_id, and it
+// is the row a user most often wants removed.
+export async function deleteRunItem(
+  runId: string,
+  itemId: string
+): Promise<void> {
+  return apiRequest<void>(`/evaluations/runs/${runId}/items/${itemId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getDashboardStats(): Promise<DashboardStatsResponse> {
   return apiRequest<DashboardStatsResponse>("/dashboard/stats");
 }

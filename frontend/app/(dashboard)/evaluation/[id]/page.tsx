@@ -9,6 +9,7 @@ import {
   RefreshCw,
   RotateCcw,
   Sparkles,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CandidateCompareDialog } from "@/components/candidate-compare-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { CompareBar } from "@/components/evaluation/compare-bar";
 import { FilterControls } from "@/components/evaluation/filter-controls";
 import { InterviewStatsStrip } from "@/components/evaluation/interview-stats-strip";
@@ -36,6 +38,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  candidateDeleteDescription,
+  runDeleteDescription,
+} from "@/lib/delete-copy";
 import { interviewStatusLabels, recommendationLabels } from "@/lib/evaluation-styles";
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from "@/lib/evaluation-types";
 import type { CachedInterview } from "@/lib/interview-types";
@@ -46,6 +52,8 @@ import {
   addCandidatesToRun,
   assessRunCandidateInterview,
   createRunCandidateInterview,
+  deleteEvaluationRun,
+  deleteRunItem,
   getEvaluationRun,
   getRunCandidateBreakdown,
   getRunCandidateInterview,
@@ -154,6 +162,9 @@ function RunDetailPageInner({
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addFilesError, setAddFilesError] = useState<string | null>(null);
+  const [deleteRunOpen, setDeleteRunOpen] = useState(false);
+  const [pendingDeleteItem, setPendingDeleteItem] =
+    useState<RunItemSummary | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keys already fetched or in flight. Kept in a ref so the ensure* callbacks
@@ -364,6 +375,51 @@ function RunDetailPageInner({
     } finally {
       setAddSubmitting(false);
     }
+  }
+
+  async function handleDeleteRun() {
+    await deleteEvaluationRun(runId);
+    // The page being viewed no longer exists.
+    router.push("/history");
+  }
+
+  async function handleDeleteCandidate(item: RunItemSummary) {
+    const id = item.item_id;
+    await deleteRunItem(runId, id);
+
+    // Every per-item cache is keyed by item_id, and a stale entry would attach
+    // itself to whichever candidate is added next. The two refs matter most:
+    // they gate refetching, so a leftover key silently blocks the new row from
+    // ever loading its breakdown.
+    requestedBreakdowns.current.delete(id);
+    requestedInterviews.current.delete(id);
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setCompareItemIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      if (next.size < 2) setIsCompareOpen(false);
+      return next;
+    });
+    setBreakdownCache((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setInterviewCache((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setResumePanel((prev) =>
+      prev && prev.filename === item.filename ? null : prev
+    );
+
+    // Resyncs total_count and every value derived from the item list.
+    await fetchData(true);
   }
 
   function exportCsv() {
@@ -690,6 +746,20 @@ function RunDetailPageInner({
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
+            {/* Hidden while the run is in flight: the backend refuses to delete
+                a pending or processing run, so offering it would only 400. */}
+            {!isActive && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setDeleteRunOpen(true)}
+                title="Delete this evaluation run"
+                aria-label="Delete this evaluation run"
+                className="w-10 h-10 border-border text-muted-foreground hover:bg-error hover:text-error-foreground hover:border-error-edge cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -781,6 +851,14 @@ function RunDetailPageInner({
                     item.candidate_id
                       ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`
                       : null
+                  }
+                  // Withheld while processing (the backend refuses it) and on
+                  // the last remaining row, where deleting the run is the
+                  // right action instead.
+                  onDeleteCandidate={
+                    !isActive && data.items.length > 1
+                      ? setPendingDeleteItem
+                      : undefined
                   }
                 />
               )}
@@ -948,6 +1026,30 @@ function RunDetailPageInner({
       />
 
       <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
+
+      <ConfirmDeleteDialog
+        open={deleteRunOpen}
+        onOpenChange={setDeleteRunOpen}
+        title="Delete this evaluation run?"
+        description={runDeleteDescription(data)}
+        confirmLabel="Delete run"
+        onConfirm={handleDeleteRun}
+      />
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteItem !== null}
+        onOpenChange={(open) => !open && setPendingDeleteItem(null)}
+        title="Remove this candidate?"
+        description={
+          pendingDeleteItem
+            ? candidateDeleteDescription(pendingDeleteItem.candidate_name)
+            : null
+        }
+        confirmLabel="Remove candidate"
+        onConfirm={async () => {
+          if (pendingDeleteItem) await handleDeleteCandidate(pendingDeleteItem);
+        }}
+      />
     </>
   );
 }

@@ -269,6 +269,15 @@ class InterviewRepository:
         logger.info(f"Interview expired: id={interview.id}")
         return interview
 
+    def get_id_for_evaluation(self, evaluation_id: UUID) -> UUID | None:
+        """The interview id for one evaluation, or None.
+
+        Single-row twin of get_ids_for_run, for deleting one candidate out of a
+        run. Returns at most one id because interviews.evaluation_id is unique.
+        """
+        stmt = select(Interview.id).where(Interview.evaluation_id == evaluation_id)
+        return self.db.scalars(stmt).first()
+
     def get_ids_for_run(self, run_id: UUID) -> list[UUID]:
         """Every interview id reachable from a run, via its scored items.
 

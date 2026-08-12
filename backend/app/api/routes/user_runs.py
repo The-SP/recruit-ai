@@ -380,6 +380,75 @@ def retry_failed(
     )
 
 
+# Deletion is owner-only, and only from a settled run. The status allow-list is
+# the same one add_candidates and retry_failed use, for a stronger reason here:
+# a run in flight has evaluate_resume tasks running over exactly these rows, and
+# they would recreate candidates and evaluations after the delete committed.
+# There is deliberately no token-flavored twin in batch.py -- an access token is
+# shareable by design, so a forwarded link must not be able to destroy a run --
+# and no admin twin, because the admin surface is read-only.
+_DELETABLE_STATUSES = {
+    RunStatus.DRAFT.value,
+    RunStatus.COMPLETED.value,
+    RunStatus.FAILED.value,
+}
+
+
+@runs_router.delete("/{run_id}", status_code=204)
+def delete_run(
+    run_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Delete an evaluation run and everything it produced."""
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_id_for_user_for_update(run_id, current_user.id)
+    if not run:
+        raise NotFoundError("Evaluation run", str(run_id))
+
+    if run.status not in _DELETABLE_STATUSES:
+        raise ValidationError(
+            f"Cannot delete a run with status '{run.status}'. "
+            "Wait for it to finish, then try again."
+        )
+
+    run_repo.delete(run_id, actor=current_user)
+
+
+@runs_router.delete("/{run_id}/items/{item_id}", status_code=204)
+def delete_run_item(
+    run_id: UUID,
+    item_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Remove a single candidate from an evaluation run."""
+    run_repo = EvaluationRunRepository(db)
+    run = run_repo.get_by_id_for_user_for_update(run_id, current_user.id)
+    if not run:
+        raise NotFoundError("Evaluation run", str(run_id))
+
+    if run.status not in _DELETABLE_STATUSES:
+        raise ValidationError(
+            f"Cannot remove a candidate from a run with status '{run.status}'. "
+            "Wait for it to finish, then try again."
+        )
+
+    item_repo = EvaluationRunItemRepository(db)
+    item = item_repo.get_by_id(item_id)
+    # Checked against this run, so an item id belonging to someone else's run is
+    # not reachable through a run the caller does own.
+    if not item or item.evaluation_run_id != run_id:
+        raise NotFoundError("Run item", str(item_id))
+
+    if len(item_repo.get_by_run(run_id)) <= 1:
+        raise ValidationError(
+            "Cannot remove the last candidate from a run. Delete the run instead."
+        )
+
+    item_repo.delete_item_fully(item, run.folder_path, actor=current_user)
+
+
 @runs_router.get(
     "/{run_id}/candidate/{candidate_id}", response_model=CandidateBreakdownResponse
 )

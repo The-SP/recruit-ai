@@ -1,5 +1,6 @@
 from app.models.base import Base
 from app.models.candidate import Candidate
+from app.models.deletion_audit import DeletionAudit, DeletionTarget
 from app.models.evaluation import CandidateEvaluation
 from app.models.evaluation_run import EvaluationRun, EvaluationRunItem
 from app.models.interview import Interview, InterviewTurn
@@ -10,6 +11,8 @@ __all__ = [
     "Base",
     "Candidate",
     "CandidateEvaluation",
+    "DeletionAudit",
+    "DeletionTarget",
     "EvaluationRun",
     "EvaluationRunItem",
     "Interview",

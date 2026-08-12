@@ -8,6 +8,7 @@ from app.config import Config
 # Import all models so they're registered with Base.metadata
 from app.models import (  # noqa
     candidate,
+    deletion_audit,
     evaluation,
     evaluation_run,
     interview,

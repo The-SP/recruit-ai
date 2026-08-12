@@ -58,6 +58,12 @@ rate-limit-status:  ## Show the daily budget key and any active cooldowns
 rate-limit-clear:  ## Release stuck cooldowns (usage: make rate-limit-clear [KEY=retry:<run-id>])
 	@uv run -m scripts.llm_budget clear $(KEY)
 
+audit-log:  ## Show recent deletions (usage: make audit-log [LIMIT=50])
+	@uv run -m scripts.deletion_audit list $(LIMIT)
+
+audit-run:  ## Show one run's deletion history (usage: make audit-run RUN=<run-id>)
+	@uv run -m scripts.deletion_audit run $(RUN)
+
 lint:  ## Lint code
 	@echo "Running linter..."
 	uv run ruff check .

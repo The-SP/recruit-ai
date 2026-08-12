@@ -8,9 +8,11 @@ import {
   Layers,
   MessageSquareText,
   Plus,
+  Trash2,
   Users,
 } from "lucide-react";
 
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,11 +27,13 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import {
+  deleteEvaluationRun,
   getDashboardStats,
   listEvaluationRuns,
   type DashboardStatsResponse,
   type EvaluationRunSummary,
 } from "@/services/runs";
+import { runDeleteDescription } from "@/lib/delete-copy";
 import { statusLabels, statusStyles } from "@/lib/evaluation-styles";
 
 function StatCard({
@@ -70,6 +74,9 @@ export default function DashboardPage() {
   const [runs, setRuns] = useState<EvaluationRunSummary[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [runsLoading, setRunsLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<EvaluationRunSummary | null>(
+    null
+  );
 
   useEffect(() => {
     getDashboardStats()
@@ -80,6 +87,17 @@ export default function DashboardPage() {
       .then((res) => setRuns(res.items))
       .finally(() => setRunsLoading(false));
   }, []);
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    await deleteEvaluationRun(id);
+    setRuns((prev) => prev.filter((run) => run.id !== id));
+    // The stat tiles are computed server-side and fetched once on mount, so
+    // dropping the row is not enough -- total_runs and total_candidates would
+    // both stay stale until a remount.
+    setStats(await getDashboardStats());
+  };
 
   const firstName = user?.full_name?.split(" ")[0] ?? "there";
 
@@ -209,12 +227,23 @@ export default function DashboardPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/evaluation/${run.id}`}>
-                          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                          View
-                        </Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/evaluation/${run.id}`}>
+                            <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                            View
+                          </Link>
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Delete run ${run.job_title ?? "untitled"}`}
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => setPendingDelete(run)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -234,6 +263,15 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDeleteDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete this evaluation run?"
+        description={pendingDelete ? runDeleteDescription(pendingDelete) : null}
+        confirmLabel="Delete run"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

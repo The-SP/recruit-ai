@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Clock, ExternalLink, History, Loader2 } from "lucide-react";
+import { Clock, ExternalLink, History, Loader2, Trash2 } from "lucide-react";
 
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,13 +17,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/services/api";
-import { listEvaluationRuns, type EvaluationRunSummary } from "@/services/runs";
+import {
+  deleteEvaluationRun,
+  listEvaluationRuns,
+  type EvaluationRunSummary,
+} from "@/services/runs";
+import { runDeleteDescription } from "@/lib/delete-copy";
 import { statusLabels, statusStyles } from "@/lib/evaluation-styles";
 
 export default function HistoryPage() {
   const [items, setItems] = useState<EvaluationRunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // One dialog for the whole table, driven by whichever row is pending.
+  const [pendingDelete, setPendingDelete] = useState<EvaluationRunSummary | null>(
+    null
+  );
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    await deleteEvaluationRun(id);
+    // Nothing on this page is derived from the list, so filtering is enough.
+    setItems((prev) => prev.filter((run) => run.id !== id));
+  };
 
   useEffect(() => {
     listEvaluationRuns(100)
@@ -125,12 +143,23 @@ export default function HistoryPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/evaluation/${item.id}`}>
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        View
-                      </Link>
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/evaluation/${item.id}`}>
+                          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                          View
+                        </Link>
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Delete run ${item.job_title ?? "untitled"}`}
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setPendingDelete(item)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -138,6 +167,17 @@ export default function HistoryPage() {
           </Table>
         </Card>
       )}
+
+      <ConfirmDeleteDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete this evaluation run?"
+        description={
+          pendingDelete ? runDeleteDescription(pendingDelete) : null
+        }
+        confirmLabel="Delete run"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

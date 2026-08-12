@@ -9,11 +9,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.file_storage import (
     delete_batch_folder,
+    delete_file,
     delete_interview_audio,
     ensure_folder,
     get_batch_folder,
+    resolve_file_path,
 )
 from app.core.logger import init_logger
+from app.models.candidate import Candidate
+from app.models.deletion_audit import DeletionTarget
 from app.models.evaluation import CandidateEvaluation
 from app.models.evaluation_run import (
     EvaluationRun,
@@ -29,6 +33,8 @@ from app.models.interview import (
 )
 from app.models.job import Job
 from app.models.user import User
+from app.repositories.candidate_repository import CandidateRepository
+from app.repositories.deletion_audit_repository import DeletionAuditRepository
 from app.repositories.interview_repository import InterviewRepository
 
 logger = init_logger(__name__)
@@ -550,22 +556,83 @@ class EvaluationRunRepository:
         )
         return list(self.db.scalars(stmt).all())
 
-    def delete(self, run_id: UUID) -> bool:
-        """Delete evaluation run and its folder."""
-        run = self.get_by_id(run_id)
+    def delete(self, run_id: UUID, actor: User | None = None) -> bool:
+        """Delete an evaluation run, everything it produced, and its files.
+
+        Order matters, because each step destroys the trail the next one needs:
+
+        1. Interview ids resolve through items -> evaluations, so they have to
+           be read before any of that is deleted.
+        2. The audit snapshot is taken while the rows are still readable.
+        3. Stored files are removed next. Cascades drop rows but never storage
+           objects (see delete_interview_audio), so this is the only chance.
+        4. Candidates are deleted explicitly. Only then do candidate_evaluations
+           (Candidate.evaluations cascades) and interviews + interview_turns
+           (interviews.evaluation_id is ondelete=CASCADE) follow. Deleting the
+           run alone would not reach them: item.candidate_id and
+           item.evaluation_id are both SET NULL, so the run cascade stops at
+           evaluation_run_items and leaves the rest orphaned.
+
+        `actor` is the user who asked for this. None for the internal rollback
+        callers (a run that never got off the ground), which is why it is
+        optional rather than required.
+        """
+        run = self.get_by_id(run_id, with_items=True)
         if not run:
             return False
 
-        # Delete stored files first (before the DB record): the cascade removes
-        # interviews and their turns, after which nothing points at the
-        # recordings any more.
-        for interview_id in InterviewRepository(self.db).get_ids_for_run(run_id):
+        interview_ids = InterviewRepository(self.db).get_ids_for_run(run_id)
+        candidate_ids = [
+            item.candidate_id for item in run.items if item.candidate_id is not None
+        ]
+
+        # Snapshot before anything is destroyed: once the cascade runs, none of
+        # this is recoverable from the database.
+        candidate_names = CandidateRepository(self.db).get_names_by_ids(candidate_ids)
+        job = self.db.get(Job, run.job_id)
+        DeletionAuditRepository(self.db).record(
+            target_type=DeletionTarget.RUN,
+            target_id=run_id,
+            run_id=run_id,
+            actor_user_id=actor.id if actor else None,
+            actor_email=actor.email if actor else None,
+            details={
+                "job_title": job.title if job else None,
+                "company_name": job.company_name if job else None,
+                "run_status": run.status,
+                "total_count": run.total_count,
+                "item_count": len(run.items),
+                "candidate_count": len(candidate_ids),
+                "interview_count": len(interview_ids),
+                "candidate_names": sorted(
+                    n for n in candidate_names.values() if n is not None
+                ),
+                "filenames": sorted(item.pdf_filename for item in run.items),
+                "was_anonymous": run.user_id is None,
+                "created_at": run.created_at.isoformat() if run.created_at else None,
+            },
+        )
+
+        for interview_id in interview_ids:
             delete_interview_audio(interview_id)
         delete_batch_folder(run_id)
 
+        # One commit for the whole graph rather than CandidateRepository.delete
+        # per row: a run can hold hundreds of candidates.
+        if candidate_ids:
+            for candidate in self.db.scalars(
+                select(Candidate).where(Candidate.id.in_(candidate_ids))
+            ):
+                self.db.delete(candidate)
+
         self.db.delete(run)
+        # Audit and deletion commit together: neither can exist without the other.
         self.db.commit()
-        logger.info(f"Deleted evaluation run: id={run_id}")
+        logger.info(
+            f"Deleted evaluation run: id={run_id}, "
+            f"candidates={len(candidate_ids)}, interviews={len(interview_ids)}, "
+            f"actor={actor.email if actor else 'system'}"
+        )
         return True
 
 
@@ -632,7 +699,13 @@ class EvaluationRunItemRepository:
         self.db.commit()
 
     def delete_item(self, item_id: UUID) -> bool:
-        """Delete an item. Returns True if deleted."""
+        """Delete an item row only. Returns True if deleted.
+
+        Deliberately narrow: the add-candidates rollback path deletes the PDF
+        itself and adjusts the count, because it is undoing an upload that
+        never produced a candidate. To remove a scored candidate from a run,
+        use delete_item_fully.
+        """
         item = self.get_by_id(item_id)
         if item:
             self.db.delete(item)
@@ -640,6 +713,90 @@ class EvaluationRunItemRepository:
             logger.info(f"Deleted item: id={item_id}")
             return True
         return False
+
+    def delete_item_fully(
+        self,
+        item: EvaluationRunItem,
+        folder_path: str,
+        actor: User | None = None,
+    ) -> None:
+        """Remove one candidate from a run: files, rows, and the run's total.
+
+        Same ordering rule as EvaluationRunRepository.delete -- read the
+        interview id through the evaluation before deleting the candidate that
+        cascades it away, and remove storage objects while something still
+        points at them.
+
+        The two storage calls are not interchangeable. The resume is a single
+        object, but the recordings are a prefix holding every turn, and
+        S3Storage.delete issues delete_object, which cannot remove a prefix --
+        it would silently succeed and delete nothing. Folders go through
+        delete_interview_audio.
+        """
+        # Captured before the delete: afterwards the instance is expired and
+        # touching a column would re-query a row that no longer exists.
+        run_id = item.evaluation_run_id
+        item_id = item.id
+        candidate_id = item.candidate_id
+
+        interview_id = (
+            InterviewRepository(self.db).get_id_for_evaluation(item.evaluation_id)
+            if item.evaluation_id
+            else None
+        )
+
+        # Snapshotted before the cascade, same reason as the run-level audit.
+        candidate_name = (
+            CandidateRepository(self.db)
+            .get_names_by_ids([candidate_id])
+            .get(candidate_id)
+            if candidate_id
+            else None
+        )
+        DeletionAuditRepository(self.db).record(
+            target_type=DeletionTarget.RUN_ITEM,
+            target_id=item_id,
+            run_id=run_id,
+            actor_user_id=actor.id if actor else None,
+            actor_email=actor.email if actor else None,
+            details={
+                "candidate_name": candidate_name,
+                "candidate_id": str(candidate_id) if candidate_id else None,
+                "filename": item.pdf_filename,
+                "item_status": item.status,
+                "had_interview": interview_id is not None,
+            },
+        )
+
+        resume_path = resolve_file_path(folder_path, item.pdf_filename)
+        if not delete_file(resume_path):
+            # S3Storage.delete swallows every exception and returns False, so a
+            # permissions or network failure is indistinguishable from an
+            # already-missing file. Not fatal -- the rows should still go -- but
+            # a retained object must leave a trace.
+            logger.warning(
+                f"Resume file not removed: path={resume_path}, item={item_id}"
+            )
+        if interview_id:
+            delete_interview_audio(interview_id)
+
+        # Deleting the candidate cascades candidate_evaluations, and with it the
+        # interview and its turns. Items point at both via SET NULL, so the item
+        # row survives that and is deleted on its own below.
+        if candidate_id:
+            candidate = self.db.get(Candidate, candidate_id)
+            if candidate:
+                self.db.delete(candidate)
+
+        self.db.delete(item)
+        self.db.commit()
+
+        EvaluationRunRepository(self.db).adjust_total_count(run_id, -1)
+        logger.info(
+            f"Deleted run item fully: id={item_id}, run={run_id}, "
+            f"candidate={candidate_id}, interview={interview_id}, "
+            f"actor={actor.email if actor else 'system'}"
+        )
 
     def filename_exists(self, run_id: UUID, filename: str) -> bool:
         """Check if filename already exists in run."""
