@@ -17,10 +17,12 @@ import { useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { InterviewCountdown } from "@/components/interview/countdown";
+import { MicCheck } from "@/components/interview/mic-check";
 import { QuestionSpeaker } from "@/components/interview/question-speaker";
 import { AnswerRecorder } from "@/components/interview/recorder";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { useInterviewVoice } from "@/components/interview/use-interview-voice";
+import { useMicStream } from "@/components/interview/use-mic-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -61,6 +63,11 @@ function InterviewPageInner() {
     [token]
   );
   const voice = useInterviewVoice(fetchClip, state?.voice_mode === "on");
+
+  // Owned here rather than inside the recorder so the pre-start check and the
+  // answer composer share one MediaStream — and therefore one permission
+  // prompt for the whole session.
+  const mic = useMicStream();
 
   // GET state is the source of truth: rendered on mount, refetched after any
   // stream error. SSE events only advance live state between fetches.
@@ -332,6 +339,11 @@ function InterviewPageInner() {
               </div>
             )}
 
+            {/* After the consent block on purpose: the check is the first thing
+                that touches the microphone, so declining is still possible
+                before any prompt appears. */}
+            {isAudioMode && <MicCheck mic={mic} voiceMode={isVoiceMode} />}
+
             <Button
               onClick={handleStart}
               disabled={isStarting}
@@ -454,7 +466,11 @@ function InterviewPageInner() {
           </p>
         </Card>
       ) : isAudioMode ? (
-        <AnswerRecorder onSubmit={handleSubmitAudio} onRecordingStart={voice.stop} />
+        <AnswerRecorder
+          mic={mic}
+          onSubmit={handleSubmitAudio}
+          onRecordingStart={voice.stop}
+        />
       ) : (
         <div className="space-y-3 pb-2">
           {notice && (

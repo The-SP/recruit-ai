@@ -1,8 +1,10 @@
 "use client";
 
 import { AlertCircle, Loader2, Mic, MicOff, RotateCcw, Send, Square } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MicPermissionDenied } from "@/components/interview/mic-check";
+import { pickMimeType, type MicStream } from "@/components/interview/use-mic-stream";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatClock } from "@/lib/utils";
@@ -15,18 +17,7 @@ const MAX_SECONDS = 180;
 /** Warn the candidate this many seconds before the auto-stop. */
 const WARN_AT_REMAINING = 30;
 
-/** Tried in order; the browser's own recorder.mimeType is what gets uploaded,
- * since a browser may normalize what we asked for. WebM/Opus covers
- * Chrome/Edge/Firefox, MP4/AAC covers Safari including iOS >= 14.3. */
-const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-
-type RecorderState =
-  | "permission_needed"
-  | "permission_denied"
-  | "ready"
-  | "recording"
-  | "recorded"
-  | "submitting";
+type RecorderState = "ready" | "recording" | "recorded" | "submitting";
 
 /** The recording currently held, and the object URL rendering it. Kept as one
  * value so the URL can never outlive the blob it points at. */
@@ -36,6 +27,9 @@ interface HeldRecording {
 }
 
 interface AnswerRecorderProps {
+  /** The page-owned microphone. Shared with the pre-start check so a candidate
+   * who tested their mic is never prompted for permission a second time. */
+  mic: MicStream;
   /** Uploads the recording. Resolves to an error message, or null on success.
    * The recorder keeps the blob on failure so Retry re-sends the same audio
    * instead of making the candidate speak again. */
@@ -46,21 +40,8 @@ interface AnswerRecorderProps {
   onRecordingStart?: () => void;
 }
 
-function pickMimeType(): string | null {
-  if (typeof MediaRecorder === "undefined") return null;
-  return MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m)) ?? null;
-}
-
-function canRecordAudio(): boolean {
-  return pickMimeType() !== null && !!navigator.mediaDevices?.getUserMedia;
-}
-
-/** Capability never changes for the life of the page, so there is nothing to
- * subscribe to; useSyncExternalStore still needs a subscribe function. */
-const subscribeNever = () => () => {};
-
-export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderProps) {
-  const [uiState, setUiState] = useState<RecorderState>("permission_needed");
+export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecorderProps) {
+  const [uiState, setUiState] = useState<RecorderState>("ready");
   const [elapsed, setElapsed] = useState(0);
   // Non-null means the last submit failed; it is also what turns the submit
   // button into Retry, so there is no separate "error" ui state.
@@ -69,21 +50,10 @@ export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderPro
 
   // Refs, not state: none of these should trigger a render, and the recorder
   // callbacks need to read the current value rather than a captured one.
-  const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Browser capability, not UI state: read through useSyncExternalStore so the
-  // server snapshot says "supported" (MediaRecorder never exists there, and
-  // hydrating every candidate from an unsupported card would be a lie) and the
-  // client re-reads it on mount.
-  const isSupported = useSyncExternalStore(
-    subscribeNever,
-    canRecordAudio,
-    () => true
-  );
 
   const clearTimers = useCallback(() => {
     if (autoStopRef.current) clearTimeout(autoStopRef.current);
@@ -103,32 +73,25 @@ export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderPro
     chunksRef.current = [];
   }, []);
 
-  // Release the mic on unmount so the browser's recording indicator goes away.
-  // The stream is otherwise kept alive across turns: one permission prompt per
-  // interview, not one per question.
+  // The mic itself belongs to the page (`useMicStream`), which keeps it alive
+  // across turns and across the pre-start check: one permission prompt per
+  // interview, not one per question. Only this component's own timers and
+  // object URLs are torn down here.
   useEffect(() => {
     return () => {
       clearTimers();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      // Stopping the stream used to end an in-flight recorder implicitly; now
+      // that the stream outlives this component, stop the recorder explicitly.
+      if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
       releaseRecording();
     };
   }, [clearTimers, releaseRecording]);
 
-  const requestMic = async () => {
-    setMessage(null);
-    try {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setUiState("ready");
-    } catch {
-      setUiState("permission_denied");
-    }
-  };
-
   const startRecording = () => {
-    const stream = streamRef.current;
+    const stream = mic.stream;
     const mimeType = pickMimeType();
     if (!stream || !mimeType) {
-      setUiState("permission_needed");
+      mic.request();
       return;
     }
 
@@ -197,7 +160,7 @@ export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderPro
     setUiState("ready");
   };
 
-  if (!isSupported) {
+  if (!mic.isSupported) {
     return (
       <Card className="p-6 rounded-2xl border-error-edge bg-error/40 space-y-2">
         <div className="flex items-center gap-2 font-bold text-foreground">
@@ -212,37 +175,34 @@ export function AnswerRecorder({ onSubmit, onRecordingStart }: AnswerRecorderPro
     );
   }
 
-  if (uiState === "permission_denied") {
-    return (
-      <Card className="p-6 rounded-2xl border-error-edge bg-error/40 space-y-3">
-        <div className="flex items-center gap-2 font-bold text-foreground">
-          <MicOff className="w-4 h-4" />
-          Microphone access is blocked
-        </div>
-        <p className="text-sm text-muted-foreground">
-          This interview is answered out loud. Allow the microphone for this site —
-          click the icon at the left of the address bar, choose Site settings, and set
-          Microphone to Allow — then try again.
-        </p>
-        <Button onClick={requestMic} className="h-11 px-6 font-bold rounded-xl cursor-pointer">
-          Try again
-        </Button>
-      </Card>
-    );
+  if (mic.status === "denied") {
+    return <MicPermissionDenied onRetry={mic.request} />;
   }
 
-  if (uiState === "permission_needed") {
+  // Never reached by a candidate who ran the pre-start check — this is the path
+  // for one who skipped it, or whose grant was revoked mid-session.
+  if (mic.status !== "ready") {
     return (
       <Card className="p-6 rounded-2xl border-border/60 space-y-3">
         <p className="text-sm text-muted-foreground">
           Answers are spoken. Enable your microphone to begin recording.
         </p>
         <Button
-          onClick={requestMic}
+          onClick={mic.request}
+          disabled={mic.status === "requesting"}
           className="h-11 px-6 font-bold rounded-xl cursor-pointer"
         >
-          <Mic className="w-4 h-4 mr-2" />
-          Enable microphone
+          {mic.status === "requesting" ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Waiting for permission...
+            </>
+          ) : (
+            <>
+              <Mic className="w-4 h-4 mr-2" />
+              Enable microphone
+            </>
+          )}
         </Button>
       </Card>
     );
