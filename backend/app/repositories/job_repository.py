@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logger import init_logger
@@ -96,11 +96,6 @@ class JobRepository:
             stmt = stmt.options(joinedload(Job.requirements))
         return self.db.scalars(stmt).first()
 
-    def get_all(self, limit: int = 10, offset: int = 0) -> list[Job]:
-        """Retrieve all jobs with pagination"""
-        stmt = select(Job).order_by(Job.created_at.desc()).offset(offset).limit(limit)
-        return list(self.db.scalars(stmt).all())
-
     def delete(self, job_id: UUID) -> bool:
         """Delete a job by ID"""
         job = self.get_by_id(job_id)
@@ -110,8 +105,3 @@ class JobRepository:
             logger.info(f"Deleted job with id={job_id}")
             return True
         return False
-
-    def count(self) -> int:
-        """Count total jobs"""
-        stmt = select(func.count()).select_from(Job)
-        return self.db.scalar(stmt) or 0

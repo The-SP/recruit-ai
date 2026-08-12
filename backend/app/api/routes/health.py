@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
-from app.api.dependencies import enforce_budget, verify_api_key
+from app.api.dependencies import enforce_budget
+from app.auth.jwt import require_admin
 from app.config import Config
 from app.core.logger import init_logger
 from app.core.model_factory import build_model
@@ -134,15 +135,12 @@ def health_check() -> dict[str, str]:
 @router.get(
     "/detailed",
     response_model=DetailedHealthResponse,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(require_admin)],
 )
 def detailed_health_check() -> DetailedHealthResponse:
     """Detailed health check - tests actual connectivity.
 
-    Gated on the api key, unlike GET /health, because this one can reach the
-    model. That gate is weak on its own -- API_KEY ships to browsers as
-    NEXT_PUBLIC_API_KEY and verify_api_key no-ops when it is unset -- so the
-    real protections are the cache and the budget check in _check_llm.
+    Admin-only, unlike GET /health, because this one can reach the LLM model.
     """
     db_status = _check_database()
     redis_status = _check_redis()

@@ -69,11 +69,6 @@ COST_JD_PARSE = 1
 # the ratio between this and the others is what matters, not the absolute count.
 COST_RESUME = 1
 
-# POST /evaluations scores an already-parsed candidate: three scorer calls, no
-# parse. Priced above COST_RESUME's nominal 1 so the cheap-looking direct
-# endpoint cannot be used to dodge the resume price.
-COST_COMPOSITE_SCORE = 3
-
 # interview/engine.py _decide_followup: one call per typed answer.
 COST_ANSWER_TEXT = 1
 

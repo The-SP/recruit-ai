@@ -10,7 +10,7 @@ from app.models.database import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/google")

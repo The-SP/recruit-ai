@@ -21,7 +21,6 @@ So the limiter counts **units of LLM work**. Prices live in one cost table in
 | --- | --- | --- |
 | `COST_JD_PARSE` | 1 | One job description parse |
 | `COST_RESUME` | 1 | One resume: a parse plus three scorers (~4 provider calls) |
-| `COST_COMPOSITE_SCORE` | 3 | `POST /evaluations`, three scorers with no parse |
 | `COST_ANSWER_TEXT` | 1 | One typed interview answer (follow-up decision) |
 | `COST_ANSWER_AUDIO` | 2 | One spoken answer: transcription plus follow-up |
 | `COST_ASSESSMENT` | 1 | One post-interview assessment |
@@ -39,7 +38,7 @@ Worked examples, at the default ceiling of 100 units/day:
 | Anonymous trial run (1 JD + 5 resumes) | 6 | ~16 runs |
 | Signed-in run, 20 resumes (no cap) | 21 | ~4 runs |
 | Full audio interview, 5 questions, voice on | 18 | ~5 interviews |
-| One resume via `POST /candidates` | 1 | 100 |
+| One resume added to an existing run | 1 | 100 |
 
 The interview breaks down as 7 to create the invite (2 for script generation, budgeting
 for the validation retry, plus one TTS synthesis per question), 2 per spoken answer, and

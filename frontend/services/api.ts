@@ -1,7 +1,6 @@
 import { getToken } from "@/services/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 export class ApiError extends Error {
   constructor(
@@ -23,12 +22,11 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 
 export const apiUrl = (endpoint: string) => `${BASE_URL}${endpoint}`;
 
-/** The API key + JWT headers every request carries. Exported for callers that
- * must fetch by hand (streaming responses) and can't go through apiRequest. */
+/** The JWT header every request carries. Exported for callers that must fetch
+ * by hand (streaming responses) and can't go through apiRequest. */
 export function authHeaders(): Record<string, string> {
   const jwtToken = getToken();
   return {
-    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
     ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
   };
 }

@@ -1,21 +1,17 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.api.dependencies import verify_api_key
 from app.api.exceptions import register_exception_handlers
 from app.api.routes import (
     admin,
     auth,
     batch,
-    candidates,
-    evaluations,
     health,
     interview,
-    jobs,
     user_runs,
 )
 from app.config import Config
@@ -59,18 +55,14 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     # Routes
-    api_key_auth = [Depends(verify_api_key)]
     app.include_router(health.router)
-    app.include_router(auth.router, prefix="/auth", tags=["auth"])
-    # Authenticated user routes (JWT Bearer) — registered before evaluations to avoid path conflict
+    app.include_router(auth.router)
+    # Authenticated user routes (JWT Bearer)
     app.include_router(user_runs.runs_router)
     app.include_router(user_runs.dashboard_router)
     app.include_router(admin.router)
-    app.include_router(jobs.router, dependencies=api_key_auth)
-    app.include_router(candidates.router, dependencies=api_key_auth)
-    app.include_router(evaluations.router, dependencies=api_key_auth)
-    app.include_router(batch.router, dependencies=api_key_auth)
-    app.include_router(interview.router, dependencies=api_key_auth)
+    app.include_router(batch.router)
+    app.include_router(interview.router)
 
     return app
 

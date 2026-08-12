@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.logger import init_logger
@@ -55,20 +55,6 @@ class CandidateRepository:
             Candidate.id.in_(candidate_ids)
         )
         return {row.id: row.name for row in self.db.execute(stmt)}
-
-    def get_all(self, limit: int = 10, offset: int = 0) -> list[Candidate]:
-        stmt = (
-            select(Candidate)
-            .order_by(Candidate.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-        )
-        return list(self.db.scalars(stmt).all())
-
-    def count(self) -> int:
-        """Count total candidates."""
-        stmt = select(func.count()).select_from(Candidate)
-        return self.db.scalar(stmt) or 0
 
     def delete(self, candidate_id: UUID) -> bool:
         candidate = self.get_by_id(candidate_id)
