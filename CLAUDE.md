@@ -52,6 +52,7 @@ make budget-reset     # Clear today's budget counter (unblock a demo)
 make rate-limit-status              # Budget key + any active cooldowns
 make rate-limit-clear KEY=retry:<run-id>   # Release a stuck cooldown
 make seed-ssm         # Seed SSM Parameter Store from an env file (prod bootstrap)
+make seed-ssm-prune   # List SSM params no longer in the env file (read-only)
 ```
 
 All Python commands use `uv run` (e.g., `uv run ruff check .`). CI runs `ruff format --check`, so run `make format` before pushing.
@@ -190,5 +191,7 @@ Frontend: `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`), `NEXT_PUBLIC_
 Production runs on a single EC2 host: API, worker, and Redis as Docker Compose services behind nginx, with PostgreSQL on RDS and config rendered from SSM Parameter Store on every deploy. Deploys are manual-dispatch only — the **Deploy to EC2** GitHub Actions workflow sends an SSM command that runs `backend/deploy/deploy.sh` on the host.
 
 Two things a deploy does **not** carry: new env vars (the render pulls from SSM, so a var must be seeded with `make seed-ssm` first or prod silently runs the code default) and nginx config (`backend/deploy/nginx/recruitai.conf` is a reference copy; the live vhost is certbot-managed and edited by hand).
+
+Retiring a var is one-way too: the render has no allowlist, so a parameter dropped from the code keeps reappearing in `.env.prod` until it is deleted from SSM. `make seed-ssm-prune` lists the leftovers; `seed_ssm_params.py --prune` deletes them, always prompting, with deliberately no `--yes` flag so it cannot be scripted.
 
 See [backend/deploy/README.md](backend/deploy/README.md) for the full pipeline, config workflow, and TLS caveats.

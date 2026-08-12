@@ -37,6 +37,9 @@ batch-results:  ## Check results (usage: make batch-results RUN_ID=<id>)
 seed-ssm:  ## Seed SSM Parameter Store from an env file (usage: make seed-ssm FILE=.env.prod [DRY_RUN=1])
 	uv run -m scripts.seed_ssm_params --file $(or $(FILE),.env.prod) $(if $(DRY_RUN),--dry-run,)
 
+seed-ssm-prune:  ## List SSM parameters no longer in the env file (read-only; deletes nothing)
+	uv run -m scripts.seed_ssm_params --file $(or $(FILE),.env.prod) --dry-run --prune
+
 circuit-status:  ## Check circuit breaker status
 	@uv run -m scripts.circuit_breaker status
 

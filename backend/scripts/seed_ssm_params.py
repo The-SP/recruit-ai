@@ -7,12 +7,21 @@ path prefix (default `/recruit-ai/prod/`), so `deploy/deploy.sh` can render
 over SSH. See backend/deploy/README.md.
 
 Run from a machine with `ssm:PutParameter` rights (NOT the read-only instance
-role). Uses the free default `alias/aws/ssm` KMS key for SecureStrings.
+role); `--prune` additionally needs `ssm:DeleteParameters`, likewise on the
+operator credentials only. Uses the free default `alias/aws/ssm` KMS key for
+SecureStrings.
+
+Seeding is safe to re-run. `--prune` is the one destructive option: it deletes
+parameters under the prefix that the env file no longer mentions, which is how
+a var retired from the code stops reappearing in every rendered `.env.prod`.
+It always prompts, and there is deliberately no flag to skip the prompt.
 
 Usage:
     uv run -m scripts.seed_ssm_params --file .env.prod                 # seed for real
     uv run -m scripts.seed_ssm_params --file .env.prod --dry-run       # print, don't write
     uv run -m scripts.seed_ssm_params --file .env.prod --prefix /recruit-ai/staging/
+    uv run -m scripts.seed_ssm_params --file .env.prod --dry-run --prune  # list orphans only
+    uv run -m scripts.seed_ssm_params --file .env.prod --prune         # seed, then delete orphans
 """
 
 import argparse
@@ -113,6 +122,97 @@ def seed(
     return written
 
 
+# SSM caps DeleteParameters at 10 names per call.
+DELETE_BATCH_SIZE = 10
+
+
+def prune(
+    env: dict[str, str],
+    prefix: str,
+    region: str,
+    dry_run: bool,
+) -> int:
+    """Delete parameters under `prefix` that `env` no longer mentions.
+
+    Returns the number deleted (or, under `dry_run`, the number that would be).
+    Always prompts before deleting; a non-interactive stdin aborts rather than
+    assuming yes.
+
+    Unlike `seed()`, this builds an SSM client even under `--dry-run`: listing
+    is read-only, and it is the whole point of `--dry-run --prune`. Only the
+    delete call is gated on `dry_run`.
+    """
+    if not prefix.endswith("/"):
+        prefix += "/"
+
+    client = boto3.client("ssm", region_name=region)
+
+    # Names only -- deliberately no WithDecryption. Computing a set difference
+    # does not need the values, and decrypting would pull every secret into
+    # this process for nothing.
+    found: dict[str, str] = {}
+    try:
+        paginator = client.get_paginator("get_parameters_by_path")
+        for page in paginator.paginate(Path=prefix, Recursive=True):
+            for param in page["Parameters"]:
+                found[param["Name"].rsplit("/", 1)[-1]] = param["Type"]
+    except (ClientError, BotoCoreError) as exc:
+        print(f"  ERROR listing parameters under {prefix}: {exc}", file=sys.stderr)
+        raise
+
+    # Compare against the parsed env keys, not against what seed() actually
+    # wrote: seed() skips empty values, so a var that is present in the env
+    # file but empty is absent from SSM yet must not count as an orphan.
+    orphans = sorted(set(found) - set(env))
+    if not orphans:
+        print(f"==> No orphans: all {len(found)} parameters are in {prefix}")
+        return 0
+
+    print(f"==> {len(orphans)} orphan(s) under {prefix} not in the env file:")
+    for key in orphans:
+        # Names and types only, never values.
+        print(f"  {prefix}{key} ({found[key]})")
+
+    if dry_run:
+        print("    (dry run: nothing deleted)")
+        return len(orphans)
+
+    if not sys.stdin.isatty():
+        print(
+            "    stdin is not a terminal; refusing to delete without confirmation.",
+            file=sys.stderr,
+        )
+        return 0
+
+    try:
+        answer = input(
+            f"Delete these {len(orphans)} parameters? Type 'yes' to confirm: "
+        )
+    except EOFError:
+        answer = ""
+    if answer.strip() != "yes":
+        print("    aborted; nothing deleted.")
+        return 0
+
+    deleted = 0
+    for start in range(0, len(orphans), DELETE_BATCH_SIZE):
+        batch = orphans[start : start + DELETE_BATCH_SIZE]
+        names = [f"{prefix}{key}" for key in batch]
+        try:
+            response = client.delete_parameters(Names=names)
+        except (ClientError, BotoCoreError) as exc:
+            print(f"  ERROR deleting {', '.join(names)}: {exc}", file=sys.stderr)
+            raise
+        for name in response.get("DeletedParameters", []):
+            print(f"  pruned {name}")
+            deleted += 1
+        # Report rather than silently counting these as deleted.
+        for name in response.get("InvalidParameters", []):
+            print(f"  ERROR could not delete {name}", file=sys.stderr)
+
+    return deleted
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Seed an env file into AWS SSM Parameter Store."
@@ -137,6 +237,15 @@ def main() -> None:
         action="store_true",
         help="Print what would be written without calling AWS.",
     )
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help=(
+            "After seeding, delete parameters under the prefix that the env "
+            "file no longer mentions. Always prompts for confirmation. "
+            "Combine with --dry-run to list orphans without deleting."
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -156,8 +265,18 @@ def main() -> None:
 
     count = seed(env, args.prefix, args.region, args.dry_run)
 
+    # Only after a clean seed -- a failed seed raises, so we never get here and
+    # start deleting things based on a half-applied env file.
+    pruned = 0
+    if args.prune:
+        pruned = prune(env, args.prefix, args.region, args.dry_run)
+
     verb = "would seed" if args.dry_run else "seeded"
-    print(f"==> Done: {verb} {count} parameters.")
+    summary = f"{verb} {count} parameters"
+    if args.prune:
+        prune_verb = "would prune" if args.dry_run else "pruned"
+        summary += f", {prune_verb} {pruned}"
+    print(f"==> Done: {summary}.")
     if not args.dry_run:
         print(
             "    Verify: aws ssm get-parameters-by-path --region "

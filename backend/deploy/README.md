@@ -61,6 +61,13 @@ docker compose -f docker-compose.prod.yml up -d
 `.env.prod` with an empty render, which is what a wrong prefix or a broken IAM
 policy looks like.
 
+### Retiring a variable
+
+`render-env.sh` renders whatever is under the prefix, with no allowlist, so
+removing a var from the code does **not** remove it from Parameter Store: it
+keeps landing in every rendered `.env.prod`. `make seed-ssm-prune` lists the
+leftovers; `seed_ssm_params.py --prune` deletes them, interactively.
+
 ## Manual deploy on the host
 
 `deploy.sh` does not update the checkout, so check out the ref yourself:
@@ -99,7 +106,7 @@ The live file has two server blocks after certbot; per-location settings
 - The API publishes only to `127.0.0.1:8000`, so it is reachable exclusively
   through nginx.
 - The host's instance role only needs read access to the SSM parameters.
-  Seeding them requires `ssm:PutParameter` and is done from a separate
-  machine via `scripts/seed_ssm_params.py`.
+  Seeding them requires `ssm:PutParameter` (and `ssm:DeleteParameters` to
+  prune) and is done from a separate machine via `scripts/seed_ssm_params.py`.
 - Uploaded resumes live in the `uploads_data` Docker volume, shared by `api`
   and `worker`; it survives container replacement.
