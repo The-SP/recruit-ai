@@ -12,6 +12,7 @@ from app.models import (  # noqa
     evaluation,
     evaluation_run,
     interview,
+    interview_template,
     job,
     user,
 )

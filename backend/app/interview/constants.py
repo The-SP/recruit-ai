@@ -1,11 +1,24 @@
 # Question count and its validation tolerance are NOT here: they are
 # env-driven via Config.INTERVIEW_QUESTION_COUNT and
 # Config.INTERVIEW_QUESTION_COUNT_TOLERANCE, so a local checkout can run short
-# test interviews while production asks the full 5-6.
+# test interviews while production asks the full 5-6. What IS here is the range
+# a per-run template may override that default to (below).
 
 # At most one adaptive follow-up per core question, enforced in code via
 # Interview.followup_asked — never by trusting the model.
+#
+# Whether follow-ups happen *at all* is a per-template choice, snapshotted onto
+# Interview.followups_enabled. This stays a constant so the cap can be raised
+# later without that toggle having to become a count.
 MAX_FOLLOWUPS_PER_QUESTION = 1
+
+# Bounds on a template's question_count override. A product bound, not a
+# deployment knob: unlike Config.INTERVIEW_QUESTION_COUNT, which is only the
+# default a template starts from, dev and prod agree on these. Every question
+# costs a generation slot, a TTS clip, a transcription and an assessment entry,
+# so the ceiling is what stops one invite becoming unbounded spend.
+MIN_QUESTIONS_PER_INTERVIEW = 1
+MAX_QUESTIONS_PER_INTERVIEW = 8
 
 # At most this many scorer-gap questions; the interview is JD- and
 # resume-first, not a gap interrogation.

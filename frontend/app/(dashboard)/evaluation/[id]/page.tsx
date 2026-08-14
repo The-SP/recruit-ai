@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Settings2,
   Sparkles,
   Trash2,
   Users,
@@ -51,7 +52,6 @@ import { type CandidateBreakdown } from "@/services/batch";
 import {
   addCandidatesToRun,
   assessRunCandidateInterview,
-  createRunCandidateInterview,
   deleteEvaluationRun,
   deleteRunItem,
   getEvaluationRun,
@@ -66,10 +66,13 @@ import {
 /** Ranks interview states by how far along the funnel they are, so sorting
  *  the Interview column walks the workflow rather than the alphabet. */
 const INTERVIEW_STATUS_ORDER: Record<string, number> = {
-  assessed: 5,
-  completed: 4,
-  in_progress: 3,
-  created: 2,
+  assessed: 6,
+  completed: 5,
+  in_progress: 4,
+  created: 3,
+  // Earliest real stage: generated, but waiting on a human before it can be
+  // sent. Ranked above `expired`, which is where an invite ends up.
+  draft: 2,
   expired: 1,
 };
 
@@ -78,6 +81,7 @@ const INTERVIEW_STATUS_ORDER: Record<string, number> = {
  *  INTERVIEW_STATUS_ORDER and interviewStatusLabels is all it takes to make it
  *  sortable and badge-able; adding it here also makes it filterable. */
 const INTERVIEW_STATUS_FILTER_VALUES = [
+  "draft",
   "created",
   "in_progress",
   "completed",
@@ -256,16 +260,20 @@ function RunDetailPageInner({
     [runId, fetchData]
   );
 
-  // Generation runs an LLM call (~20s). The cache slot is marked "loading"
-  // for the duration so a panel remount can't drop the in-flight request and
-  // leave a dead spinner; on failure the slot is refetched, not guessed.
-  const handleGenerateInterview = useCallback(async (item: RunItemSummary) => {
-    if (!item.candidate_id) return;
-    setInterviewCache((prev) => ({ ...prev, [item.item_id]: "loading" }));
-    await runInterviewAction(item, (candidateId) =>
-      createRunCandidateInterview(runId, candidateId)
-    );
-  }, [runId, runInterviewAction]);
+  // Navigates rather than generating in place: questions now go through a
+  // human review step before any invite exists, and the ~20s generation
+  // belongs on the page built to wait for it. The review page issues the
+  // create call itself, which is idempotent, so landing there twice never
+  // drafts a second interview.
+  const handleGenerateInterview = useCallback(
+    async (item: RunItemSummary) => {
+      if (!item.candidate_id) return;
+      router.push(
+        `/evaluation/${runId}/candidate/${item.candidate_id}/interview/review`
+      );
+    },
+    [runId, router]
+  );
 
   const handleReissueInterview = useCallback(async (item: RunItemSummary) => {
     await runInterviewAction(item, (candidateId) =>
@@ -489,16 +497,22 @@ function RunDetailPageInner({
   // One pass rather than three filters: this recomputes on every poll tick
   // while a run is active, and the result is four integers.
   const interviewStats = useMemo(() => {
-    let invited = 0;
-    let awaiting = 0;
-    let assessed = 0;
+    // Counted by status rather than with a running total per tile: a draft has
+    // no invite link, so "Invited" must exclude it. Bucketing first means the
+    // next status is a display decision here, not an off-by-one in the strip.
+    const byStatus: Record<string, number> = {};
     for (const i of interviewableItems) {
       if (!i.interview) continue;
-      invited++;
-      if (i.interview.status === "created") awaiting++;
-      else if (i.interview.status === "assessed") assessed++;
+      byStatus[i.interview.status] = (byStatus[i.interview.status] ?? 0) + 1;
     }
-    return { total: interviewableItems.length, invited, awaiting, assessed };
+    const count = (...statuses: string[]) =>
+      statuses.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0);
+    return {
+      total: interviewableItems.length,
+      invited: count("created", "in_progress", "completed", "assessed", "expired"),
+      awaiting: count("created"),
+      assessed: count("assessed"),
+    };
   }, [interviewableItems]);
 
   // Kept separate from the screening filters: the two tabs filter on
@@ -868,6 +882,22 @@ function RunDetailPageInner({
 
           <TabsContent value="interviews" className="space-y-8">
             <InterviewStatsStrip {...interviewStats} />
+
+            {/* Run-level settings get a run-level entry point, rather than
+                being reachable only inside one candidate's review page. */}
+            <div className="flex justify-end -mt-4">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
+              >
+                <Link href={`/evaluation/${runId}/interview-template`}>
+                  <Settings2 className="w-4 h-4" />
+                  Interview template
+                </Link>
+              </Button>
+            </div>
 
             {interviewableItems.length > 0 && (
               <FilterControls

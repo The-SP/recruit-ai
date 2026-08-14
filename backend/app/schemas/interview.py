@@ -36,6 +36,42 @@ class InterviewScript(BaseModel):
     closing: str = Field(description="Closing turn for normal completion")
 
 
+class FixedQuestion(BaseModel):
+    """A question the recruiter wrote, asked verbatim of every candidate.
+
+    Carries focus and subject like any generated question because the assessor
+    grades against both -- a fixed question missing its subject would leave the
+    model inventing a rubric for it.
+    """
+
+    text: str
+    focus: QuestionFocus
+    subject: str
+
+
+class TemplateSettings(BaseModel):
+    """Resolved template settings for one generation.
+
+    A plain value object rather than the InterviewTemplate ORM row, so the
+    generator has one input shape whether or not a template exists: the
+    service builds this from the row, or from deployment defaults when there
+    is none.
+    """
+
+    question_count: int
+    followups_enabled: bool = True
+    opening: str | None = None
+    closing: str | None = None
+    fixed_questions: list[FixedQuestion] = Field(default_factory=list)
+
+    @property
+    def generated_count(self) -> int:
+        """How many questions the model must write. Fixed questions count
+        toward the total, so a template whose fixed questions fill it needs no
+        generation at all."""
+        return max(0, self.question_count - len(self.fixed_questions))
+
+
 class FollowupDecision(BaseModel):
     """Whether to ask one adaptive follow-up after a candidate's answer.
 

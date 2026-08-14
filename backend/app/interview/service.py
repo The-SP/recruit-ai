@@ -13,7 +13,11 @@ from app.core.file_storage import (
     save_uploaded_file,
 )
 from app.core.logger import init_logger
-from app.interview.constants import ANSWER_AUDIO_EXTENSIONS
+from app.interview.constants import (
+    ANSWER_AUDIO_EXTENSIONS,
+    MAX_QUESTIONS_PER_INTERVIEW,
+    MIN_QUESTIONS_PER_INTERVIEW,
+)
 from app.interview.question_generator import build_grounding, generate_script
 from app.interview.speaker import (
     is_safe_voice_key,
@@ -29,6 +33,7 @@ from app.models.interview import (
     InterviewVoice,
     TurnRole,
 )
+from app.models.interview_template import InterviewTemplate
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.evaluation_run_repository import (
@@ -36,7 +41,9 @@ from app.repositories.evaluation_run_repository import (
     InterviewRow,
 )
 from app.repositories.interview_repository import OVERDUE_STATUSES, InterviewRepository
+from app.repositories.interview_template_repository import InterviewTemplateRepository
 from app.repositories.job_repository import JobRepository
+from app.schemas.interview import FixedQuestion, InterviewScript, TemplateSettings
 from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
 
 logger = init_logger(__name__)
@@ -74,7 +81,14 @@ def apply_lazy_expiry(db: Session, interview: Interview) -> Interview:
     InterviewRepository.expire_overdue_for_run is the bulk twin, used by the
     run listing so it doesn't commit once per stale invite. Both read
     OVERDUE_STATUSES, so the two can't disagree about which invites are stale.
+
+    Drafts are excluded by having no expires_at at all: expiry bounds an
+    invite, and a draft has none. DRAFT is deliberately absent from
+    OVERDUE_STATUSES for the same reason.
     """
+    if interview.expires_at is None:
+        return interview
+
     if interview.status in OVERDUE_STATUSES and interview.expires_at < datetime.now():
         return InterviewRepository(db).mark_expired(interview)
     return interview
@@ -136,10 +150,101 @@ def _configured_voice() -> InterviewVoice:
         return InterviewVoice.OFF
 
 
-def create_interview(
+def default_template_settings() -> TemplateSettings:
+    """What generation uses for a run with no saved template."""
+    return TemplateSettings(
+        question_count=Config.INTERVIEW_QUESTION_COUNT,
+        followups_enabled=True,
+    )
+
+
+def template_settings_from(template: InterviewTemplate) -> TemplateSettings:
+    """A saved template as the value object generation reads.
+
+    Split from resolve_template_settings so a caller that already holds the row
+    -- the GET route, which must first check whether one exists -- doesn't
+    re-query for it.
+    """
+    return TemplateSettings(
+        question_count=template.question_count,
+        followups_enabled=template.followups_enabled,
+        opening=template.opening,
+        closing=template.closing,
+        fixed_questions=[
+            FixedQuestion.model_validate(q) for q in template.fixed_questions
+        ],
+    )
+
+
+def resolve_template_settings(db: Session, run_id: UUID) -> TemplateSettings:
+    """The run's template, or deployment defaults when it has none.
+
+    One resolver so generation has a single input shape: a recruiter who never
+    opens the template step gets exactly today's behaviour, driven by
+    Config.INTERVIEW_QUESTION_COUNT.
+    """
+    template = InterviewTemplateRepository(db).get_by_run_id(run_id)
+    if template is None:
+        return default_template_settings()
+    return template_settings_from(template)
+
+
+def upsert_template(
+    db: Session,
+    run: EvaluationRun,
+    question_count: int,
+    followups_enabled: bool,
+    opening: str | None,
+    closing: str | None,
+    fixed_questions: list[FixedQuestion],
+) -> InterviewTemplate:
+    """Create or replace the run's template.
+
+    Deliberately allowed at any time, including while interviews from it are
+    live. Every interview snapshots its script, mode and follow-up setting at
+    approval, so an edit here can only ever reach interviews generated after
+    it. What a template equalizes across candidates is structure, not wording:
+    the questions were always generated per resume.
+    """
+    if not MIN_QUESTIONS_PER_INTERVIEW <= question_count <= MAX_QUESTIONS_PER_INTERVIEW:
+        raise ValidationError(
+            f"Question count must be between {MIN_QUESTIONS_PER_INTERVIEW} and "
+            f"{MAX_QUESTIONS_PER_INTERVIEW}."
+        )
+
+    if len(fixed_questions) > question_count:
+        raise ValidationError(
+            f"{len(fixed_questions)} fixed questions exceed the total of "
+            f"{question_count}. Raise the question count or remove one."
+        )
+
+    for question in fixed_questions:
+        if not question.text.strip():
+            raise ValidationError("A fixed question cannot be empty.")
+        if not question.subject.strip():
+            raise ValidationError(
+                "Every fixed question needs a subject saying what it tests, "
+                "so the assessment can grade the answer against it."
+            )
+
+    return InterviewTemplateRepository(db).upsert(
+        run_id=run.id,
+        question_count=question_count,
+        followups_enabled=followups_enabled,
+        opening=(opening or "").strip() or None,
+        closing=(closing or "").strip() or None,
+        fixed_questions=[q.model_dump(mode="json") for q in fixed_questions],
+    )
+
+
+def create_interview_draft(
     db: Session, run: EvaluationRun, candidate_id: UUID
 ) -> tuple[Interview, bool]:
-    """Create an interview invite for a candidate in a run.
+    """Generate an unapproved interview draft for a candidate in a run.
+
+    The draft has no access_token, so nothing exists for a candidate to open
+    until a human approves it. That is the whole review gate; see
+    InterviewRepository.create_draft.
 
     Idempotent: if one already exists for the evaluation it is returned
     untouched. Returns (interview, created) so the route can pick 200 vs 201.
@@ -172,17 +277,19 @@ def create_interview(
     mode = _configured_mode()
     voice = _configured_voice()
 
+    template = resolve_template_settings(db, run.id)
     grounding = build_grounding(job, candidate, evaluation)
-    script = generate_script(grounding, mode)
+    script = generate_script(grounding, mode, template)
 
     try:
-        interview = interview_repo.create(
+        interview = interview_repo.create_draft(
             evaluation_id=evaluation_id,
             question_script=script.model_dump(mode="json"),
             grounding=grounding,
             model_name=Config.INTERVIEW_MODEL_NAME,
             answer_mode=mode.value,
             voice_mode=voice.value,
+            followups_enabled=template.followups_enabled,
         )
     except IntegrityError:
         # Two clicks raced: both passed the check above while generation ran
@@ -199,14 +306,83 @@ def create_interview(
         )
         return apply_lazy_expiry(db, existing), False
 
-    if voice is InterviewVoice.ON:
+    # Voice synthesis deliberately does NOT happen here -- it waits for
+    # approve_interview. A draft's questions can still be edited or deleted,
+    # and synthesizing them now would pay for audio of text nobody agreed to
+    # send.
+    return interview, True
+
+
+def update_interview_draft(
+    db: Session, run: EvaluationRun, candidate_id: UUID, script: InterviewScript
+) -> Interview:
+    """Save recruiter edits to a draft's script.
+
+    Only while `draft`: once approved the script is frozen, so a live
+    transcript can never drift from the rubric the assessor grades against.
+    """
+    interview = get_interview(db, run, candidate_id)
+
+    if interview.status != InterviewStatus.DRAFT.value:
+        raise ValidationError(
+            "This interview has already been approved and can no longer be edited."
+        )
+
+    if not script.questions:
+        raise ValidationError("An interview needs at least one question.")
+
+    if len(script.questions) > MAX_QUESTIONS_PER_INTERVIEW:
+        raise ValidationError(
+            f"An interview can have at most {MAX_QUESTIONS_PER_INTERVIEW} questions."
+        )
+
+    for question in script.questions:
+        if not question.text.strip():
+            raise ValidationError("A question cannot be empty.")
+
+    if not script.opening.strip() or not script.closing.strip():
+        raise ValidationError("The opening and closing cannot be empty.")
+
+    # Renumber so ids stay 0-based and contiguous after deletions; the engine
+    # and the assessor both index questions by position.
+    for index, question in enumerate(script.questions):
+        question.id = index
+
+    return InterviewRepository(db).update_draft_script(
+        interview, script.model_dump(mode="json")
+    )
+
+
+def approve_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> Interview:
+    """Approve a draft and mint its invite.
+
+    The human gate: before this call the interview has no token and cannot be
+    opened by anyone. Only now is the voice cache warmed -- the script is
+    frozen from here, so synthesized audio can no longer be wasted.
+
+    Deliberately does NOT re-read the template. Everything a template governs
+    was applied when the draft was generated, so re-reading only
+    followups_enabled would make one of four settings quietly retroactive
+    while the rest weren't -- the worst of both rules. The draft the recruiter
+    approves is exactly the draft they reviewed.
+    """
+    interview = get_interview(db, run, candidate_id)
+
+    if interview.status != InterviewStatus.DRAFT.value:
+        raise ValidationError(
+            f"Cannot approve an interview with status '{interview.status}'."
+        )
+
+    interview = InterviewRepository(db).approve(interview)
+
+    if interview.voice_on:
         # Warm the cache for every slot whose text is verbatim from the frozen
         # script, so the candidate never waits on the questions that matter.
         # Routes dispatch, workers execute -- the same split as assessment. A
         # failure here is invisible: the audio endpoint synthesizes on demand.
         synthesize_interview_voice.delay(str(interview.id))
 
-    return interview, True
+    return interview
 
 
 def get_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> Interview:
@@ -226,6 +402,12 @@ def reissue_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> In
     """
     interview = get_interview(db, run, candidate_id)
     repo = InterviewRepository(db)
+
+    if interview.status == InterviewStatus.DRAFT.value:
+        raise ValidationError(
+            "This interview has not been approved yet, so there is no invite "
+            "to reissue. Approve it to create the link."
+        )
 
     if interview.status == InterviewStatus.CREATED.value:
         return repo.rotate_token(interview)

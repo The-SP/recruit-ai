@@ -22,8 +22,11 @@ class RunItemInterview(BaseModel):
     recommendation: str | None
     answered: bool
     has_assessment_error: bool
-    invite_url: str
-    expires_at: datetime
+    # Null while the interview is an unapproved draft: it has no token and no
+    # expiry until a human approves the questions. Same contract as
+    # InterviewSummaryResponse.
+    invite_url: str | None = None
+    expires_at: datetime | None = None
     completed_at: datetime | None
     assessed_at: datetime | None
 

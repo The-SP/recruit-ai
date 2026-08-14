@@ -10,11 +10,16 @@ from app.api.exceptions import (
     ValidationError,
 )
 from app.api.schemas.interview import (
+    DraftScriptUpdateRequest,
     InterviewDetailResponse,
     InterviewSummaryResponse,
+    InterviewTemplateRequest,
+    InterviewTemplateResponse,
+    build_default_template_response,
     build_detail_response,
     build_invite_url,
     build_summary_response,
+    build_template_response,
 )
 from app.api.schemas.public import (
     AddCandidatesResponse,
@@ -45,13 +50,17 @@ from app.core.rate_limit import (
     refund,
 )
 from app.interview.service import (
-    create_interview,
+    approve_interview,
+    create_interview_draft,
+    default_template_settings,
     get_interview,
     get_owned_interview_voice,
     get_turn_audio,
     list_interview_rows,
     reissue_interview,
     request_assessment,
+    update_interview_draft,
+    upsert_template,
 )
 from app.interview.speaker import (
     VOICE_MIME_TYPE,
@@ -67,9 +76,11 @@ from app.repositories.evaluation_run_repository import (
     EvaluationRunRepository,
 )
 from app.repositories.interview_repository import InterviewRepository
+from app.repositories.interview_template_repository import InterviewTemplateRepository
 from app.repositories.job_repository import JobRepository
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.experience_evaluation import ExperienceScoreResult
+from app.schemas.interview import FixedQuestion, InterviewQuestion, InterviewScript
 from app.schemas.skill_evaluation import SkillScoreResult
 from app.worker.tasks import process_evaluation_run
 
@@ -528,6 +539,63 @@ def _load_owned_run(db: Session, run_id: UUID, user: User) -> EvaluationRun:
     return run
 
 
+@runs_router.get(
+    "/{run_id}/interview-template",
+    response_model=InterviewTemplateResponse,
+)
+def get_owned_run_interview_template(
+    run_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewTemplateResponse:
+    """The run's interview template, or the defaults generation would use.
+
+    Deliberately not a 404 when unset: the review page has to show the count
+    that will actually be used, and a client-side default would drift from
+    Config.INTERVIEW_QUESTION_COUNT the moment they disagreed. `is_saved`
+    tells the page whether to open the setup step.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    template = InterviewTemplateRepository(db).get_by_run_id(run.id)
+    if template:
+        return build_template_response(template)
+    # Defaults built directly rather than via resolve_template_settings, which
+    # would re-run the SELECT just missed above.
+    return build_default_template_response(run.id, default_template_settings())
+
+
+@runs_router.put(
+    "/{run_id}/interview-template",
+    response_model=InterviewTemplateResponse,
+)
+def save_owned_run_interview_template(
+    run_id: UUID,
+    payload: InterviewTemplateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewTemplateResponse:
+    """Create or replace the run's interview template.
+
+    Allowed while interviews from it are live: each one snapshotted its script
+    and settings at approval, so this can only reach interviews drafted after
+    it. No budget charge -- nothing here calls a model.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    template = upsert_template(
+        db,
+        run,
+        question_count=payload.question_count,
+        followups_enabled=payload.followups_enabled,
+        opening=payload.opening,
+        closing=payload.closing,
+        fixed_questions=[
+            FixedQuestion.model_validate(q.model_dump())
+            for q in payload.fixed_questions
+        ],
+    )
+    return build_template_response(template)
+
+
 @runs_router.post(
     "/{run_id}/candidate/{candidate_id}/interview",
     response_model=InterviewSummaryResponse,
@@ -540,22 +608,76 @@ def create_owned_candidate_interview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> InterviewSummaryResponse:
-    """Generate an interview invite for a candidate in an owned run.
+    """Draft an interview for a candidate in an owned run.
+
+    Returns an unapproved draft with no invite link: a human reviews the
+    questions and calls .../interview/approve to mint the token. Question
+    generation runs synchronously, so expect a few seconds.
 
     Idempotent: returns the existing interview with 200 rather than creating a
-    second one. Question generation runs synchronously, so expect a few seconds.
+    second one.
     """
     run = _load_owned_run(db, run_id, current_user)
 
     cost = interview_invite_cost()
     enforce_budget(cost)
 
-    interview, created = create_interview(db, run, candidate_id)
+    interview, created = create_interview_draft(db, run, candidate_id)
     if not created:
-        # Idempotent hit: no script was generated and no TTS queued, so the
-        # units go back.
+        # Idempotent hit: no script was generated, so the units go back.
         refund(cost)
         response.status_code = 200
+    return build_summary_response(interview)
+
+
+@runs_router.patch(
+    "/{run_id}/candidate/{candidate_id}/interview/draft",
+    response_model=InterviewDetailResponse,
+)
+def update_owned_candidate_interview_draft(
+    run_id: UUID,
+    candidate_id: UUID,
+    payload: DraftScriptUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewDetailResponse:
+    """Save recruiter edits to a draft's questions.
+
+    Draft-only: an approved script is frozen. No budget charge -- editing text
+    calls no model.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    script = InterviewScript(
+        opening=payload.opening,
+        questions=[
+            InterviewQuestion(id=q.id, text=q.text, focus=q.focus, subject=q.subject)
+            for q in payload.questions
+        ],
+        closing=payload.closing,
+    )
+    interview = update_interview_draft(db, run, candidate_id, script)
+    turns = InterviewRepository(db).get_turns(interview.id)
+    return build_detail_response(interview, turns)
+
+
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview/approve",
+    response_model=InterviewSummaryResponse,
+)
+def approve_owned_candidate_interview(
+    run_id: UUID,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewSummaryResponse:
+    """Approve a reviewed draft and mint its invite link.
+
+    The human gate: before this call the interview has no token and cannot be
+    opened. No budget charge -- generation was already paid for at draft time,
+    and voice synthesis is queued to a worker.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    interview = approve_interview(db, run, candidate_id)
     return build_summary_response(interview)
 
 

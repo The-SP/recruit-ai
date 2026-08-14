@@ -3,7 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 
 
 class InterviewStatus(str, Enum):
+    # Generated but not yet approved by a human. Has no access_token, so it is
+    # unreachable by a candidate -- see Interview.access_token.
+    DRAFT = "draft"
     CREATED = "created"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -74,7 +77,14 @@ class Interview(Base):
     )
 
     # Public access — the token is the candidate's identity, as in EvaluationRun.
-    access_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    #
+    # NULL until a human approves the script. That is what makes the review gate
+    # structural rather than a convention: a draft cannot be looked up by token
+    # because it has no token, so no route needs to remember to exclude drafts.
+    # Minted by InterviewRepository.approve, rotated by rotate_token.
+    access_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, default=None
+    )
 
     status: Mapped[str] = mapped_column(
         String(20), default=InterviewStatus.CREATED.value
@@ -100,13 +110,25 @@ class Interview(Base):
         String(3), server_default=InterviewVoice.OFF.value
     )
 
+    # Snapshotted from InterviewTemplate at approval, for the same reason
+    # answer_mode and voice_mode are: editing the template must never change
+    # how an interview already in flight behaves.
+    followups_enabled: Mapped[bool] = mapped_column(server_default=true())
+
     # Progress state. Invariant: only ever updated in the same commit that
     # inserts the corresponding turn row (see InterviewRepository).
     current_question_index: Mapped[int] = mapped_column(default=0)
     followup_asked: Mapped[bool] = mapped_column(default=False)
     last_seq: Mapped[int] = mapped_column(default=0)
 
-    expires_at: Mapped[datetime]
+    # NULL while draft: expiry bounds an invite, and a draft has none. Set by
+    # approve() alongside the token, so the two can't disagree.
+    expires_at: Mapped[datetime | None] = mapped_column(default=None)
+
+    # When a human approved the script. The audit record that the review gate
+    # was actually passed, not just that the row moved status.
+    approved_at: Mapped[datetime | None] = mapped_column(default=None)
+
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     completed_at: Mapped[datetime | None] = mapped_column(default=None)
     assessed_at: Mapped[datetime | None] = mapped_column(default=None)

@@ -208,8 +208,11 @@ export function RecruiterInterviewView({
           </div>
         )}
 
-        {/* Invite link while the candidate hasn't finished */}
-        {(interview.status === "created" || interview.status === "in_progress") && (
+        {/* Invite link while the candidate hasn't finished. Guarded on the
+            url itself, which is null until the questions are approved. */}
+        {interview.invite_url &&
+          (interview.status === "created" ||
+            interview.status === "in_progress") && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <code className="flex-1 min-w-0 truncate text-xs bg-card border border-border rounded-lg px-3 py-2 select-all">
@@ -218,7 +221,7 @@ export function RecruiterInterviewView({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => copyInviteUrl(interview.invite_url)}
+                onClick={() => copyInviteUrl(interview.invite_url ?? "")}
                 className="gap-1.5 shrink-0 cursor-pointer"
               >
                 {copied ? (

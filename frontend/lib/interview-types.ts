@@ -59,15 +59,51 @@ export interface InterviewQuestionData {
   subject: string;
 }
 
-/** Response of create/reissue; mirrors InterviewSummaryResponse. */
+/** What a question is for. Mirrors the backend QuestionFocus enum; the
+ * recruiter picks one when writing a fixed question. */
+export type QuestionFocus = "experience_depth" | "role_competency" | "gap_probe";
+
+/** A question the recruiter wrote, asked verbatim of every candidate in the
+ * run. Carries focus and subject because the assessor grades against both. */
+export interface FixedQuestionData {
+  text: string;
+  focus: QuestionFocus;
+  subject: string;
+}
+
+/** Per-run interview template; mirrors InterviewTemplateResponse.
+ *
+ * Editable at any time: every interview snapshots its script and settings at
+ * approval, so a change here only reaches interviews drafted afterward. */
+export interface InterviewTemplateData {
+  run_id: string;
+  /** False when nothing is stored yet and these are the deployment defaults
+   * generation would use. The endpoint always returns a body, so the client
+   * never has to invent a question count of its own. */
+  is_saved: boolean;
+  question_count: number;
+  followups_enabled: boolean;
+  /** Null means "let the model write it". */
+  opening: string | null;
+  closing: string | null;
+  fixed_questions: FixedQuestionData[];
+  /** Null until the recruiter saves one. */
+  updated_at: string | null;
+}
+
+/** Response of draft/approve/reissue; mirrors InterviewSummaryResponse.
+ *
+ * invite_url, access_token and expires_at are null while the interview is a
+ * draft — there is no link to send until a human approves the questions. */
 export interface InterviewSummary {
   interview_id: string;
   status: string;
-  invite_url: string;
-  access_token: string;
+  invite_url: string | null;
+  access_token: string | null;
   questions_count: number;
-  expires_at: string;
+  expires_at: string | null;
   created_at: string;
+  approved_at: string | null;
 }
 
 /** Per-question verdict; mirrors the backend QuestionAssessment schema. */
@@ -96,18 +132,27 @@ export interface InterviewAssessmentData {
 export interface InterviewDetail {
   interview_id: string;
   status: string;
-  invite_url: string;
-  access_token: string;
+  /** Null while draft — see InterviewSummary. */
+  invite_url: string | null;
+  access_token: string | null;
   model_name: string;
   answer_mode: InterviewMode;
   voice_mode: InterviewVoice;
+  /** Whether the engine may ask adaptive follow-ups. Snapshotted from the
+   * template at approval, like answer_mode and voice_mode. */
+  followups_enabled: boolean;
+  /** The script's greeting and sign-off. Present even on a draft, which has
+   * no turns to read them from. */
+  opening: string;
+  closing: string;
   questions_count: number;
   current_question_index: number;
   questions: InterviewQuestionData[];
   turns: InterviewTurnData[];
   assessment: InterviewAssessmentData | null;
   assessment_error: string | null;
-  expires_at: string;
+  expires_at: string | null;
+  approved_at: string | null;
   started_at: string | null;
   completed_at: string | null;
   assessed_at: string | null;

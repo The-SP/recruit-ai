@@ -20,7 +20,12 @@ from app.models.candidate import Candidate
 from app.models.evaluation import CandidateEvaluation
 from app.models.interview import InterviewMode
 from app.models.job import Job
-from app.schemas.interview import InterviewScript, QuestionFocus
+from app.schemas.interview import (
+    InterviewQuestion,
+    InterviewScript,
+    QuestionFocus,
+    TemplateSettings,
+)
 from app.schemas.job_utils import build_job_requirements_schema
 from app.schemas.skill_evaluation import MatchType, SkillScoreResult
 
@@ -55,7 +60,7 @@ Critical gaps: {critical_gaps}
 Weak or missing skills: {weak_skills}
 
 ## What to produce
-
+{fixed_questions_block}
 Exactly {question_count} core questions, in this mix:
 - Mostly EXPERIENCE_DEPTH questions: pick the projects or roles on the resume
   most relevant to this job and dig into them. Ask about decisions the
@@ -80,8 +85,8 @@ Rules for every question:
 
 Also write:
 - `opening`: a two-sentence greeting that names the role and sets expectations
-  ({question_count} questions, roughly {time_limit_minutes} minutes, answers
-  {answer_medium}). Do not ask a question in the opening.
+  ({total_question_count} questions, roughly {time_limit_minutes} minutes,
+  answers {answer_medium}). Do not ask a question in the opening.
 - `closing`: two sentences thanking the candidate and saying the team will
   review and follow up. Do not promise a decision or a timeline.
 
@@ -145,10 +150,17 @@ def build_grounding(
     }
 
 
-def _validate_script(script: InterviewScript) -> str | None:
-    """Return a reason string when the script is unusable, else None."""
-    low = Config.INTERVIEW_QUESTION_COUNT - Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
-    high = Config.INTERVIEW_QUESTION_COUNT + Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
+def _validate_script(script: InterviewScript, expected_count: int) -> str | None:
+    """Return a reason string when the script is unusable, else None.
+
+    `expected_count` is how many questions the *model* was asked for, not the
+    interview's total: fixed questions are appended after validation, so
+    counting them here would reject every template that has any. The tolerance
+    stays env-driven because it describes how loosely the model follows an
+    instruction, which is a property of the model, not of the template.
+    """
+    low = expected_count - Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
+    high = expected_count + Config.INTERVIEW_QUESTION_COUNT_TOLERANCE
     count = len(script.questions)
     if not low <= count <= high:
         return f"expected {low}-{high} questions, got {count}"
@@ -183,44 +195,126 @@ def _invoke(prompt: str) -> InterviewScript:
     return script
 
 
-def generate_script(grounding: dict[str, Any], mode: InterviewMode) -> InterviewScript:
+def _fixed_questions_block(template: TemplateSettings) -> str:
+    """The prompt section telling the model what is already being asked.
+
+    Without it the model re-asks whatever the recruiter pinned, and the
+    candidate pays for the duplicate twice: once in synthesis and transcription,
+    once in an assessment that grades the same subject two ways.
+    """
+    if not template.fixed_questions:
+        return ""
+
+    lines = "\n".join(
+        f"- {q.text}\n  (already covers: {q.subject})" for q in template.fixed_questions
+    )
+    return (
+        "\nThe recruiter has already fixed these questions, which will be asked "
+        "alongside yours:\n"
+        f"{lines}\n"
+        "Do not repeat them or probe the same subjects again. Your questions "
+        "must cover different ground.\n"
+    )
+
+
+def _default_opening(template: TemplateSettings, mode: InterviewMode) -> str:
+    """Greeting for a script with no generated questions.
+
+    Only reached when fixed questions fill the interview, so there is no model
+    call to write one. Mirrors what GENERATION_PROMPT asks for: names the
+    shape, sets expectations, asks nothing.
+    """
+    medium = "spoken aloud" if mode is InterviewMode.AUDIO else "typed"
+    minutes = INTERVIEW_TIME_LIMIT_SECONDS // 60
+    return (
+        f"Thanks for making the time. This is a short screening interview: "
+        f"{template.question_count} question"
+        f"{'s' if template.question_count != 1 else ''}, roughly {minutes} "
+        f"minutes, and your answers are {medium}."
+    )
+
+
+DEFAULT_CLOSING = (
+    "Thank you for taking the time to talk through your experience. "
+    "The team will review your responses and follow up."
+)
+
+
+def generate_script(
+    grounding: dict[str, Any], mode: InterviewMode, template: TemplateSettings
+) -> InterviewScript:
     """Generate the interview backbone from a grounding snapshot.
 
     Regenerates once if the first attempt violates the count or gap-probe
     constraints, then raises.
 
     `mode` only reaches the opening greeting, which tells the candidate how to
-    answer. The script is frozen at creation alongside the mode snapshot, so
+    answer. The script is frozen at approval alongside the mode snapshot, so
     the greeting can never contradict the composer the candidate is looking at.
+
+    `template` supplies the structural decisions a recruiter made once for the
+    whole run. Its fixed questions count toward question_count and are appended
+    after the generated ones, so a template that fills the interview skips the
+    model entirely.
     """
     answer_medium = "spoken aloud" if mode is InterviewMode.AUDIO else "typed"
-    prompt = GENERATION_PROMPT.format(
-        answer_medium=answer_medium,
-        job_title=grounding.get("job_title") or "Not specified",
-        company_name=grounding.get("company_name") or "Not specified",
-        job_summary=grounding.get("job_summary") or "Not provided",
-        requirements=json_block(grounding.get("requirements")),
-        resume_markdown=grounding.get("resume_markdown") or "Not available",
-        evaluation_summary=grounding.get("evaluation_summary") or "Not available",
-        critical_gaps=", ".join(grounding.get("critical_gaps") or []) or "None",
-        weak_skills=", ".join(grounding.get("weak_skills") or []) or "None",
-        question_count=Config.INTERVIEW_QUESTION_COUNT,
-        max_gap_probes=MAX_GAP_PROBES,
-        time_limit_minutes=INTERVIEW_TIME_LIMIT_SECONDS // 60,
-    )
+    generated_count = template.generated_count
 
-    script = _invoke(prompt)
-    problem = _validate_script(script)
-
-    if problem:
-        logger.warning(f"Regenerating interview script: {problem}")
-        script = _invoke(
-            f"{prompt}\n\nYour previous attempt was rejected because {problem}. "
-            "Follow the constraints exactly this time."
+    if generated_count == 0:
+        # Fully hand-written interview. No LLM call, no cost, and nothing to
+        # validate -- the recruiter wrote every question themselves.
+        script = InterviewScript(
+            opening=template.opening or _default_opening(template, mode),
+            questions=[],
+            closing=template.closing or DEFAULT_CLOSING,
         )
-        problem = _validate_script(script)
+        logger.info("Skipped generation: fixed questions fill the interview")
+    else:
+        prompt = GENERATION_PROMPT.format(
+            answer_medium=answer_medium,
+            job_title=grounding.get("job_title") or "Not specified",
+            company_name=grounding.get("company_name") or "Not specified",
+            job_summary=grounding.get("job_summary") or "Not provided",
+            requirements=json_block(grounding.get("requirements")),
+            resume_markdown=grounding.get("resume_markdown") or "Not available",
+            evaluation_summary=grounding.get("evaluation_summary") or "Not available",
+            critical_gaps=", ".join(grounding.get("critical_gaps") or []) or "None",
+            weak_skills=", ".join(grounding.get("weak_skills") or []) or "None",
+            question_count=generated_count,
+            total_question_count=template.question_count,
+            fixed_questions_block=_fixed_questions_block(template),
+            max_gap_probes=MAX_GAP_PROBES,
+            time_limit_minutes=INTERVIEW_TIME_LIMIT_SECONDS // 60,
+        )
+
+        script = _invoke(prompt)
+        problem = _validate_script(script, generated_count)
+
         if problem:
-            raise ValueError(f"Could not generate a valid interview script: {problem}")
+            logger.warning(f"Regenerating interview script: {problem}")
+            script = _invoke(
+                f"{prompt}\n\nYour previous attempt was rejected because {problem}. "
+                "Follow the constraints exactly this time."
+            )
+            problem = _validate_script(script, generated_count)
+            if problem:
+                raise ValueError(
+                    f"Could not generate a valid interview script: {problem}"
+                )
+
+        # Recruiter copy wins over the model's, so the template's voice carries
+        # even when the model was asked to write a greeting.
+        if template.opening:
+            script.opening = template.opening
+        if template.closing:
+            script.closing = template.closing
+
+    # Fixed questions go last: the generated ones open on the candidate's own
+    # experience, which is the gentler start.
+    script.questions.extend(
+        InterviewQuestion(id=0, text=q.text, focus=q.focus, subject=q.subject)
+        for q in template.fixed_questions
+    )
 
     # Renumber defensively so ids are always 0-based and contiguous; the
     # assessor and the engine both index questions by position.

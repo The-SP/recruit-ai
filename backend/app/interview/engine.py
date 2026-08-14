@@ -182,7 +182,10 @@ def validate_answerable(db: Session, interview: Interview, after_seq: int) -> No
         raise ValidationError(
             f"Interview is not in progress (status: '{interview.status}')."
         )
-    if interview.expires_at < datetime.now():
+    # expires_at is NULL only on an unapproved draft, which the status gate
+    # above has already rejected -- a draft is never IN_PROGRESS because it has
+    # no token to start it with.
+    if interview.expires_at is not None and interview.expires_at < datetime.now():
         InterviewRepository(db).mark_expired(interview)
         raise ValidationError("This interview invite has expired.")
     if after_seq != interview.last_seq:
@@ -242,9 +245,12 @@ def submit_answer(
         completed = True
     else:
         followup_text = None
-        if not interview.followup_asked:
+        if interview.followups_enabled and not interview.followup_asked:
             # The <=1-followup-per-question cap is this flag, enforced here
-            # regardless of what the model wants.
+            # regardless of what the model wants. followups_enabled is the
+            # recruiter's per-template opt-out, snapshotted at approval; when
+            # off, the decision call is skipped entirely rather than made and
+            # discarded.
             followup_text = _decide_followup(script.questions[current_index], content)
 
         if followup_text is not None:

@@ -3,9 +3,10 @@ from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import false, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.logger import init_logger
 from app.interview.constants import INTERVIEW_INVITE_TTL_DAYS
@@ -39,11 +40,24 @@ def default_expires_at() -> datetime:
 OVERDUE_STATUSES = (InterviewStatus.CREATED.value, InterviewStatus.IN_PROGRESS.value)
 
 
+def _token_match(token: str | None) -> ColumnElement[bool]:
+    """Predicate matching one invite token, and never an unapproved draft.
+
+    The None branch is load-bearing rather than defensive noise: a draft stores
+    NULL, and SQLAlchemy compiles `access_token == None` into `IS NULL`, which
+    would match every draft in the table. Both token lookups go through here so
+    neither can be hardened without the other.
+    """
+    if token is None:
+        return false()
+    return Interview.access_token == token
+
+
 class InterviewRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create(
+    def create_draft(
         self,
         evaluation_id: UUID,
         question_script: dict[str, Any],
@@ -51,25 +65,65 @@ class InterviewRepository:
         model_name: str,
         answer_mode: str,
         voice_mode: str,
+        followups_enabled: bool,
     ) -> Interview:
-        """Create an interview invite with a fresh token and expiry."""
+        """Create an unapproved interview: no token, no expiry.
+
+        The absent token is the review gate. Until approve() runs there is
+        nothing for get_by_token to match, so a draft is unreachable by a
+        candidate without any route having to exclude it.
+        """
         interview = Interview(
             evaluation_id=evaluation_id,
-            access_token=generate_access_token(),
-            status=InterviewStatus.CREATED.value,
+            access_token=None,
+            status=InterviewStatus.DRAFT.value,
             question_script=question_script,
             grounding=grounding,
             model_name=model_name,
             answer_mode=answer_mode,
             voice_mode=voice_mode,
-            expires_at=default_expires_at(),
+            followups_enabled=followups_enabled,
+            expires_at=None,
         )
         self.db.add(interview)
         self.db.commit()
         self.db.refresh(interview)
         logger.info(
-            f"Created interview: id={interview.id} evaluation_id={evaluation_id}"
+            f"Created interview draft: id={interview.id} evaluation_id={evaluation_id}"
         )
+        return interview
+
+    def update_draft_script(
+        self, interview: Interview, question_script: dict[str, Any]
+    ) -> Interview:
+        """Save recruiter edits to a draft's script.
+
+        The only path that rewrites question_script, and it exists solely for
+        the review step: once approved the script is frozen, which is what
+        keeps a transcript aligned with the rubric the assessor grades against.
+        Callers check the state guard; the repository does not enforce policy.
+        """
+        interview.question_script = question_script
+        self.db.commit()
+        self.db.refresh(interview)
+        logger.info(f"Updated draft script: id={interview.id}")
+        return interview
+
+    def approve(self, interview: Interview) -> Interview:
+        """Mint the invite: token, expiry, and the approval audit stamp.
+
+        The moment the interview becomes reachable. Touches nothing about the
+        interview's content or settings -- those were snapshotted when the
+        draft was created, so approving is purely the act of publishing what
+        was reviewed.
+        """
+        interview.access_token = generate_access_token()
+        interview.expires_at = default_expires_at()
+        interview.status = InterviewStatus.CREATED.value
+        interview.approved_at = datetime.now()
+        self.db.commit()
+        self.db.refresh(interview)
+        logger.info(f"Approved interview, invite minted: id={interview.id}")
         return interview
 
     def get_by_id(
@@ -81,7 +135,9 @@ class InterviewRepository:
         return self.db.scalars(stmt).unique().first()
 
     def get_by_token(self, token: str, with_turns: bool = False) -> Interview | None:
-        stmt = select(Interview).where(Interview.access_token == token)
+        """Resolve an invite. Never returns a draft: an unapproved interview
+        has no token, so there is nothing for a candidate to open."""
+        stmt = select(Interview).where(_token_match(token))
         if with_turns:
             stmt = stmt.options(joinedload(Interview.turns))
         return self.db.scalars(stmt).unique().first()
@@ -92,9 +148,7 @@ class InterviewRepository:
         Used by the answer path to make the after_seq check and the turn
         append atomic. The lock releases on the next db.commit().
         """
-        stmt = (
-            select(Interview).where(Interview.access_token == token).with_for_update()
-        )
+        stmt = select(Interview).where(_token_match(token)).with_for_update()
         return self.db.scalars(stmt).first()
 
     def get_by_evaluation_id(

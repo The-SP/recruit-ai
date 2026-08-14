@@ -273,15 +273,33 @@ export function InterviewTable({
 
     if (!iv) {
       return actionButton(
-        "Generate invite",
+        "Set up",
         <Sparkles className="w-3.5 h-3.5" />,
         () => onGenerate(item),
         false,
-        "Create a private interview link for this candidate"
+        "Choose what to ask, then review the questions before sending"
       );
     }
 
     switch (iv.status) {
+      // Generated but not approved: there is no link to copy, and the only
+      // move is finishing the review. Derived from the transcript href rather
+      // than taking another prop, so both flavors stay on one route shape.
+      case "draft":
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {href ? (
+              <Link
+                href={`${href}/review`}
+                title="Review the questions before sending this interview"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+              >
+                Review questions
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            ) : null}
+          </div>
+        );
       case "created":
         return (
           <div className="flex items-center justify-end gap-2">

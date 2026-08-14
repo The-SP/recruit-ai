@@ -1,4 +1,10 @@
-import type { InterviewDetail, InterviewSummary } from "@/lib/interview-types";
+import type {
+  FixedQuestionData,
+  InterviewDetail,
+  InterviewQuestionData,
+  InterviewSummary,
+  InterviewTemplateData,
+} from "@/lib/interview-types";
 
 import { ApiError, apiFetch, apiRequest, authHeaders } from "./api";
 import type { CandidateBreakdown } from "./batch";
@@ -172,6 +178,11 @@ export async function getRunCandidateInterview(
   }
 }
 
+/**
+ * Draft an interview. Returns an unapproved script with no invite link — the
+ * recruiter reviews it and calls approveRunCandidateInterview to mint one.
+ * Generation is synchronous, so this takes a few seconds.
+ */
 export async function createRunCandidateInterview(
   runId: string,
   candidateId: string
@@ -179,6 +190,62 @@ export async function createRunCandidateInterview(
   return apiRequest<InterviewSummary>(
     `/evaluations/runs/${runId}/candidate/${candidateId}/interview`,
     { method: "POST" }
+  );
+}
+
+/** Save recruiter edits to a draft's questions. Draft-only: an approved
+ * script is frozen so the transcript can't drift from the rubric. */
+export async function updateRunCandidateInterviewDraft(
+  runId: string,
+  candidateId: string,
+  script: {
+    opening: string;
+    questions: InterviewQuestionData[];
+    closing: string;
+  }
+): Promise<InterviewDetail> {
+  return apiRequest<InterviewDetail>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/draft`,
+    { method: "PATCH", body: script }
+  );
+}
+
+/** Approve a reviewed draft and mint its invite link. */
+export async function approveRunCandidateInterview(
+  runId: string,
+  candidateId: string
+): Promise<InterviewSummary> {
+  return apiRequest<InterviewSummary>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/approve`,
+    { method: "POST" }
+  );
+}
+
+// Interview template (per run)
+
+/** The run's template, or the deployment defaults generation would use.
+ * Always returns a body; `is_saved` says which one it is. */
+export async function getInterviewTemplate(
+  runId: string
+): Promise<InterviewTemplateData> {
+  return apiRequest<InterviewTemplateData>(
+    `/evaluations/runs/${runId}/interview-template`
+  );
+}
+
+export async function saveInterviewTemplate(
+  runId: string,
+  template: {
+    question_count: number;
+    followups_enabled: boolean;
+    opening: string | null;
+    closing: string | null;
+    fixed_questions: FixedQuestionData[];
+  }
+): Promise<InterviewTemplateData> {
+  return apiRequest<InterviewTemplateData>(
+    `/evaluations/runs/${runId}/interview-template`,
+    { method: "PUT", body: template }
   );
 }
 

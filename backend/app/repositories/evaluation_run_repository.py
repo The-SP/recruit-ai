@@ -49,8 +49,9 @@ class InterviewRow(NamedTuple):
     recommendation: str | None
     answered: bool
     has_assessment_error: bool
-    access_token: str
-    expires_at: datetime
+    # Both NULL on an unapproved draft, which has no invite yet.
+    access_token: str | None
+    expires_at: datetime | None
     completed_at: datetime | None
     assessed_at: datetime | None
 

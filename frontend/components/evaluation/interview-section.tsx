@@ -150,21 +150,39 @@ export function InterviewSection({
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Generate interview invite
+                Set up interview
               </>
             )}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Creates a private link with questions tailored to this candidate and the
-            job description. Generation takes a few seconds.
+            Confirm what to ask, then review the questions before the invite
+            link is created.
           </p>
         </div>
       )}
 
       {detail && (
         <div className="space-y-3">
+          {/* Drafted but not approved: no link exists yet, so the only thing
+              to offer is finishing the review. */}
+          {detail.status === "draft" && interviewHref && (
+            <div className="space-y-2">
+              <Button asChild size="sm" variant="outline" className="gap-2 font-semibold cursor-pointer">
+                <Link href={`${interviewHref}/review`}>
+                  <MessageSquareText className="w-4 h-4" />
+                  Review questions
+                </Link>
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {detail.questions_count} questions are ready for review. The
+                invite link is created once you approve them.
+              </p>
+            </div>
+          )}
+
           {/* Invite link while the candidate hasn't finished */}
-          {(detail.status === "created" || detail.status === "in_progress") && (
+          {detail.invite_url &&
+            (detail.status === "created" || detail.status === "in_progress") && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <code className="flex-1 min-w-0 truncate text-xs bg-card border border-border rounded-lg px-3 py-2 select-all">
@@ -173,7 +191,7 @@ export function InterviewSection({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyInviteUrl(detail.invite_url)}
+                  onClick={() => copyInviteUrl(detail.invite_url ?? "")}
                   className="gap-1.5 shrink-0 cursor-pointer"
                 >
                   {copied ? (
@@ -191,7 +209,9 @@ export function InterviewSection({
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>
-                  Expires {new Date(detail.expires_at).toLocaleDateString()} ·{" "}
+                  {detail.expires_at
+                    ? `Expires ${new Date(detail.expires_at).toLocaleDateString()} · `
+                    : ""}
                   {detail.questions_count} questions
                 </span>
                 {detail.status === "in_progress" && (

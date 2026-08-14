@@ -49,6 +49,10 @@ export const relevanceStyles: Record<string, string> = {
 };
 
 export const interviewStatusStyles: Record<string, string> = {
+  // Awaiting a human. Deliberately the only dashed badge here: every other
+  // status describes something that happened, this one describes something
+  // the recruiter still has to do.
+  draft: "bg-warning text-warning-foreground border-warning-edge border-dashed",
   created: "bg-info text-info-foreground border-info-edge",
   in_progress: "bg-warning text-warning-foreground border-warning-edge",
   completed: "bg-success text-success-foreground border-success-edge",
@@ -57,11 +61,21 @@ export const interviewStatusStyles: Record<string, string> = {
 };
 
 export const interviewStatusLabels: Record<string, string> = {
+  draft: "Needs Review",
   created: "Invite Sent",
   in_progress: "In Progress",
   completed: "Completed",
   assessed: "Assessed",
   expired: "Expired",
+};
+
+/** What a question is for, in recruiter language. Read by both question
+ * editors so a focus can't be labelled one way on a fixed question and another
+ * on a generated one. Never shown to the candidate — focus is rubric. */
+export const questionFocusLabels: Record<string, string> = {
+  experience_depth: "Experience",
+  role_competency: "Role skill",
+  gap_probe: "Gap",
 };
 
 export const interviewModeLabels: Record<string, string> = {
