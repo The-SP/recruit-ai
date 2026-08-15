@@ -7,13 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.config import Config
 from app.interview import state
 from app.interview.constants import (
+    ALLOWED_TIME_LIMIT_SECONDS,
+    INTERVIEW_TIME_LIMIT_SECONDS,
     MAX_QUESTIONS_PER_INTERVIEW,
     MIN_QUESTIONS_PER_INTERVIEW,
 )
 from app.interview.speaker import voice_key_for_turn
 from app.models.interview import Interview, InterviewTurn
 from app.models.interview_template import InterviewTemplate
-from app.schemas.interview import InterviewScript, QuestionFocus, TemplateSettings
+from app.schemas.interview import (
+    InterviewQuestion,
+    InterviewScript,
+    QuestionFocus,
+    TemplateSettings,
+)
 
 
 def build_invite_url(access_token: str | None) -> str | None:
@@ -110,6 +117,10 @@ class InterviewTemplateRequest(BaseModel):
         ge=MIN_QUESTIONS_PER_INTERVIEW, le=MAX_QUESTIONS_PER_INTERVIEW
     )
     followups_enabled: bool = True
+    # Validated against ALLOWED_TIME_LIMIT_SECONDS in the service, not here:
+    # the message names the allowed durations, which is copy the client renders
+    # directly.
+    time_limit_seconds: int = INTERVIEW_TIME_LIMIT_SECONDS
     # Null or blank means "let the model write it".
     opening: str | None = Field(default=None, max_length=2000)
     closing: str | None = Field(default=None, max_length=2000)
@@ -129,6 +140,12 @@ class InterviewTemplateResponse(BaseModel):
     is_saved: bool
     question_count: int
     followups_enabled: bool
+    time_limit_seconds: int
+    # The durations a client may offer, so the picker cannot drift from what
+    # the service accepts.
+    allowed_time_limits: list[int] = Field(
+        default_factory=lambda: list(ALLOWED_TIME_LIMIT_SECONDS)
+    )
     opening: str | None = None
     closing: str | None = None
     fixed_questions: list[FixedQuestionIO] = Field(default_factory=list)
@@ -160,6 +177,24 @@ class DraftScriptUpdateRequest(BaseModel):
     opening: str = Field(min_length=1, max_length=2000)
     questions: list[DraftQuestionIn] = Field(min_length=1)
     closing: str = Field(min_length=1, max_length=2000)
+    # Set on the interview, not read back from the template. The template
+    # supplies the default at generation; from then on this draft owns the
+    # setting, so approve_interview's rule -- the draft you approve is exactly
+    # the draft you reviewed -- still holds.
+    #
+    # Both settings here are ones generation did not consume: the engine reads
+    # them per answer, and the opening states no duration, so neither is baked
+    # into the frozen script.
+    followups_enabled: bool
+    time_limit_seconds: int
+
+
+class OneMoreQuestionRequest(BaseModel):
+    """The questions currently on the recruiter's screen, so the model can
+    avoid duplicating them. Sent rather than read from the stored script
+    because the draft may have unsaved edits."""
+
+    questions: list[DraftQuestionIn] = Field(default_factory=list)
 
 
 def build_template_response(
@@ -170,6 +205,7 @@ def build_template_response(
         is_saved=True,
         question_count=template.question_count,
         followups_enabled=template.followups_enabled,
+        time_limit_seconds=template.time_limit_seconds,
         opening=template.opening,
         closing=template.closing,
         fixed_questions=[
@@ -193,6 +229,7 @@ def build_default_template_response(
         is_saved=False,
         question_count=settings.question_count,
         followups_enabled=settings.followups_enabled,
+        time_limit_seconds=settings.time_limit_seconds,
         opening=settings.opening,
         closing=settings.closing,
         fixed_questions=[
@@ -233,6 +270,9 @@ class InterviewDetailResponse(BaseModel):
     answer_mode: str
     voice_mode: str
     followups_enabled: bool
+    # This interview's snapshotted wall clock, so the review page can state the
+    # real duration rather than assuming the deployment default.
+    time_limit_seconds: int
     # The script's greeting and sign-off. Recruiter-only, and the review step
     # needs them before any turn exists to read them from -- a draft has no
     # transcript, so the turns list can't be the only place they appear.
@@ -267,18 +307,38 @@ def _parse_script(script_data: dict[str, Any]) -> InterviewScript | None:
         return None
 
 
+def build_question_out(question: InterviewQuestion) -> QuestionOut:
+    """One question for the wire.
+
+    The single constructor for QuestionOut, because that model is the
+    candidate-safety boundary: a field added there must not be silently
+    omitted by a second hand-rolled copy.
+    """
+    return QuestionOut(
+        id=question.id,
+        text=question.text,
+        focus=question.focus.value,
+        subject=question.subject,
+    )
+
+
+def to_interview_questions(questions: list[DraftQuestionIn]) -> list[InterviewQuestion]:
+    """Recruiter-edited questions as the domain objects the service takes.
+
+    Lives here with the other wire<->domain conversions rather than in the
+    route, so both endpoints that accept edited questions convert them the
+    same way.
+    """
+    return [
+        InterviewQuestion(id=q.id, text=q.text, focus=q.focus, subject=q.subject)
+        for q in questions
+    ]
+
+
 def _questions_out(script: InterviewScript | None) -> list[QuestionOut]:
     if script is None:
         return []
-    return [
-        QuestionOut(
-            id=q.id,
-            text=q.text,
-            focus=q.focus.value,
-            subject=q.subject,
-        )
-        for q in script.questions
-    ]
+    return [build_question_out(q) for q in script.questions]
 
 
 def build_turn_out(turn: InterviewTurn, voice: bool) -> TurnOut:
@@ -351,6 +411,7 @@ def build_detail_response(
         answer_mode=interview.answer_mode,
         voice_mode=interview.voice_mode,
         followups_enabled=interview.followups_enabled,
+        time_limit_seconds=interview.time_limit_seconds,
         opening=opening,
         closing=closing,
         questions_count=len(questions),

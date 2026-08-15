@@ -14,11 +14,16 @@ from app.core.file_storage import (
 )
 from app.core.logger import init_logger
 from app.interview.constants import (
+    ALLOWED_TIME_LIMIT_SECONDS,
     ANSWER_AUDIO_EXTENSIONS,
     MAX_QUESTIONS_PER_INTERVIEW,
     MIN_QUESTIONS_PER_INTERVIEW,
 )
-from app.interview.question_generator import build_grounding, generate_script
+from app.interview.question_generator import (
+    build_grounding,
+    generate_one_question,
+    generate_script,
+)
 from app.interview.speaker import (
     is_safe_voice_key,
     resolve_voice_text,
@@ -43,7 +48,12 @@ from app.repositories.evaluation_run_repository import (
 from app.repositories.interview_repository import OVERDUE_STATUSES, InterviewRepository
 from app.repositories.interview_template_repository import InterviewTemplateRepository
 from app.repositories.job_repository import JobRepository
-from app.schemas.interview import FixedQuestion, InterviewScript, TemplateSettings
+from app.schemas.interview import (
+    FixedQuestion,
+    InterviewQuestion,
+    InterviewScript,
+    TemplateSettings,
+)
 from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
 
 logger = init_logger(__name__)
@@ -168,6 +178,7 @@ def template_settings_from(template: InterviewTemplate) -> TemplateSettings:
     return TemplateSettings(
         question_count=template.question_count,
         followups_enabled=template.followups_enabled,
+        time_limit_seconds=template.time_limit_seconds,
         opening=template.opening,
         closing=template.closing,
         fixed_questions=[
@@ -189,11 +200,25 @@ def resolve_template_settings(db: Session, run_id: UUID) -> TemplateSettings:
     return template_settings_from(template)
 
 
+def _validate_time_limit(seconds: int) -> None:
+    """Reject a duration outside the allowed set.
+
+    Shared by the template upsert and the draft PATCH: both can set the limit,
+    so a check living in only one of them would leave the other as a way around
+    it. The message names the durations because clients render `detail`
+    verbatim.
+    """
+    if seconds not in ALLOWED_TIME_LIMIT_SECONDS:
+        allowed = ", ".join(str(s // 60) for s in ALLOWED_TIME_LIMIT_SECONDS)
+        raise ValidationError(f"Interview length must be one of {allowed} minutes.")
+
+
 def upsert_template(
     db: Session,
     run: EvaluationRun,
     question_count: int,
     followups_enabled: bool,
+    time_limit_seconds: int,
     opening: str | None,
     closing: str | None,
     fixed_questions: list[FixedQuestion],
@@ -211,6 +236,8 @@ def upsert_template(
             f"Question count must be between {MIN_QUESTIONS_PER_INTERVIEW} and "
             f"{MAX_QUESTIONS_PER_INTERVIEW}."
         )
+
+    _validate_time_limit(time_limit_seconds)
 
     if len(fixed_questions) > question_count:
         raise ValidationError(
@@ -231,6 +258,7 @@ def upsert_template(
         run_id=run.id,
         question_count=question_count,
         followups_enabled=followups_enabled,
+        time_limit_seconds=time_limit_seconds,
         opening=(opening or "").strip() or None,
         closing=(closing or "").strip() or None,
         fixed_questions=[q.model_dump(mode="json") for q in fixed_questions],
@@ -290,6 +318,7 @@ def create_interview_draft(
             answer_mode=mode.value,
             voice_mode=voice.value,
             followups_enabled=template.followups_enabled,
+            time_limit_seconds=template.time_limit_seconds,
         )
     except IntegrityError:
         # Two clicks raced: both passed the check above while generation ran
@@ -314,12 +343,21 @@ def create_interview_draft(
 
 
 def update_interview_draft(
-    db: Session, run: EvaluationRun, candidate_id: UUID, script: InterviewScript
+    db: Session,
+    run: EvaluationRun,
+    candidate_id: UUID,
+    script: InterviewScript,
+    followups_enabled: bool,
+    time_limit_seconds: int,
 ) -> Interview:
-    """Save recruiter edits to a draft's script.
+    """Save recruiter edits to a draft's script, follow-ups and time limit.
 
     Only while `draft`: once approved the script is frozen, so a live
     transcript can never drift from the rubric the assessor grades against.
+
+    The two settings are editable here for the same reason: generation did not
+    consume either, so changing them cannot contradict the script the recruiter
+    is looking at.
     """
     interview = get_interview(db, run, candidate_id)
 
@@ -343,14 +381,51 @@ def update_interview_draft(
     if not script.opening.strip() or not script.closing.strip():
         raise ValidationError("The opening and closing cannot be empty.")
 
+    _validate_time_limit(time_limit_seconds)
+
     # Renumber so ids stay 0-based and contiguous after deletions; the engine
     # and the assessor both index questions by position.
     for index, question in enumerate(script.questions):
         question.id = index
 
     return InterviewRepository(db).update_draft_script(
-        interview, script.model_dump(mode="json")
+        interview,
+        script.model_dump(mode="json"),
+        followups_enabled=followups_enabled,
+        time_limit_seconds=time_limit_seconds,
     )
+
+
+def draft_one_more_question(
+    db: Session,
+    run: EvaluationRun,
+    candidate_id: UUID,
+    existing: list[InterviewQuestion],
+) -> InterviewQuestion:
+    """Write one more question for a draft under review.
+
+    Returns the question without saving it. The recruiter is mid-edit and the
+    client holds unsaved changes, so persisting here would force a refetch that
+    discards them -- the new question joins the draft on the next PATCH like
+    any hand-written one.
+
+    `existing` comes from the request, not the stored script, for the same
+    reason: the model has to see what is on the recruiter's screen to avoid
+    duplicating it, and the stored script may be several edits behind.
+    """
+    interview = get_interview(db, run, candidate_id)
+
+    if interview.status != InterviewStatus.DRAFT.value:
+        raise ValidationError(
+            "This interview has already been approved and can no longer be edited."
+        )
+
+    if len(existing) >= MAX_QUESTIONS_PER_INTERVIEW:
+        raise ValidationError(
+            f"An interview can have at most {MAX_QUESTIONS_PER_INTERVIEW} questions."
+        )
+
+    return generate_one_question(interview.grounding, existing)
 
 
 def approve_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> Interview:

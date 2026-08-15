@@ -27,7 +27,19 @@ MAX_GAP_PROBES = 2
 # Wall clock for a single interview. Enforced server-side on every answer:
 # past this, the engine accepts the final answer, closes the interview, and
 # assesses whatever transcript exists.
+#
+# The default a template starts from, and the fallback for interviews drafted
+# before templates carried a limit. The live value is read from
+# Interview.time_limit_seconds, snapshotted at approval.
 INTERVIEW_TIME_LIMIT_SECONDS = 15 * 60
+
+# What a template may set the limit to. A fixed set rather than a range,
+# because the durations are coarse by nature and a free number invites both
+# 3 minutes (too short to answer anything) and 90 (an unbounded transcription
+# and assessment bill). The ceiling is deliberately modest for the same reason
+# MAX_QUESTIONS_PER_INTERVIEW is: minutes of candidate talk are minutes of
+# speech-to-text.
+ALLOWED_TIME_LIMIT_SECONDS = (10 * 60, 15 * 60, 20 * 60, 30 * 60)
 
 # How long an invite link stays valid before the interview lazily flips to
 # `expired`.

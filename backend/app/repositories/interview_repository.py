@@ -66,6 +66,7 @@ class InterviewRepository:
         answer_mode: str,
         voice_mode: str,
         followups_enabled: bool,
+        time_limit_seconds: int,
     ) -> Interview:
         """Create an unapproved interview: no token, no expiry.
 
@@ -83,6 +84,7 @@ class InterviewRepository:
             answer_mode=answer_mode,
             voice_mode=voice_mode,
             followups_enabled=followups_enabled,
+            time_limit_seconds=time_limit_seconds,
             expires_at=None,
         )
         self.db.add(interview)
@@ -94,16 +96,28 @@ class InterviewRepository:
         return interview
 
     def update_draft_script(
-        self, interview: Interview, question_script: dict[str, Any]
+        self,
+        interview: Interview,
+        question_script: dict[str, Any],
+        *,
+        followups_enabled: bool,
+        time_limit_seconds: int,
     ) -> Interview:
-        """Save recruiter edits to a draft's script.
+        """Save recruiter edits to a draft's script, follow-ups and time limit.
 
         The only path that rewrites question_script, and it exists solely for
         the review step: once approved the script is frozen, which is what
         keeps a transcript aligned with the rubric the assessor grades against.
         Callers check the state guard; the repository does not enforce policy.
+
+        The two settings ride along because they are the ones a recruiter can
+        still change once the questions exist: both feed the engine at run
+        time, not the generator, so unlike question_count neither is already
+        spent by the time the draft is reviewed.
         """
         interview.question_script = question_script
+        interview.followups_enabled = followups_enabled
+        interview.time_limit_seconds = time_limit_seconds
         self.db.commit()
         self.db.refresh(interview)
         logger.info(f"Updated draft script: id={interview.id}")

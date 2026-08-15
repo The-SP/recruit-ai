@@ -36,12 +36,13 @@ const FOCUS_OPTIONS: QuestionFocus[] = [
  * subject the assessor grades it against would quietly break the assessment
  * rather than improve the question.
  *
- * A question the recruiter added has no subject yet, so it exposes both fields
- * — the assessor needs them for every question regardless of who wrote it.
+ * A question the recruiter added exposes both fields — the assessor needs them
+ * for every question regardless of who wrote it.
  */
 export function QuestionEditor({
   question,
   index,
+  isAdded,
   onChange,
   onFieldChange,
   onDelete,
@@ -51,6 +52,17 @@ export function QuestionEditor({
 }: {
   question: InterviewQuestionData;
   index: number;
+  /**
+   * Whether the recruiter wrote this question here, as opposed to the model
+   * generating it.
+   *
+   * Passed in rather than inferred from an empty `subject`. Inferring it meant
+   * the card flipped to read-only on the first character typed into "What it
+   * tests" — the field that makes subject non-empty is inside the branch that
+   * an empty subject was keeping open, so filling it in destroyed the inputs
+   * mid-keystroke and locked the question.
+   */
+  isAdded: boolean;
   onChange: (text: string) => void;
   onFieldChange: (patch: Partial<InterviewQuestionData>) => void;
   onDelete: () => void;
@@ -62,10 +74,6 @@ export function QuestionEditor({
   const [savedToTemplate, setSavedToTemplate] = useState(false);
   const [savingToTemplate, setSavingToTemplate] = useState(false);
 
-  // A question with no subject was written here rather than generated: the
-  // generator always sets one. That is what decides whether the rubric fields
-  // are editable, so no extra flag has to be threaded through the script.
-  const isNew = !question.subject.trim();
   const incomplete = !question.text.trim() || !question.subject.trim();
 
   const handleAddToTemplate = async () => {
@@ -89,12 +97,12 @@ export function QuestionEditor({
           <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground shrink-0">
             Question {index + 1}
           </span>
-          {!isNew && (
+          {!isAdded && (
             <Badge variant="outline" className="font-semibold shrink-0">
               {questionFocusLabels[question.focus] ?? question.focus}
             </Badge>
           )}
-          {isNew && (
+          {isAdded && (
             <Badge
               variant="outline"
               className="font-semibold shrink-0 bg-info text-info-foreground border-info-edge"
@@ -133,7 +141,7 @@ export function QuestionEditor({
         className="text-sm leading-relaxed"
       />
 
-      {isNew ? (
+      {isAdded ? (
         <>
           <div className="grid sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">

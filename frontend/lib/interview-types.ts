@@ -83,6 +83,11 @@ export interface InterviewTemplateData {
   is_saved: boolean;
   question_count: number;
   followups_enabled: boolean;
+  /** Wall clock for interviews drafted from this template, in seconds. */
+  time_limit_seconds: number;
+  /** The durations the server accepts, so the picker can't offer one that
+   * would be rejected. Served with the template rather than hardcoded here. */
+  allowed_time_limits: number[];
   /** Null means "let the model write it". */
   opening: string | null;
   closing: string | null;
@@ -141,6 +146,8 @@ export interface InterviewDetail {
   /** Whether the engine may ask adaptive follow-ups. Snapshotted from the
    * template at approval, like answer_mode and voice_mode. */
   followups_enabled: boolean;
+  /** This interview's snapshotted wall clock, in seconds. */
+  time_limit_seconds: number;
   /** The script's greeting and sign-off. Present even on a draft, which has
    * no turns to read them from. */
   opening: string;

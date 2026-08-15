@@ -230,7 +230,14 @@ function InterviewPageInner() {
   if (!state) return null;
 
   const hasCompany = state.company_name && state.company_name !== "null";
-  const totalMinutes = Math.round((state.time_remaining_seconds ?? 900) / 60);
+  // Null once the interview is over (completed, assessed, expired); `created`
+  // and `in_progress` both carry a real value. No numeric fallback on purpose:
+  // the opening no longer states a duration, so this and the countdown are the
+  // only places the candidate learns it, and inventing 15 here would be a
+  // guess presented as fact.
+  const totalMinutes = state.time_remaining_seconds
+    ? Math.round(state.time_remaining_seconds / 60)
+    : null;
   const isDone = state.status === "completed" || state.status === "assessed";
   // The interview's own snapshot, never an env var or a client flag: an invite
   // minted under one mode stays that mode even after the deployment flips.
@@ -272,16 +279,18 @@ function InterviewPageInner() {
                   about your background and experience
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <Timer className="w-5 h-5 text-primary shrink-0" />
-                <span>
-                  Around{" "}
-                  <span className="font-semibold text-foreground">
-                    {totalMinutes} minutes
+              {totalMinutes !== null && (
+                <div className="flex items-center gap-3">
+                  <Timer className="w-5 h-5 text-primary shrink-0" />
+                  <span>
+                    Around{" "}
+                    <span className="font-semibold text-foreground">
+                      {totalMinutes} minutes
+                    </span>
+                    , with the timer starting when you begin
                   </span>
-                  , with the timer starting when you begin
-                </span>
-              </div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 {isAudioMode ? (
                   <Mic className="w-5 h-5 text-primary shrink-0" />

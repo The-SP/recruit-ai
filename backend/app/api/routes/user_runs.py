@@ -15,11 +15,15 @@ from app.api.schemas.interview import (
     InterviewSummaryResponse,
     InterviewTemplateRequest,
     InterviewTemplateResponse,
+    OneMoreQuestionRequest,
+    QuestionOut,
     build_default_template_response,
     build_detail_response,
     build_invite_url,
+    build_question_out,
     build_summary_response,
     build_template_response,
+    to_interview_questions,
 )
 from app.api.schemas.public import (
     AddCandidatesResponse,
@@ -47,12 +51,14 @@ from app.core.rate_limit import (
     COST_JD_PARSE,
     COST_RESUME,
     interview_invite_cost,
+    interview_one_question_cost,
     refund,
 )
 from app.interview.service import (
     approve_interview,
     create_interview_draft,
     default_template_settings,
+    draft_one_more_question,
     get_interview,
     get_owned_interview_voice,
     get_turn_audio,
@@ -80,7 +86,7 @@ from app.repositories.interview_template_repository import InterviewTemplateRepo
 from app.repositories.job_repository import JobRepository
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.experience_evaluation import ExperienceScoreResult
-from app.schemas.interview import FixedQuestion, InterviewQuestion, InterviewScript
+from app.schemas.interview import FixedQuestion, InterviewScript
 from app.schemas.skill_evaluation import SkillScoreResult
 from app.worker.tasks import process_evaluation_run
 
@@ -586,6 +592,7 @@ def save_owned_run_interview_template(
         run,
         question_count=payload.question_count,
         followups_enabled=payload.followups_enabled,
+        time_limit_seconds=payload.time_limit_seconds,
         opening=payload.opening,
         closing=payload.closing,
         fixed_questions=[
@@ -630,6 +637,34 @@ def create_owned_candidate_interview(
     return build_summary_response(interview)
 
 
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview/question",
+    response_model=QuestionOut,
+)
+def draft_owned_candidate_interview_question(
+    run_id: UUID,
+    candidate_id: UUID,
+    payload: OneMoreQuestionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> QuestionOut:
+    """Write one more question for a draft under review.
+
+    Draft-only, and charged: this is a real generation call, unlike the rest of
+    the review step. Returns the question alone without saving it -- the
+    recruiter's unsaved edits live in the client, so it is persisted by the
+    next PATCH along with everything else.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+
+    enforce_budget(interview_one_question_cost())
+
+    question = draft_one_more_question(
+        db, run, candidate_id, to_interview_questions(payload.questions)
+    )
+    return build_question_out(question)
+
+
 @runs_router.patch(
     "/{run_id}/candidate/{candidate_id}/interview/draft",
     response_model=InterviewDetailResponse,
@@ -649,13 +684,17 @@ def update_owned_candidate_interview_draft(
     run = _load_owned_run(db, run_id, current_user)
     script = InterviewScript(
         opening=payload.opening,
-        questions=[
-            InterviewQuestion(id=q.id, text=q.text, focus=q.focus, subject=q.subject)
-            for q in payload.questions
-        ],
+        questions=to_interview_questions(payload.questions),
         closing=payload.closing,
     )
-    interview = update_interview_draft(db, run, candidate_id, script)
+    interview = update_interview_draft(
+        db,
+        run,
+        candidate_id,
+        script,
+        payload.followups_enabled,
+        payload.time_limit_seconds,
+    )
     turns = InterviewRepository(db).get_turns(interview.id)
     return build_detail_response(interview, turns)
 

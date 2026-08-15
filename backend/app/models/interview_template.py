@@ -6,6 +6,7 @@ from sqlalchemy import ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
 from app.models.base import Base
 
 
@@ -40,6 +41,14 @@ class InterviewTemplate(Base):
     # Whether the engine may ask an adaptive follow-up at all. A toggle, not a
     # count: the <=1-per-question cap stays MAX_FOLLOWUPS_PER_QUESTION.
     followups_enabled: Mapped[bool] = mapped_column(default=True)
+
+    # Wall clock for interviews drafted from this template, constrained to
+    # ALLOWED_TIME_LIMIT_SECONDS at the service layer. Snapshotted onto
+    # Interview.time_limit_seconds at approval like every other setting the
+    # candidate experiences.
+    time_limit_seconds: Mapped[int] = mapped_column(
+        server_default=str(INTERVIEW_TIME_LIMIT_SECONDS)
+    )
 
     # NULL means "let the model write it", which is what keeps the template
     # skippable -- a recruiter who only cares about question count never has

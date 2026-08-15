@@ -23,6 +23,7 @@ import type { CandidateBreakdown } from "@/services/batch";
 import {
   approveRunCandidateInterview,
   createRunCandidateInterview,
+  draftRunCandidateInterviewQuestion,
   getEvaluationRun,
   getInterviewTemplate,
   getRunCandidateBreakdown,
@@ -36,6 +37,8 @@ function scriptFrom(interview: InterviewDetail): ScriptDraft {
     opening: interview.opening,
     questions: interview.questions,
     closing: interview.closing,
+    followupsEnabled: interview.followups_enabled,
+    timeLimitSeconds: interview.time_limit_seconds,
   };
 }
 
@@ -50,6 +53,11 @@ export default function InterviewReviewPage({
   const [breakdown, setBreakdown] = useState<CandidateBreakdown | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [interviewCount, setInterviewCount] = useState(0);
+  // Both header fetches, tracked as one flag. They settle independently but
+  // fill the same two lines, so flipping them separately would just make the
+  // header rearrange twice.
+  const [runLoading, setRunLoading] = useState(true);
+  const [breakdownLoading, setBreakdownLoading] = useState(true);
 
   const [script, setScript] = useState<ScriptDraft | null>(null);
   // Null until the server says what generation would use. Nothing renders a
@@ -76,13 +84,17 @@ export default function InterviewReviewPage({
           run.items.filter((item) => item.interview !== null).length
         );
       })
-      .catch(() => {});
+      .catch(() => {})
+      // Also on failure: the header can't wait forever for a fetch that will
+      // never answer, and the name has a fallback for exactly this.
+      .finally(() => setRunLoading(false));
   }, [runId]);
 
   useEffect(() => {
     getRunCandidateBreakdown(runId, candidateId)
       .then(setBreakdown)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setBreakdownLoading(false));
   }, [runId, candidateId]);
 
   useEffect(() => {
@@ -131,6 +143,7 @@ export default function InterviewReviewPage({
       const saved = await saveInterviewTemplate(runId, {
         question_count: Number(draft.questionCount),
         followups_enabled: draft.followupsEnabled,
+        time_limit_seconds: draft.timeLimitSeconds,
         opening: draft.opening.trim() || null,
         closing: draft.closing.trim() || null,
         fixed_questions: draft.fixedQuestions,
@@ -201,6 +214,29 @@ export default function InterviewReviewPage({
     return persistTemplate(next);
   };
 
+  /** Ask the model for one more question for this candidate.
+   *
+   * Returns it rather than setting state: the view holds the draft and appends
+   * it there, so this stays the same shape as every other action on the page
+   * and can report failure by resolving null. */
+  const handleGenerateQuestion = async (
+    existing: InterviewQuestionData[]
+  ): Promise<InterviewQuestionData | null> => {
+    setLocalError(null);
+    try {
+      return await draftRunCandidateInterviewQuestion(
+        runId,
+        candidateId,
+        existing
+      );
+    } catch (err) {
+      setLocalError(
+        err instanceof Error ? err.message : "Could not write a question."
+      );
+      return null;
+    }
+  };
+
   /**
    * Save edits, then approve. Two calls rather than one: the PATCH is what
    * persists the recruiter's wording, and approving without it would mint a
@@ -217,6 +253,8 @@ export default function InterviewReviewPage({
         opening: script.opening,
         questions: script.questions,
         closing: script.closing,
+        followups_enabled: script.followupsEnabled,
+        time_limit_seconds: script.timeLimitSeconds,
       });
       const summary = await approveRunCandidateInterview(runId, candidateId);
       setInterview({
@@ -266,6 +304,7 @@ export default function InterviewReviewPage({
       template={template}
       onTemplateChange={setTemplate}
       interviewCount={interviewCount}
+      headerLoading={runLoading || breakdownLoading}
       hasSavedTemplate={hasSavedTemplate}
       isApproving={isApproving}
       error={localError ?? error}
@@ -273,6 +312,7 @@ export default function InterviewReviewPage({
       onGenerate={handleGenerate}
       onApprove={handleApprove}
       onAddQuestionToTemplate={handleAddQuestionToTemplate}
+      onGenerateQuestion={handleGenerateQuestion}
     />
   );
 }

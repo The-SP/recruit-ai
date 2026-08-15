@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, Settings2, Trash2 } from "lucide-react";
+import { Info, Loader2, Plus, Settings2, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { questionFocusLabels } from "@/lib/evaluation-styles";
 import type {
@@ -40,9 +41,39 @@ const FOCUS_OPTIONS: QuestionFocus[] = [
 export interface TemplateDraft {
   questionCount: string;
   followupsEnabled: boolean;
+  timeLimitSeconds: number;
+  /** The durations the server accepts. Carried on the draft rather than a
+   * module constant so the picker's options come from the same response that
+   * supplied the current value, and can't drift from what the API allows. */
+  allowedTimeLimits: number[];
   opening: string;
   closing: string;
   fixedQuestions: FixedQuestionData[];
+}
+
+/** Seconds to whole minutes. One rounding rule, so a summary line and a picker
+ * label can never disagree about what 900 seconds is. */
+export function durationMinutes(seconds: number): number {
+  return Math.round(seconds / 60);
+}
+
+/** Seconds to a short label for the picker. */
+export function formatDuration(seconds: number): string {
+  return `${durationMinutes(seconds)} minutes`;
+}
+
+/** The server's allowed durations, guaranteed to contain `value` and to be
+ * non-empty. Defends against a response that predates the field: `undefined`
+ * would render an option-less picker, which Radix styles as a placeholder and
+ * therefore greys out. */
+export function withValue(
+  allowed: number[] | undefined,
+  value: number
+): number[] {
+  const options = allowed?.length ? allowed : [value];
+  return options.includes(value)
+    ? options
+    : [...options, value].sort((a, b) => a - b);
 }
 
 /** Server values into form state. No client-side default: the endpoint always
@@ -52,6 +83,15 @@ export function toDraft(template: InterviewTemplateData): TemplateDraft {
   return {
     questionCount: String(template.question_count),
     followupsEnabled: template.followups_enabled,
+    timeLimitSeconds: template.time_limit_seconds,
+    // Union with the current value, so the trigger always has an item to match.
+    // Radix marks a trigger `data-placeholder` when the value matches no item,
+    // and that state renders muted -- a saved 15 with an empty or stale option
+    // list would look disabled while being perfectly valid.
+    allowedTimeLimits: withValue(
+      template.allowed_time_limits,
+      template.time_limit_seconds
+    ),
     opening: template.opening ?? "",
     closing: template.closing ?? "",
     fixedQuestions: template.fixed_questions,
@@ -93,12 +133,85 @@ export function templateSummary(draft: TemplateDraft): string {
   const count = draft.questionCount || "?";
   const parts = [
     `${count} question${count === "1" ? "" : "s"}`,
+    `${durationMinutes(draft.timeLimitSeconds)} min`,
     draft.followupsEnabled ? "follow-ups on" : "follow-ups off",
   ];
   if (draft.fixedQuestions.length > 0) {
     parts.push(`${draft.fixedQuestions.length} fixed`);
   }
   return parts.join(" · ");
+}
+
+/**
+ * Placeholder shaped like the editor above, for the window where the run's
+ * template is still being fetched.
+ *
+ * It reproduces the real chrome — card border, section label, divider, and the
+ * two two-column field rows — rather than showing one filled block, because a
+ * plain block at this size reads as a screen of its own and the recruiter sees
+ * it flash past before the form appears. The static parts (label text, helper
+ * copy) render for real; only the values a fetch decides are bars, so the
+ * transition is a fill-in rather than a swap.
+ *
+ * The count itself is deliberately never guessed here. A number rendered before
+ * the server answers is a number the backend may disagree with, which is the
+ * bug this component's `toDraft` comment describes.
+ */
+export function TemplateEditorSkeleton() {
+  return (
+    <div
+      className="rounded-2xl border border-border bg-card overflow-hidden"
+      aria-busy="true"
+      aria-label="Loading interview template"
+    >
+      <div className="px-5 py-4">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <Settings2 className="w-3.5 h-3.5" />
+          Interview template
+        </h2>
+        <Skeleton className="h-5 w-52 mt-1.5 rounded-md" />
+      </div>
+
+      <div className="px-5 pb-5 space-y-6 border-t border-border pt-5">
+        <p className="text-sm text-muted-foreground">
+          These settings apply to every candidate in this run. Questions
+          themselves are still written per resume.
+        </p>
+
+        <div className="grid sm:grid-cols-2 gap-5">
+          <div className="space-y-2">
+            <Label className="font-semibold">Questions per interview</Label>
+            <Skeleton className="h-9 w-full rounded-lg" />
+          </div>
+          <div className="space-y-2">
+            <Label className="font-semibold">Follow-up questions</Label>
+            <Skeleton className="h-[4.25rem] w-full rounded-xl" />
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-5">
+          <div className="space-y-2">
+            <Label className="font-semibold">Opening</Label>
+            <Skeleton className="h-[4.5rem] w-full rounded-lg" />
+          </div>
+          <div className="space-y-2">
+            <Label className="font-semibold">Closing</Label>
+            <Skeleton className="h-[4.5rem] w-full rounded-lg" />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Label className="font-semibold">Fixed questions</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Asked word-for-word to every candidate in this run.
+            </p>
+          </div>
+          <Skeleton className="h-8 w-16 rounded-lg shrink-0" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function TemplateEditor({
@@ -171,10 +284,19 @@ export function TemplateEditor({
               themselves are still written per resume.
             </p>
 
+            {/* Muted surface rather than the `info` triple: that triple is
+                built for badges, where a saturated fill on a few words reads
+                right. Across a full-width panel it becomes a slab that outweighs
+                the settings it sits above, and this is a passive statement of
+                scope, not an alert. The icon carries the "informational" cue. */}
             {interviewCount > 0 && (
-              <div className="bg-info border border-info-edge text-info-foreground text-xs px-3 py-2 rounded-lg">
-                {interviewCount} interview{interviewCount === 1 ? "" : "s"}{" "}
-                already use this template. Changes apply to new interviews only.
+              <div className="bg-muted/50 border border-border text-muted-foreground text-xs px-3 py-2 rounded-lg flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  {interviewCount} interview{interviewCount === 1 ? "" : "s"}{" "}
+                  already use this template. Changes apply to new interviews
+                  only.
+                </span>
               </div>
             )}
 
@@ -199,23 +321,55 @@ export function TemplateEditor({
               </div>
 
               <div className="space-y-2">
-                <Label className="font-semibold">Follow-up questions</Label>
-                <label className="flex items-start gap-3 rounded-xl border border-border p-3 cursor-pointer">
-                  <Checkbox
-                    checked={draft.followupsEnabled}
-                    disabled={disabled}
-                    onCheckedChange={(v) => set("followupsEnabled", v === true)}
-                    className="mt-0.5 cursor-pointer"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium">Ask one follow-up</span>
-                    <span className="block text-xs text-muted-foreground mt-0.5">
-                      When an answer is thin, the interviewer probes once before
-                      moving on.
-                    </span>
-                  </span>
-                </label>
+                <Label htmlFor="time-limit" className="font-semibold">
+                  Interview length
+                </Label>
+                {/* Presets, not a number field: the durations are coarse, and
+                    an open range invites both 3 minutes (too short to answer
+                    anything) and 90 (an unbounded transcription bill). */}
+                <Select
+                  value={String(draft.timeLimitSeconds)}
+                  disabled={disabled}
+                  onValueChange={(v) => set("timeLimitSeconds", Number(v))}
+                >
+                  <SelectTrigger id="time-limit" className="cursor-pointer w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {draft.allowedTimeLimits.map((seconds) => (
+                      <SelectItem
+                        key={seconds}
+                        value={String(seconds)}
+                        className="cursor-pointer"
+                      >
+                        {formatDuration(seconds)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The interview closes at this point, wherever it has reached.
+                </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-semibold">Follow-up questions</Label>
+              <label className="flex items-start gap-3 rounded-xl border border-border p-3 cursor-pointer">
+                <Checkbox
+                  checked={draft.followupsEnabled}
+                  disabled={disabled}
+                  onCheckedChange={(v) => set("followupsEnabled", v === true)}
+                  className="mt-0.5 cursor-pointer"
+                />
+                <span className="text-sm">
+                  <span className="font-medium">Ask one follow-up</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    When an answer is thin, the interviewer probes once before
+                    moving on.
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* Deliberately NOT prefilled from the generated draft: that text

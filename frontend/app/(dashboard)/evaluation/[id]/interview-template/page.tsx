@@ -7,9 +7,9 @@ import { use, useEffect, useState } from "react";
 import {
   toDraft,
   TemplateEditor,
+  TemplateEditorSkeleton,
   type TemplateDraft,
 } from "@/components/interview/template-editor";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { InterviewTemplateData } from "@/lib/interview-types";
 import {
   getEvaluationRun,
@@ -71,6 +71,7 @@ export default function InterviewTemplatePage({
       const saved = await saveInterviewTemplate(runId, {
         question_count: Number(template.questionCount),
         followups_enabled: template.followupsEnabled,
+        time_limit_seconds: template.timeLimitSeconds,
         opening: template.opening.trim() || null,
         closing: template.closing.trim() || null,
         fixed_questions: template.fixedQuestions,
@@ -128,7 +129,7 @@ export default function InterviewTemplatePage({
             onSave={handleSave}
           />
         ) : (
-          <Skeleton className="h-20 w-full rounded-2xl" />
+          <TemplateEditorSkeleton />
         )}
 
         {savedAt !== null && (

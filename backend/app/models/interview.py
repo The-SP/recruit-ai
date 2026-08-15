@@ -7,6 +7,7 @@ from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
 from app.models.base import Base
 
 if TYPE_CHECKING:
@@ -114,6 +115,14 @@ class Interview(Base):
     # answer_mode and voice_mode are: editing the template must never change
     # how an interview already in flight behaves.
     followups_enabled: Mapped[bool] = mapped_column(server_default=true())
+
+    # Wall clock for this interview, snapshotted from the template at approval
+    # for the same reason. The engine and state.py read this, not the module
+    # constant -- which remains the server_default, so rows drafted before the
+    # setting existed keep the behaviour they were created under.
+    time_limit_seconds: Mapped[int] = mapped_column(
+        server_default=str(INTERVIEW_TIME_LIMIT_SECONDS)
+    )
 
     # Progress state. Invariant: only ever updated in the same commit that
     # inserts the corresponding turn row (see InterviewRepository).

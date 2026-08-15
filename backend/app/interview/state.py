@@ -7,19 +7,26 @@ model factory). Nothing here does I/O or touches the turn loop.
 
 from datetime import datetime
 
-from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
 from app.models.interview import Interview, InterviewStatus
 
 
 def time_remaining_seconds(interview: Interview) -> int | None:
+    """Seconds left, from the interview's own snapshotted limit.
+
+    Reads interview.time_limit_seconds rather than the module constant so a
+    template's choice actually reaches the countdown -- and so an interview
+    already in flight keeps the limit it was approved under even if the
+    template changes underneath it.
+    """
+    limit = interview.time_limit_seconds
     if interview.status == InterviewStatus.CREATED.value:
-        return INTERVIEW_TIME_LIMIT_SECONDS
+        return limit
     if (
         interview.status == InterviewStatus.IN_PROGRESS.value
         and interview.started_at is not None
     ):
         elapsed = (datetime.now() - interview.started_at).total_seconds()
-        return max(0, INTERVIEW_TIME_LIMIT_SECONDS - int(elapsed))
+        return max(0, limit - int(elapsed))
     return None
 
 

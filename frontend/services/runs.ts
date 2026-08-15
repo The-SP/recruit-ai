@@ -202,11 +202,31 @@ export async function updateRunCandidateInterviewDraft(
     opening: string;
     questions: InterviewQuestionData[];
     closing: string;
+    followups_enabled: boolean;
+    time_limit_seconds: number;
   }
 ): Promise<InterviewDetail> {
   return apiRequest<InterviewDetail>(
     `/evaluations/runs/${runId}/candidate/${candidateId}/interview/draft`,
     { method: "PATCH", body: script }
+  );
+}
+
+/**
+ * Ask the model for one more question for a draft under review.
+ *
+ * Takes the questions currently on screen so the model can avoid repeating
+ * them, and returns the new question without saving it — it is persisted by
+ * the next draft PATCH, along with whatever else the recruiter has edited.
+ */
+export async function draftRunCandidateInterviewQuestion(
+  runId: string,
+  candidateId: string,
+  questions: InterviewQuestionData[]
+): Promise<InterviewQuestionData> {
+  return apiRequest<InterviewQuestionData>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/question`,
+    { method: "POST", body: { questions } }
   );
 }
 
@@ -238,6 +258,7 @@ export async function saveInterviewTemplate(
   template: {
     question_count: number;
     followups_enabled: boolean;
+    time_limit_seconds: number;
     opening: string | null;
     closing: string | null;
     fixed_questions: FixedQuestionData[];

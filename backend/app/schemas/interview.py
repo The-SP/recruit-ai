@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
+
 # ---------------------------------------------------------------------------
 # Question generation
 # ---------------------------------------------------------------------------
@@ -60,6 +62,10 @@ class TemplateSettings(BaseModel):
 
     question_count: int
     followups_enabled: bool = True
+    # Not used by generation -- the opening deliberately states no duration --
+    # but carried here so the service has one settings object to snapshot onto
+    # the interview at approval.
+    time_limit_seconds: int = INTERVIEW_TIME_LIMIT_SECONDS
     opening: str | None = None
     closing: str | None = None
     fixed_questions: list[FixedQuestion] = Field(default_factory=list)

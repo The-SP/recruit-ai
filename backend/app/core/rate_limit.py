@@ -98,6 +98,16 @@ def interview_invite_cost() -> int:
     return cost
 
 
+def interview_one_question_cost() -> int:
+    """Units to write one more question into a draft under review.
+
+    A single generation call with no retry (the caller takes the first usable
+    question rather than regenerating) and no TTS -- synthesis still happens
+    once at approval, where this question is priced as part of the script.
+    """
+    return 1
+
+
 def _global_key() -> str:
     """Today's bucket, keyed by UTC calendar day.
 

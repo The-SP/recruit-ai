@@ -17,7 +17,6 @@ from app.api.exceptions import ConflictError, ValidationError
 from app.config import Config
 from app.core.logger import init_logger
 from app.core.model_factory import build_model
-from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
 from app.interview.state import question_number, time_remaining_seconds
 from app.models.interview import (
     Interview,
@@ -223,10 +222,13 @@ def submit_answer(
         "content": content,
     }
 
+    # The interview's own snapshot, not the module constant: the limit is a
+    # per-template setting, and an interview in flight keeps what it was
+    # approved under.
     time_up = (
         interview.started_at is not None
         and datetime.now()
-        > interview.started_at + timedelta(seconds=INTERVIEW_TIME_LIMIT_SECONDS)
+        > interview.started_at + timedelta(seconds=interview.time_limit_seconds)
     )
 
     completed = False

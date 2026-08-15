@@ -14,7 +14,7 @@ from langchain.agents.structured_output import ToolStrategy
 from app.config import Config
 from app.core.logger import init_logger
 from app.core.model_factory import build_model
-from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS, MAX_GAP_PROBES
+from app.interview.constants import MAX_GAP_PROBES
 from app.interview.prompting import json_block
 from app.models.candidate import Candidate
 from app.models.evaluation import CandidateEvaluation
@@ -85,14 +85,123 @@ Rules for every question:
 
 Also write:
 - `opening`: a two-sentence greeting that names the role and sets expectations
-  ({total_question_count} questions, roughly {time_limit_minutes} minutes,
-  answers {answer_medium}). Do not ask a question in the opening.
+  ({total_question_count} questions, answers {answer_medium}). Do not state a
+  duration or any number of minutes -- the candidate already saw the length on
+  the consent screen and watches a live timer, and this text is frozen into the
+  script while the limit is not. Do not ask a question in the opening.
 - `closing`: two sentences thanking the candidate and saying the team will
   review and follow up. Do not promise a decision or a timeline.
 
 For each question set `subject` to the specific JD requirement or resume claim
 being probed. It is read only by the recruiter and the assessor, never shown
 to the candidate."""
+
+
+ONE_MORE_QUESTION_PROMPT = """Write ONE more interview question for this
+candidate and role, to be added to an interview that already exists.
+
+## The role
+
+Title: {job_title}
+Company: {company_name}
+
+Summary:
+{job_summary}
+
+Structured requirements:
+{requirements}
+
+## The candidate's resume
+
+{resume_markdown}
+
+## Automated resume screen (secondary — use sparingly)
+
+Summary: {evaluation_summary}
+Critical gaps: {critical_gaps}
+Weak or missing skills: {weak_skills}
+
+## Already being asked — do not repeat or rephrase any of these
+
+{existing_questions}
+
+## What to produce
+
+Exactly ONE question, in the `questions` list. It must cover new ground: a
+different project, requirement, or competency than everything listed above.
+Prefer EXPERIENCE_DEPTH or ROLE_COMPETENCY. Only use GAP_PROBE if the screen
+flagged something material that no existing question touches.
+
+Rules:
+- Answerable out loud in 1-3 minutes. This is a conversation, not a take-home.
+- No leetcode-style puzzles, no trivia, no riddles.
+- Never ask about age, gender, race, religion, nationality, disability,
+  marital or family status, pregnancy, or any other protected characteristic.
+- Reference the candidate's actual claims specifically.
+- Do not number the question in its text.
+- Set `subject` to the specific JD requirement or resume claim being probed.
+
+Return the existing opening and closing unchanged in `opening` and `closing`;
+only the single new question is used."""
+
+
+def _grounding_fields(grounding: dict[str, Any]) -> dict[str, str]:
+    """The grounding snapshot as prompt substitutions, with its fallbacks.
+
+    Shared by both prompts because build_grounding is the single producer of
+    these keys: adding a field there should mean editing one unpacking site,
+    not two that have to agree.
+    """
+    return {
+        "job_title": grounding.get("job_title") or "Not specified",
+        "company_name": grounding.get("company_name") or "Not specified",
+        "job_summary": grounding.get("job_summary") or "Not provided",
+        "requirements": json_block(grounding.get("requirements")),
+        "resume_markdown": grounding.get("resume_markdown") or "Not available",
+        "evaluation_summary": grounding.get("evaluation_summary") or "Not available",
+        "critical_gaps": ", ".join(grounding.get("critical_gaps") or []) or "None",
+        "weak_skills": ", ".join(grounding.get("weak_skills") or []) or "None",
+    }
+
+
+def generate_one_question(
+    grounding: dict[str, Any], existing: list[InterviewQuestion]
+) -> InterviewQuestion:
+    """Write one additional question for a draft the recruiter is reviewing.
+
+    Separate from generate_script because the job is different: the script call
+    designs a balanced set against a target count, while this one fills a
+    single slot in a set that already exists. Passing the current questions in
+    is what stops it rewording one of them -- the model cannot avoid a
+    duplicate it was never shown.
+
+    Returns the question with a placeholder id; the caller renumbers, as
+    every other path into question_script does.
+    """
+    existing_block = (
+        "\n".join(f"- {q.text} (tests: {q.subject})" for q in existing)
+        or "Nothing yet."
+    )
+
+    prompt = ONE_MORE_QUESTION_PROMPT.format(
+        **_grounding_fields(grounding),
+        existing_questions=existing_block,
+    )
+
+    script = _invoke(prompt)
+
+    if not script.questions:
+        raise ValueError("The model returned no question.")
+
+    # Take the first and ignore any extras rather than rejecting: one usable
+    # question is the whole request, and a retry would cost a second call to
+    # fix a surplus the recruiter would never see.
+    question = script.questions[0]
+
+    if not question.text.strip():
+        raise ValueError("The model returned an empty question.")
+
+    return question
 
 
 def _extract_scorer_signals(
@@ -223,14 +332,18 @@ def _default_opening(template: TemplateSettings, mode: InterviewMode) -> str:
     Only reached when fixed questions fill the interview, so there is no model
     call to write one. Mirrors what GENERATION_PROMPT asks for: names the
     shape, sets expectations, asks nothing.
+
+    States no duration, for the same reason the prompt doesn't: this text is
+    frozen into question_script, so a number here would outlive any change to
+    the limit. The candidate gets the length from the consent screen and the
+    live countdown, both served from server state.
     """
     medium = "spoken aloud" if mode is InterviewMode.AUDIO else "typed"
-    minutes = INTERVIEW_TIME_LIMIT_SECONDS // 60
     return (
         f"Thanks for making the time. This is a short screening interview: "
         f"{template.question_count} question"
-        f"{'s' if template.question_count != 1 else ''}, roughly {minutes} "
-        f"minutes, and your answers are {medium}."
+        f"{'s' if template.question_count != 1 else ''}, "
+        f"and your answers are {medium}."
     )
 
 
@@ -271,20 +384,12 @@ def generate_script(
         logger.info("Skipped generation: fixed questions fill the interview")
     else:
         prompt = GENERATION_PROMPT.format(
+            **_grounding_fields(grounding),
             answer_medium=answer_medium,
-            job_title=grounding.get("job_title") or "Not specified",
-            company_name=grounding.get("company_name") or "Not specified",
-            job_summary=grounding.get("job_summary") or "Not provided",
-            requirements=json_block(grounding.get("requirements")),
-            resume_markdown=grounding.get("resume_markdown") or "Not available",
-            evaluation_summary=grounding.get("evaluation_summary") or "Not available",
-            critical_gaps=", ".join(grounding.get("critical_gaps") or []) or "None",
-            weak_skills=", ".join(grounding.get("weak_skills") or []) or "None",
             question_count=generated_count,
             total_question_count=template.question_count,
             fixed_questions_block=_fixed_questions_block(template),
             max_gap_probes=MAX_GAP_PROBES,
-            time_limit_minutes=INTERVIEW_TIME_LIMIT_SECONDS // 60,
         )
 
         script = _invoke(prompt)

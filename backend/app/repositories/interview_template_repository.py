@@ -26,6 +26,7 @@ class InterviewTemplateRepository:
         run_id: UUID,
         question_count: int,
         followups_enabled: bool,
+        time_limit_seconds: int,
         opening: str | None,
         closing: str | None,
         fixed_questions: list[dict[str, Any]],
@@ -45,6 +46,7 @@ class InterviewTemplateRepository:
 
         template.question_count = question_count
         template.followups_enabled = followups_enabled
+        template.time_limit_seconds = time_limit_seconds
         template.opening = opening
         template.closing = closing
         template.fixed_questions = fixed_questions
