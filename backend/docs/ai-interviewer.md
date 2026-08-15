@@ -1,39 +1,106 @@
 # AI Interviewer
 
-An AI-run interview a recruiter attaches to a scored candidate. The candidate
-takes it through an unguessable invite link, no account required; the
-recruiter reviews a transcript and an AI assessment afterward. Text and voice
-are both supported, configured per deployment.
+An AI-run interview a recruiter attaches to a scored candidate. Questions are
+generated from the resume and the job description, **reviewed and approved by
+a human**, and only then does the candidate get an unguessable invite link, no
+account required; the recruiter reads a transcript and an AI assessment
+afterward. Text and voice are both supported, configured per deployment.
 
 ## Lifecycle
 
-A recruiter creates an invite from an existing evaluation run
+A recruiter creates an interview from an existing evaluation run
 (`interview/service.py`) — this requires login; the anonymous batch flow
 cannot create interviews (see below). The interview snapshots its question
-script, answer mode, and voice mode at creation time and never rereads config
-afterward.
+script, answer mode, voice mode, follow-up setting, and time limit, and never
+rereads config afterward.
 
-States: `created` → `in_progress` → `completed` → `assessed`, with `expired`
-if the invite sits unopened past its TTL. The candidate opens the link at
-`/interview?token=` (frontend) against `api/routes/interview.py` (backend),
-answers each question in turn, and on completion the transcript is handed to
-`interview/assessor.py` for a post-interview assessment the recruiter reads
-alongside the candidate's score.
+States: `draft` → `created` → `in_progress` → `completed` → `assessed`, with
+`expired` if the invite sits unopened past its TTL. The candidate opens the
+link at `/interview?token=` (frontend) against `api/routes/interview.py`
+(backend), answers each question in turn, and on completion the transcript is
+handed to `interview/assessor.py` for a post-interview assessment the
+recruiter reads alongside the candidate's score.
 
+- **A human approves every interview before a candidate can reach it.**
+  Generation produces a `draft`, and approval is what mints the invite. See
+  [The review gate](#the-review-gate).
 - **Expiry is lazy** — nothing runs on a timer; a request just notices the
   invite is overdue and writes `expired` at that point, both for a single
-  interview and in bulk for a run.
+  interview and in bulk for a run. `draft` is deliberately absent from
+  `OVERDUE_STATUSES`: expiry bounds an invite, and a draft has none.
 - **Re-assessment is a manual fallback.** If auto-assessment never ran or
   failed, a recruiter can trigger it again from `completed` or an
   `expired`-with-answers interview; it's safe to call repeatedly since it
   no-ops once the interview is already `assessed`.
 - **Creation is idempotent** — there's one interview per evaluation, and
-  creating again just returns the existing row. A race between two
-  concurrent creates is resolved by recovering from the resulting
-  `IntegrityError`, not by locking.
+  creating again just returns the existing draft untouched, without
+  regenerating. A race between two concurrent creates is resolved by
+  recovering from the resulting `IntegrityError`, not by locking.
 - **Reissue is restricted.** A recruiter can reissue an invite from
   `created`, or from `expired` if the candidate never answered anything — a
-  reissue never wipes an existing transcript.
+  reissue never wipes an existing transcript. Reissuing a `draft` is rejected:
+  there is no invite to rotate until it is approved.
+
+## The review gate
+
+Generated questions used to go straight onto a live invite link with no human
+having read them, leaving the protected-characteristics rule in
+`GENERATION_PROMPT` as the model policing itself. Creation is now split into
+**draft → review → approve**.
+
+- A draft has **no `access_token` at all** (the column is nullable). That is
+  the gate: with no token there is nothing for `get_by_token` to match, so a
+  draft is unreachable by a candidate without any route having to exclude it.
+  `_token_match` returns SQL `false` for a `None` token rather than compiling
+  to `IS NULL`, which would otherwise match every draft in the table.
+- `POST .../interview` generates and returns a draft — `invite_url` and
+  `access_token` are null in the response, which is the API-level expression
+  of the gate.
+- `PATCH .../interview/draft` saves the recruiter's edited opening, questions,
+  and closing, plus `followups_enabled` and `time_limit_seconds`. Question ids
+  are renumbered server-side so deletions can't leave gaps. Those two settings
+  are editable here — and the question count and fixed questions are not —
+  because generation already consumed the latter, while the former are read by
+  the engine at run time and so can still change without contradicting the
+  script on screen. They write to the interview row, never back to the
+  template, so approval still hands over exactly the draft that was reviewed.
+- `POST .../interview/approve` mints the token, sets the expiry, stamps
+  `approved_at`, and **only then** dispatches voice synthesis — previously
+  scripts were synthesized at creation, paying for audio of text the recruiter
+  might still rewrite.
+- `POST .../interview/question` writes **one** additional question grounded in
+  the resume, given the questions currently on the recruiter's screen so the
+  model can avoid repeating them. It returns the question **without saving
+  it**: the draft may hold unsaved edits, so it is persisted by the next
+  PATCH like a hand-written one. This is the only endpoint in the review step
+  that calls a model, and the only one that charges budget after creation.
+
+Approved is final: the script is frozen once a link exists, so the editor is
+replaced by the invite link and there is nothing left to review.
+
+## The interview template
+
+A per-run template (`models/interview_template.py`, keyed on
+`evaluation_run_id`) fixes the structural decisions once instead of per
+candidate: question count, follow-ups on/off, interview length, opening and
+closing copy, and fixed questions asked verbatim of every candidate.
+
+- **Editable at any time, including while interviews from it are live.**
+  Fairness comes from the per-interview snapshot, not from locking the
+  template: each interview captures what it needs, so an edit only ever
+  reaches interviews drafted afterward. What a template equalizes is
+  structure, not wording — the questions were always generated per resume.
+- **`GET /{run_id}/interview-template` always returns a body, never 404.**
+  When nothing is saved it returns the defaults generation *would* use, with
+  `is_saved: false`, so the client never has to invent a question count the
+  server would disagree with. It also carries `allowed_time_limits` so the
+  duration picker can't offer a value the service would reject.
+- **Fixed questions count toward the total**, because one costs the same TTS,
+  transcription, and assessment entry as a generated one. A template whose
+  fixed questions fill the interview skips the model entirely — a fully
+  hand-written interview is a legitimate, free mode.
+- `opening`/`closing` are nullable; NULL means "let the model write it", which
+  keeps the template skippable.
 
 ## The engine and the voice seam
 
@@ -46,8 +113,10 @@ substrate; voice is layered on both sides without touching the engine:
 - **Questions**: `speaker.py` synthesizes speech for what the engine already
   wrote; the engine never knows whether anyone is listening.
 
-- Each interview snapshots `answer_mode` and `voice_mode` at creation, so a
-  config change never silently alters an interview already in flight.
+- Each interview snapshots `answer_mode`, `voice_mode`, `followups_enabled`,
+  and `time_limit_seconds`, so neither a config change nor a template edit
+  ever silently alters an interview already in flight. The engine and
+  `state.py` read the row, never the module constant.
 - Answering a question holds a row lock across the whole reaction — including
   the follow-up decision, a separate structured LLM call — so the turn
   commits atomically. A client that submits against a stale `after_seq` gets
@@ -61,18 +130,32 @@ substrate; voice is layered on both sides without touching the engine:
 
 ## Question flow
 
-`question_generator.py` produces a frozen `question_script` (opening, a
-configurable number of core questions, closing) at creation time, grounded in
-the job description and the candidate's resume — probing claimed experience
-and role competencies, not just scorer-flagged gaps. Beyond the script, the
-engine allows:
+`question_generator.py` produces a `question_script` (opening, core questions,
+closing) at draft time, grounded in the job description and the candidate's
+resume — probing claimed experience and role competencies, not just
+scorer-flagged gaps. The script is editable until approval and frozen after
+it. Beyond the script, the engine allows:
 
-- At most one adaptive follow-up per core question.
+- At most one adaptive follow-up per core question, and only when the
+  interview's `followups_enabled` snapshot permits them at all.
 - Up to two questions probing scorer-flagged gaps.
 
-Both caps, along with the interview's wall-clock time limit and invite TTL,
-are constants in `interview/constants.py`, not env vars — deliberately, so
-they can't be tuned per deployment.
+All core questions come from **one** LLM call, not one call per question; a
+second call happens only when the first output fails count or gap-probe
+validation. Fixed questions reduce what the model is asked for and are
+appended after the generated ones, so a template that fills the interview
+costs nothing.
+
+**The opening deliberately states no duration.** It is frozen into
+`question_script` while the time limit is not, so a number there would outlive
+any change to the limit. The candidate learns the length from the consent
+screen and the live countdown, both served from server state.
+
+`MAX_FOLLOWUPS_PER_QUESTION`, `MAX_GAP_PROBES`, `MIN`/`MAX_QUESTIONS_PER_INTERVIEW`,
+`ALLOWED_TIME_LIMIT_SECONDS`, and the invite TTL are constants in
+`interview/constants.py`, not env vars — deliberately, so they can't be tuned
+per deployment. They are product bounds; what a recruiter picks *within* them
+lives on the template.
 
 ## SSE protocol
 
@@ -160,6 +243,11 @@ same `interview/service.py` the candidate routes use, gated by JWT and by
 run ownership (not by any notion of `user_id` inside the interview code
 itself). From there a recruiter can:
 
+- Set the run's template, from the review flow's first step or standalone at
+  `/evaluation/[id]/interview-template`.
+- Review a draft: read every question, edit its wording, delete one, write a
+  new one, or ask the model for one more — then approve, which is what mints
+  the link.
 - Read the transcript and assessment.
 - Replay a candidate's recorded answers and interviewer TTS clips
   (synthesizing on demand if a clip hasn't been requested yet).
@@ -188,10 +276,18 @@ and the recruiter UI shows a retry button rather than leaving the run stuck.
 | --- | --- | --- |
 | `INTERVIEW_MODE` | `text` or `audio` answers | `text` locally (no mic needed), `audio` in production |
 | `INTERVIEW_VOICE` | `on`/`off` — whether questions are spoken. Defaults to `off` even when `INTERVIEW_MODE=audio`; an unrecognized value for either setting degrades silently to the safe default rather than failing invite creation | `off` locally, `on` in production |
-| `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` | How many core questions are generated | Code default `1`/`0` for fast local test interviews, full 5-6 in production |
+| `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` | The **default** question count for a run with no saved template, and the tolerance its generated output is validated against. A template overrides the count, bounded by `MIN`/`MAX_QUESTIONS_PER_INTERVIEW` | Code default `1`/`0` for fast local test interviews, full 5-6 in production |
 | `INTERVIEW_MODEL_NAME` | Model used for question generation, the turn engine, transcription, and assessment (there's no separate STT model setting) | — |
 | `INTERVIEW_TTS_MODEL_NAME` | Model used for speech synthesis | — |
 | `INTERVIEW_GOOGLE_API_KEY` | API key(s) for interview LLM calls | — |
+
+**Interview length is not an env var.** It is a per-run template setting
+chosen from `ALLOWED_TIME_LIMIT_SECONDS` (10/15/20/30 minutes), defaulting to
+`INTERVIEW_TIME_LIMIT_SECONDS`. A fixed set rather than a free number, because
+the durations are coarse and an open range invites both 3 minutes (too short
+to answer anything) and 90 (an unbounded transcription and assessment bill).
+The same reasoning caps questions at 8: minutes of candidate talk are minutes
+of speech-to-text.
 
 A deploy renders config from SSM Parameter Store, not from the repo — a new
 or changed variable must be seeded with `make seed-ssm` or production keeps
