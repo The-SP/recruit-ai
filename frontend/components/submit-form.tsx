@@ -21,6 +21,8 @@ import { submitBatch } from '@/services/batch';
 
 export function SubmitForm() {
   const router = useRouter();
+  const [jobTitle, setJobTitle] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [email, setEmail] = useState("");
@@ -62,7 +64,13 @@ export function SubmitForm() {
     setIsSubmitting(true);
 
     try {
-      const data = await submitBatch(jobDescription, email, files);
+      const data = await submitBatch(
+        jobTitle.trim(),
+        companyName.trim(),
+        jobDescription,
+        email,
+        files
+      );
       router.push(`/evaluation?token=${data.token}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong");
@@ -112,6 +120,34 @@ export function SubmitForm() {
         )}
 
         <div className="space-y-10">
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-4">
+              <Label htmlFor="job-title" className="text-sm font-bold text-foreground ml-1">
+                Job Title <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="job-title"
+                placeholder="e.g. Senior Software Engineer"
+                required
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                className="h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
+              />
+            </div>
+            <div className="space-y-4">
+              <Label htmlFor="company-name" className="text-sm font-bold text-foreground ml-1">
+                Company Name
+              </Label>
+              <Input
+                id="company-name"
+                placeholder="e.g. Acme Inc."
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
+              />
+            </div>
+          </div>
+
           <div className="space-y-4">
             <Label htmlFor="job-description" className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
               <Briefcase className="w-4 h-4 text-primary" />

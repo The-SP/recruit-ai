@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { ApiError } from "@/services/api";
@@ -17,6 +18,8 @@ type Step = 1 | 2;
 export default function NewEvaluationPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
+  const [jobTitle, setJobTitle] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [jobText, setJobText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +27,10 @@ export default function NewEvaluationPage() {
   const [submitting, setSubmitting] = useState(false);
 
   function handleNextStep() {
+    if (!jobTitle.trim()) {
+      setError("Please enter a job title.");
+      return;
+    }
     if (!jobText.trim()) {
       setError("Please paste a job description.");
       return;
@@ -40,7 +47,12 @@ export default function NewEvaluationPage() {
     setFileError(null);
     setSubmitting(true);
     try {
-      const run = await createEvaluationRun(jobText, files);
+      const run = await createEvaluationRun(
+        jobTitle.trim(),
+        companyName.trim(),
+        jobText,
+        files
+      );
       router.push(`/evaluation/${run.id}`);
     } catch (err) {
       setSubmitting(false);
@@ -51,13 +63,6 @@ export default function NewEvaluationPage() {
       }
     }
   }
-
-  // Parsed title for display in step 2 (best-effort: first line of JD)
-  const displayTitle =
-    jobText
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l.length > 0 && l.length < 100) ?? "this role";
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -85,6 +90,35 @@ export default function NewEvaluationPage() {
 
       {step === 1 && (
         <Card className="p-6 space-y-5">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="job-title" className="font-semibold">
+                Job Title <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="job-title"
+                placeholder="e.g. Senior Software Engineer"
+                required
+                value={jobTitle}
+                onChange={(e) => {
+                  setJobTitle(e.target.value);
+                  if (error) setError(null);
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="company-name" className="font-semibold">
+                Company Name
+              </Label>
+              <Input
+                id="company-name"
+                placeholder="e.g. Acme Inc."
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="job-text" className="font-semibold">
               Job Description <span className="text-destructive">*</span>
@@ -120,7 +154,10 @@ export default function NewEvaluationPage() {
               <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide">
                 Evaluating for
               </p>
-              <p className="text-sm font-medium mt-0.5 line-clamp-2">{displayTitle}</p>
+              <p className="text-sm font-medium mt-0.5 line-clamp-2">
+                {jobTitle.trim()}
+                {companyName.trim() && ` at ${companyName.trim()}`}
+              </p>
             </div>
             <Button
               variant="ghost"

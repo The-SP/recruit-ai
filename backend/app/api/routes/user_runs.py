@@ -28,6 +28,7 @@ from app.api.schemas.interview import (
 from app.api.schemas.public import (
     AddCandidatesResponse,
     CandidateBreakdownResponse,
+    JobDescriptionResponse,
     RetryFailedResponse,
 )
 from app.api.schemas.runs import (
@@ -121,6 +122,8 @@ def _build_run_summary(run: object) -> EvaluationRunSummary:
 @runs_router.post("", response_model=EvaluationRunSummary, status_code=201)
 async def create_evaluation_run(
     job_text: str = Form(...),
+    job_title: str = Form(...),
+    company_name: str | None = Form(None),
     files: list[UploadFile] = [],
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -134,6 +137,15 @@ async def create_evaluation_run(
     if not files:
         raise ValidationError("At least one PDF file is required")
 
+    job_title = job_title.strip()
+    company_name = company_name.strip() if company_name else None
+    if not job_title:
+        raise ValidationError("Job title is required")
+    if len(job_title) > 255:
+        raise ValidationError("Job title must be 255 characters or fewer")
+    if company_name and len(company_name) > 255:
+        raise ValidationError("Company name must be 255 characters or fewer")
+
     # Signed-in runs have no resume cap (that is the point of an account), so
     # the hourly unit budget is the only thing bounding this endpoint. Charged
     # before the JD parse, which is itself a model call.
@@ -146,7 +158,13 @@ async def create_evaluation_run(
         )
 
     job_repo = JobRepository(db)
-    job = job_repo.create(jd, job_text, user_id=current_user.id)
+    job = job_repo.create(
+        jd,
+        job_text,
+        user_id=current_user.id,
+        job_title=job_title,
+        company_name=company_name,
+    )
 
     run_repo = EvaluationRunRepository(db)
     run = run_repo.create_for_user(job.id, user_id=current_user.id)
@@ -270,6 +288,26 @@ def get_evaluation_run(
 
     summary = _build_run_summary(run)
     return EvaluationRunDetail(**summary.model_dump(), items=items)
+
+
+@runs_router.get("/{run_id}/job-description", response_model=JobDescriptionResponse)
+def get_evaluation_job_description(
+    run_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> JobDescriptionResponse:
+    """Return the original job description for an owned evaluation run."""
+    run = EvaluationRunRepository(db).get_by_id_for_user(
+        run_id, current_user.id, with_job=True
+    )
+    if not run or not run.job:
+        raise NotFoundError("Evaluation run", str(run_id))
+
+    return JobDescriptionResponse(
+        title=run.job.title,
+        company_name=run.job.company_name,
+        raw_text=run.job.raw_text,
+    )
 
 
 @runs_router.post("/{run_id}/add-candidates", response_model=AddCandidatesResponse)

@@ -3,6 +3,8 @@
 import {
   ArrowLeft,
   Download,
+  Ellipsis,
+  Link2,
   Loader2,
   MessageSquareText,
   Plus,
@@ -23,6 +25,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { CompareBar } from "@/components/evaluation/compare-bar";
 import { FilterControls } from "@/components/evaluation/filter-controls";
 import { InterviewStatsStrip } from "@/components/evaluation/interview-stats-strip";
+import { JobDescriptionSheet } from "@/components/evaluation/job-description-sheet";
 import {
   InterviewTable,
   firstSortDir,
@@ -38,6 +41,13 @@ import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   candidateDeleteDescription,
@@ -55,6 +65,7 @@ import {
   deleteEvaluationRun,
   deleteRunItem,
   getEvaluationRun,
+  getEvaluationJobDescription,
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   reissueRunCandidateInterview,
@@ -169,6 +180,10 @@ function RunDetailPageInner({
   const [deleteRunOpen, setDeleteRunOpen] = useState(false);
   const [pendingDeleteItem, setPendingDeleteItem] =
     useState<RunItemSummary | null>(null);
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+  const [jobDescription, setJobDescription] = useState<string | null>(null);
+  const [descriptionLoading, setDescriptionLoading] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keys already fetched or in flight. Kept in a ref so the ensure* callbacks
@@ -352,6 +367,23 @@ function RunDetailPageInner({
       setResumePanel({ name: item.candidate_name ?? null, filename: item.filename, markdown: bd.resume_markdown ?? "" });
     } catch {
       setBreakdownCache(prev => ({ ...prev, [item.item_id]: "error" }));
+    }
+  };
+
+  const handleOpenDescription = async () => {
+    setIsDescriptionOpen(true);
+    if (jobDescription) return;
+    setDescriptionLoading(true);
+    setDescriptionError(null);
+    try {
+      const description = await getEvaluationJobDescription(runId);
+      setJobDescription(description.raw_text);
+    } catch (err) {
+      setDescriptionError(
+        err instanceof ApiError ? err.message : "Failed to load job description."
+      );
+    } finally {
+      setDescriptionLoading(false);
     }
   };
 
@@ -708,72 +740,72 @@ function RunDetailPageInner({
               <ArrowLeft className="w-3.5 h-3.5" />
               Dashboard
             </Link>
-            <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight">
-              {jobTitle}
-            </h1>
-            {data.company_name && data.company_name !== "null" && (
-              <p className="text-sm text-muted-foreground">{data.company_name}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1">Status</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight">
+                {jobTitle}
+              </h1>
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 rounded-lg">
                 {isActive ? "Processing" : "Completed"}
               </Badge>
             </div>
-            {!isActive && failedCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRetryAll}
-                disabled={retryingAll}
-                className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
-                title="Re-queue all failed candidates for evaluation"
-              >
-                {retryingAll ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RotateCcw className="w-4 h-4" />
-                )}
-                Retry Failed ({failedCount})
-              </Button>
+            {data.company_name && data.company_name !== "null" && (
+              <p className="text-sm text-muted-foreground">{data.company_name}</p>
             )}
-            {!isActive && data.items.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportCsv}
-                className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                Export CSV
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => fetchData(true)}
-              disabled={refreshing}
-              className="w-10 h-10 border-border text-muted-foreground hover:bg-muted transition-all active:rotate-180 duration-500 cursor-pointer"
+            <button
+              type="button"
+              onClick={handleOpenDescription}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-primary cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-            </Button>
-            {/* Hidden while the run is in flight: the backend refuses to delete
-                a pending or processing run, so offering it would only 400. */}
-            {!isActive && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setDeleteRunOpen(true)}
-                title="Delete this evaluation run"
-                aria-label="Delete this evaluation run"
-                className="w-10 h-10 border-border text-muted-foreground hover:bg-error hover:text-error-foreground hover:border-error-edge cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
+              <Link2 className="w-4 h-4" />
+              View Job Description
+            </button>
+          </div>
+
+          <div className="flex items-center self-start md:self-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Evaluation actions"
+                  className="w-10 h-10 border-border text-muted-foreground hover:bg-muted cursor-pointer"
+                >
+                  <Ellipsis className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {!isActive && failedCount > 0 && (
+                  <DropdownMenuItem onSelect={handleRetryAll} disabled={retryingAll}>
+                    {retryingAll ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                    Retry Failed ({failedCount})
+                  </DropdownMenuItem>
+                )}
+                {!isActive && data.items.length > 0 && (
+                  <DropdownMenuItem onSelect={exportCsv}>
+                    <Download />
+                    Export CSV
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onSelect={() => fetchData(true)} disabled={refreshing}>
+                  <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+                  Refresh
+                </DropdownMenuItem>
+                {/* Hidden while the run is in flight: the backend refuses to delete
+                    a pending or processing run, so offering it would only 400. */}
+                {!isActive && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => setDeleteRunOpen(true)}
+                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                    >
+                      <Trash2 />
+                      Delete Evaluation
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -1053,6 +1085,17 @@ function RunDetailPageInner({
         candidates={compareItems}
         breakdowns={compareBreakdowns}
         onRemove={handleRemoveFromCompare}
+      />
+
+      <JobDescriptionSheet
+        open={isDescriptionOpen}
+        onOpenChange={setIsDescriptionOpen}
+        title={data.job_title}
+        companyName={data.company_name}
+        markdown={jobDescription}
+        loading={descriptionLoading}
+        error={descriptionError}
+        onCopy={() => navigator.clipboard.writeText(jobDescription ?? "")}
       />
 
       <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />

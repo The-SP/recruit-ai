@@ -34,6 +34,12 @@ export interface BatchStatus {
   created_at: string;
 }
 
+export interface JobDescription {
+  title: string | null;
+  company_name: string | null;
+  raw_text: string;
+}
+
 export interface CandidateResult {
   item_id: string;
   candidate_id: string | null;
@@ -126,6 +132,8 @@ export interface RetryFailedResponse {
 
 // API functions
 export async function submitBatch(
+  jobTitle: string,
+  companyName: string,
   jobText: string,
   email: string,
   files: File[]
@@ -133,6 +141,8 @@ export async function submitBatch(
   if (IS_DEMO_MODE) return demoSubmitBatch();
 
   const formData = new FormData();
+  formData.append("job_title", jobTitle);
+  if (companyName) formData.append("company_name", companyName);
   formData.append("job_text", jobText);
   formData.append("email", email);
   files.forEach((file) => formData.append("files", file));
@@ -147,6 +157,21 @@ export async function getBatchStatus(token: string): Promise<BatchStatus> {
   if (IS_DEMO_MODE) return demoGetBatchStatus();
 
   return apiRequest<BatchStatus>(`/batch/status/${token}`);
+}
+
+export async function getBatchJobDescription(
+  token: string
+): Promise<JobDescription> {
+  if (IS_DEMO_MODE) {
+    const status = await demoGetBatchStatus();
+    return {
+      title: status.job?.title ?? null,
+      company_name: status.job?.company_name ?? null,
+      raw_text: "# Senior Software Engineer\n\nDemo job description is not available.",
+    };
+  }
+
+  return apiRequest<JobDescription>(`/batch/status/${token}/job-description`);
 }
 
 export async function getCandidateBreakdown(

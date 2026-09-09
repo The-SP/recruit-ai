@@ -62,6 +62,12 @@ export interface EvaluationRunDetail extends EvaluationRunSummary {
   items: RunItemSummary[];
 }
 
+export interface JobDescription {
+  title: string | null;
+  company_name: string | null;
+  raw_text: string;
+}
+
 export interface EvaluationRunListResponse {
   items: EvaluationRunSummary[];
   total: number;
@@ -87,10 +93,14 @@ export interface RetryFailedResponse {
 }
 
 export async function createEvaluationRun(
+  jobTitle: string,
+  companyName: string,
   jobText: string,
   files: File[]
 ): Promise<EvaluationRunSummary> {
   const formData = new FormData();
+  formData.append("job_title", jobTitle);
+  if (companyName) formData.append("company_name", companyName);
   formData.append("job_text", jobText);
   files.forEach((file) => formData.append("files", file));
   return apiRequest<EvaluationRunSummary>("/evaluations/runs", {
@@ -110,6 +120,14 @@ export async function listEvaluationRuns(
 
 export async function getEvaluationRun(runId: string): Promise<EvaluationRunDetail> {
   return apiRequest<EvaluationRunDetail>(`/evaluations/runs/${runId}`);
+}
+
+export async function getEvaluationJobDescription(
+  runId: string
+): Promise<JobDescription> {
+  return apiRequest<JobDescription>(
+    `/evaluations/runs/${runId}/job-description`
+  );
 }
 
 export async function addCandidatesToRun(

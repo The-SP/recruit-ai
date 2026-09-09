@@ -12,6 +12,7 @@ from app.api.schemas.public import (
     CandidateBreakdownResponse,
     CandidateResult,
     CreateBatchResponse,
+    JobDescriptionResponse,
     JobSummary,
     ProgressInfo,
     RetryFailedResponse,
@@ -49,6 +50,22 @@ _RETRY_COOLDOWN_MESSAGE = (
 )
 
 
+@router.get("/status/{token}/job-description", response_model=JobDescriptionResponse)
+def get_batch_job_description(
+    token: str, db: Session = Depends(get_db)
+) -> JobDescriptionResponse:
+    """Return the original job description for a token-authorized batch."""
+    run = EvaluationRunRepository(db).get_by_token(token, with_job=True)
+    if not run or not run.job:
+        raise NotFoundError("Batch", token)
+
+    return JobDescriptionResponse(
+        title=run.job.title,
+        company_name=run.job.company_name,
+        raw_text=run.job.raw_text,
+    )
+
+
 # =============================================================================
 # Simplified Public API
 # =============================================================================
@@ -57,6 +74,8 @@ _RETRY_COOLDOWN_MESSAGE = (
 @router.post("/submit", response_model=CreateBatchResponse, status_code=201)
 async def submit_batch(
     job_text: str = Form(...),
+    job_title: str = Form(...),
+    company_name: str | None = Form(None),
     email: EmailStr = Form(...),
     files: list[UploadFile] = [],
     db: Session = Depends(get_db),
@@ -77,6 +96,15 @@ async def submit_batch(
     if not files:
         raise ValidationError("At least one PDF file is required")
 
+    job_title = job_title.strip()
+    company_name = company_name.strip() if company_name else None
+    if not job_title:
+        raise ValidationError("Job title is required")
+    if len(job_title) > 255:
+        raise ValidationError("Job title must be 255 characters or fewer")
+    if company_name and len(company_name) > 255:
+        raise ValidationError("Company name must be 255 characters or fewer")
+
     enforce_anonymous_resume_cap(0, len(files))
 
     # Charged before the JD parse below, which is itself an LLM call: a
@@ -94,7 +122,7 @@ async def submit_batch(
 
     # Create job record
     job_repo = JobRepository(db)
-    job = job_repo.create(jd, job_text)
+    job = job_repo.create(jd, job_text, job_title=job_title, company_name=company_name)
 
     # Create batch run with token
     run_repo = EvaluationRunRepository(db)

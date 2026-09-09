@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { CandidateCompareDialog } from '@/components/candidate-compare-dialog';
 import { CompareBar } from '@/components/evaluation/compare-bar';
 import { FilterControls } from '@/components/evaluation/filter-controls';
+import { JobDescriptionSheet } from '@/components/evaluation/job-description-sheet';
 import { ProcessingProgress } from '@/components/evaluation/processing-progress';
 import { ResultsTable } from '@/components/evaluation/results-table';
 import { ResumeSheet } from '@/components/evaluation/resume-sheet';
@@ -29,7 +30,7 @@ import { ApiError } from '@/services/api';
 import {
     AddCandidatesResponse, BatchStatus, CandidateBreakdown, CandidateResult,
     addCandidatesToBatch, getCandidateBreakdown,
-    getBatchStatus, retryAllFailed, retrySingleFailed
+    getBatchJobDescription, getBatchStatus, retryAllFailed, retrySingleFailed
 } from '@/services/batch';
 
 function AddCandidatesPanel({
@@ -174,6 +175,10 @@ function EvaluationPageInner() {
   const [resumePanel, setResumePanel] = useState<ResumePanelState | null>(null);
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+  const [jobDescription, setJobDescription] = useState<string | null>(null);
+  const [descriptionLoading, setDescriptionLoading] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
 
   const fetchStatus = async (t: string, isRefresh = false) => {
     if (isRefresh) {
@@ -346,6 +351,24 @@ function EvaluationPageInner() {
     setIsCompareOpen(true);
   };
 
+  const handleOpenDescription = async () => {
+    if (!token) return;
+    setIsDescriptionOpen(true);
+    if (jobDescription) return;
+    setDescriptionLoading(true);
+    setDescriptionError(null);
+    try {
+      const description = await getBatchJobDescription(token);
+      setJobDescription(description.raw_text);
+    } catch (err) {
+      setDescriptionError(
+        err instanceof ApiError ? err.message : "Failed to load job description."
+      );
+    } finally {
+      setDescriptionLoading(false);
+    }
+  };
+
   const handleRemoveFromCompare = (candidateId: string) => {
     setCompareIds(prev => {
       const next = new Set(prev);
@@ -501,9 +524,20 @@ function EvaluationPageInner() {
           <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight">
             {jobTitle}
           </h1>
+          {data.job?.company_name && data.job.company_name !== "null" && (
+            <p className="text-sm text-muted-foreground">{data.job.company_name}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenDescription}
+            className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
+          >
+            View Job Description
+          </Button>
           <div className="text-right hidden sm:block">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1">Status</p>
             <Badge variant="outline" className={`${isProcessing ? "bg-primary/10 text-primary border-primary/20" : "bg-primary/10 text-primary border-primary/20"} font-bold px-3 py-1 rounded-lg`}>
@@ -689,6 +723,17 @@ function EvaluationPageInner() {
       breakdowns={breakdownCache}
       onRemove={handleRemoveFromCompare}
     />
+
+      <JobDescriptionSheet
+        open={isDescriptionOpen}
+        onOpenChange={setIsDescriptionOpen}
+        title={data.job?.title ?? null}
+        companyName={data.job?.company_name ?? null}
+        markdown={jobDescription}
+        loading={descriptionLoading}
+        error={descriptionError}
+        onCopy={() => navigator.clipboard.writeText(jobDescription ?? "")}
+      />
 
     <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
     </>

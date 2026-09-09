@@ -35,7 +35,12 @@ class JobRepository:
         }
 
     def create(
-        self, jd: JobDescriptionResponse, raw_text: str, user_id: UUID | None = None
+        self,
+        jd: JobDescriptionResponse,
+        raw_text: str,
+        user_id: UUID | None = None,
+        job_title: str | None = None,
+        company_name: str | None = None,
     ) -> Job:
         """
         Store a parsed job description to the database.
@@ -43,20 +48,23 @@ class JobRepository:
         Args:
             jd: Parsed job description response
             raw_text: Original raw text of the job description
+            job_title: Explicit title entered by the user, if any
+            company_name: Explicit company name entered by the user, if any
 
         Returns:
             Created Job instance with requirements
         """
-        logger.info(f"Creating job: {jd.job_title or 'Unknown'}")
+        title = job_title or jd.job_title
+        company = company_name or jd.company_name
+
+        logger.info(f"Creating job: {title or 'Unknown'}")
 
         job = Job(
             raw_text=raw_text,
             is_valid_jd=jd.is_job_description,
             document_type=jd.document_type,
-            title=jd.job_title,
-            company_name=jd.company_name
-            if jd.company_name and jd.company_name.lower() != "null"
-            else None,
+            title=title,
+            company_name=company if company and company.lower() != "null" else None,
             summary=jd.summary,
             user_id=user_id,
         )

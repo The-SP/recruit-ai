@@ -33,6 +33,14 @@ class JobSummary(BaseModel):
     company_name: str | None = None
 
 
+class JobDescriptionResponse(BaseModel):
+    """Original job description for an authorized evaluation viewer."""
+
+    title: str | None = None
+    company_name: str | None = None
+    raw_text: str
+
+
 class CandidateResult(BaseModel):
     """Individual candidate result."""
 
