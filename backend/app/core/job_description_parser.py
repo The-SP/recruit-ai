@@ -28,12 +28,14 @@ IF THIS IS A JOB DESCRIPTION: Extract all information from the text. You MUST po
 GENERAL EXTRACTION RULES:
 
 1. Extract ONLY information explicitly present in the text
-2. Use EXACT wording from the text - do not rephrase or paraphrase
+2. Use EXACT wording from the text for extracted names, requirements, and responsibilities - do not rephrase or paraphrase. Use the schema's stated normalized values only where normalization is required.
 3. If a section is not present, set it as null or empty array
 4. Preserve all dates, numbers, and formatting exactly as shown
 5. Do not add placeholder text, examples, or inferred information
 6. Do not correct grammar, spelling, or formatting from the original
 7. Do not expand abbreviations unless expanded in the text
+8. Prefer an empty/null field over a plausible inference. Do not infer requirements from the job title, seniority, industry, common technology stacks, or what similar roles usually require.
+9. A fact must be explicitly stated before it can affect a candidate's score. This applies especially to education, certifications, years, proficiency, and whether a skill is mandatory.
 
 ---
 
@@ -45,7 +47,7 @@ Classify each skill into exactly one tier. Apply rules IN ORDER - first match wi
 
 CRITICAL (apply these checks FIRST):
 A skill is CRITICAL if ANY of these are true:
-- TITLE TEST: The skill (or its direct variant) appears in the job title
+- TITLE TEST: The exact skill (or an unambiguous direct variant) appears in the job title
   → "Python Developer" → Python is critical
   → "Data Analyst" → Data Analysis is critical
   → "AWS Cloud Engineer" → AWS is critical
@@ -80,9 +82,11 @@ EXPERT: "expert", "mastery", "deep expertise", "authority in", "extensive and de
 ADVANCED: "strong", "advanced", "extensive experience", "highly proficient", "senior-level"
 INTERMEDIATE: "proficient", "solid", "good knowledge", "working knowledge", "competent"
 BEGINNER: "familiar", "basic", "exposure to", "awareness of", "foundational"
-NULL: No qualifier present, or just "experience with" - do not guess
+NULL: No qualifier is directly attached to that skill, or the text only says "experience with" - do not guess
 
-WHEN IN DOUBT: Leave proficiency as null. Only set it when the language CLEARLY maps to a level.
+Attach a proficiency only to the exact skill or explicitly shared alternative group qualified by the wording. Never spread a qualifier from one skill, sentence, or bullet to nearby skills. For example, "strong Python and experience with Django" gives Python advanced and Django null.
+
+WHEN IN DOUBT: Leave proficiency as null. Only set it when the language CLEARLY and directly maps to a level.
 
 ---
 
@@ -95,6 +99,7 @@ EXPERIENCE REQUIREMENT EXTRACTION:
    - "3-5 years" → min_years: 3
    - "at least 2 years" → min_years: 2
    - If not specified, set to null
+   - Do not attach a role-wide years range to individual skills unless the text explicitly connects that range to those skills
 
 2. **max_years**: Maximum years (if specified, often indicates seniority cap)
    - "3-5 years" → max_years: 5
@@ -108,16 +113,20 @@ EXPERIENCE REQUIREMENT EXTRACTION:
 4. **key_skills**: List of critical and required skill names only
    - Extract skill names from critical and required tiers
    - Just the names, no proficiency or years
+   - Include only skills explicitly placed in critical or required; do not add inferred role skills
    - Example: ["Python", "FastAPI", "PostgreSQL", "Docker"]
 
 5. **key_responsibilities**: Most essential job responsibilities (max 5)
    - Focus on core duties that define the role
-   - Skip generic responsibilities like "attend meetings" or "collaborate with team"
+   - Skip generic responsibilities like "attend meetings" or "collaborate with team" when the text contains more role-defining duties
+   - Use only responsibilities stated in the document
    - Example: ["Design and build scalable APIs", "Optimize database performance", "Lead code reviews"]
 
 ---
 
 EDUCATION REQUIREMENT EXTRACTION:
+
+Only populate education fields when the document explicitly mentions a degree, education level, or field of study. If education is absent, set min_degree and preferred_fields to null and required to false. Never infer a degree from the role, seniority, company, or field.
 
 1. **min_degree**: Minimum degree level
    - Normalize to: "bachelors", "masters", "phd"
@@ -134,6 +143,15 @@ EDUCATION REQUIREMENT EXTRACTION:
    - true if the JD uses hard language: "must have a degree", "requires a degree", "minimum education", "BS/MS required"
    - false if it says "preferred", "a plus", "nice to have", or is silent on education
    - Default to false when ambiguous
+
+---
+
+FINAL SOURCE-GROUNDING AUDIT (complete this silently before responding):
+
+- Remove any company, education, certification, skill, years, proficiency, responsibility, or requirement that is not supported by the source text.
+- Set education to null when the source contains no education requirement. Do not return a default degree or empty education object.
+- Set proficiency to null unless a qualifier directly modifies that exact skill or an explicitly shared alternative group.
+- Treat location, work arrangement, employment type, and benefits as neither company names nor candidate requirements unless the source explicitly says so.
 
 ---
 """

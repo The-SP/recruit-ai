@@ -18,14 +18,25 @@ class ExperienceRequirement(BaseModel):
 class EducationRequirement(BaseModel):
     min_degree: str | None = Field(
         None,
-        description="Minimum degree: 'bachelors', 'masters', 'phd'",
+        description=(
+            "Minimum degree explicitly stated in the job description, normalized to "
+            "'bachelors', 'masters', or 'phd'. Null when no degree is mentioned; "
+            "never infer a degree from the role."
+        ),
     )
     preferred_fields: list[str] | None = Field(
-        None, description="Preferred fields of study"
+        None,
+        description=(
+            "Fields of study explicitly mentioned in the job description. Null when "
+            "no field of study is mentioned; never infer fields from the role."
+        ),
     )
     required: bool = Field(
         default=False,
-        description="Whether education is a hard requirement for this role",
+        description=(
+            "True only when the job description explicitly makes education or a degree "
+            "mandatory. False when education is preferred, optional, or not mentioned."
+        ),
     )
 
 
@@ -63,7 +74,11 @@ class SkillRequirements(BaseModel):
 class JobRequirementsSchema(BaseModel):
     education: EducationRequirement | None = Field(
         None,
-        description="Education requirements. Null only if the job description mentions nothing about education.",
+        description=(
+            "Education requirements explicitly stated in the job description. Null "
+            "when no education requirement is mentioned; never infer education from "
+            "the role."
+        ),
     )
     experience: ExperienceRequirement | None = Field(
         None,
