@@ -73,6 +73,7 @@ import {
   type EvaluationRunDetail,
   type RunItemSummary,
 } from "@/services/runs";
+import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
 /** Ranks interview states by how far along the funnel they are, so sorting
  *  the Interview column walks the workflow rather than the alphabet. */
@@ -146,6 +147,7 @@ function RunDetailPageInner({
   );
 
   const [data, setData] = useState<EvaluationRunDetail | null>(null);
+  useBreadcrumbLabel(runId, data?.job_title);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);

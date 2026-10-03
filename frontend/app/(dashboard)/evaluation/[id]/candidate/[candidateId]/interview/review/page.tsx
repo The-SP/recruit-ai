@@ -31,6 +31,7 @@ import {
   saveInterviewTemplate,
   updateRunCandidateInterviewDraft,
 } from "@/services/runs";
+import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
 function scriptFrom(interview: InterviewDetail): ScriptDraft {
   return {
@@ -52,6 +53,8 @@ export default function InterviewReviewPage({
   const [interview, setInterview] = useState<InterviewDetail | null>(null);
   const [breakdown, setBreakdown] = useState<CandidateBreakdown | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  useBreadcrumbLabel(runId, jobTitle);
+  useBreadcrumbLabel(candidateId, breakdown?.candidate_name ?? breakdown?.filename);
   const [interviewCount, setInterviewCount] = useState(0);
   // Both header fetches, tracked as one flag. They settle independently but
   // fill the same two lines, so flipping them separately would just make the

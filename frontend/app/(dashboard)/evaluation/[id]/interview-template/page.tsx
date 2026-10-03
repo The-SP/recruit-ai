@@ -16,6 +16,7 @@ import {
   getInterviewTemplate,
   saveInterviewTemplate,
 } from "@/services/runs";
+import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
 /**
  * Standalone template editor for a run.
@@ -34,6 +35,7 @@ export default function InterviewTemplatePage({
   const [template, setTemplate] = useState<TemplateDraft | null>(null);
   const [hasSaved, setHasSaved] = useState(false);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  useBreadcrumbLabel(runId, jobTitle);
   const [interviewCount, setInterviewCount] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

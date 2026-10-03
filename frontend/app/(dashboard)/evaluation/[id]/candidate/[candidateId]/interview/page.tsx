@@ -13,6 +13,7 @@ import {
   getRunCandidateInterview,
   reissueRunCandidateInterview,
 } from "@/services/runs";
+import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
 export default function RunCandidateInterviewPage({
   params,
@@ -25,6 +26,7 @@ export default function RunCandidateInterviewPage({
     "loading"
   );
   const [breakdown, setBreakdown] = useState<CandidateBreakdown | null>(null);
+  useBreadcrumbLabel(candidateId, breakdown?.candidate_name ?? breakdown?.filename);
 
   const fetchInterview = useCallback(async () => {
     setInterview("loading");

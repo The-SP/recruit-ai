@@ -17,6 +17,7 @@ Loaded alongside the root `CLAUDE.md` when working in `frontend/`. These are dec
 ## Layout patterns
 
 - **Page header:** title + subtitle on the left, primary CTA top-right, no icon tile. Hide the header CTA when an empty state on the page carries its own (see the dashboard's onboarding and `/history`'s empty state).
+- **Breadcrumbs** live in the top bar (`components/dashboard-breadcrumbs.tsx`). A new page under `app/(dashboard)/` must be added to `buildCrumbs`, and a page with a dynamic id must call `useBreadcrumbLabel(id, label)` once it has fetched the name; otherwise the trail is blank or falls back to "Evaluation"/"Candidate". On phones the trail collapses to a back link to the parent.
 - **Clickable table rows** use a real link stretched over the row (`after:absolute after:inset-0` on the link, `relative` on the row), never `onClick` on `<tr>`, so cmd/middle-click, the status-bar URL and keyboard focus keep working. Any other control in the row needs `relative z-10` to sit above the overlay.
 
 ## Shared components
