@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,6 +38,7 @@ export function StatCell({
   tone,
   loading,
   children,
+  tooltip,
 }: {
   icon: React.ElementType;
   label: string;
@@ -50,9 +52,11 @@ export function StatCell({
   loading: boolean;
   /** Extra content under the value, e.g. a progress bar. */
   children?: React.ReactNode;
+  /** Shown on hovering the cell, e.g. how the stat is defined. */
+  tooltip?: string;
 }) {
-  return (
-    <div className="bg-card px-5 py-4">
+  const cell = (
+    <div className={cn("bg-card px-5 py-4", tooltip && "cursor-help")}>
       <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <Icon className="w-3.5 h-3.5" />
         {label}
@@ -80,4 +84,18 @@ export function StatCell({
       )}
     </div>
   );
+
+  if (!tooltip) return cell;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{cell}</TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Counts read better as an em dash than a zero in these strips. */
+export function countOrDash(value: number): string | number {
+  return value > 0 ? value : "—";
 }

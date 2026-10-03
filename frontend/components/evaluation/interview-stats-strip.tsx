@@ -2,11 +2,11 @@
 
 import { CheckCircle, MessageSquareText, Send, Users } from "lucide-react";
 
-import { countOrDash, StatTile } from "@/components/evaluation/stat-tile";
+import { countOrDash, StatCell, StatStrip } from "@/components/stat-strip";
 
 /**
- * The Interviews tab's counterpart to StatsSummary — same StatTile treatment so
- * the two tabs read as one page, but counting the interview funnel rather
+ * The Interviews tab's counterpart to StatsSummary — same StatStrip treatment
+ * so the two tabs read as one page, but counting the interview funnel rather
  * than resume scores.
  */
 export function InterviewStatsStrip({
@@ -21,32 +21,27 @@ export function InterviewStatsStrip({
   assessed: number;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <StatTile icon={Users} iconClassName="text-primary" label="Total">
-        {total}
-      </StatTile>
-      <StatTile
+    <StatStrip className="grid-cols-2 md:grid-cols-4">
+      <StatCell icon={Users} label="Total" value={total} loading={false} />
+      <StatCell
         icon={MessageSquareText}
-        iconClassName="text-blue-500"
         label="Invited"
-      >
-        {countOrDash(invited)}
-      </StatTile>
-      <StatTile
+        value={countOrDash(invited)}
+        loading={false}
+      />
+      <StatCell
         icon={Send}
-        iconClassName="text-amber-500"
         label="Awaiting"
+        value={countOrDash(awaiting)}
         tooltip="Invite sent, candidate hasn't started yet"
-      >
-        {countOrDash(awaiting)}
-      </StatTile>
-      <StatTile
+        loading={false}
+      />
+      <StatCell
         icon={CheckCircle}
-        iconClassName="text-emerald-500"
         label="Assessed"
-      >
-        {countOrDash(assessed)}
-      </StatTile>
-    </div>
+        value={countOrDash(assessed)}
+        loading={false}
+      />
+    </StatStrip>
   );
 }

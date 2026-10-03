@@ -54,6 +54,34 @@ function loaded(bd: CachedBreakdown): CandidateBreakdown | null {
   return bd && bd !== "loading" && bd !== "error" ? bd : null;
 }
 
+/** The top score only when exactly one candidate holds it. A tie (two at
+ *  100%) marks nobody, since it tells the reader nothing. */
+function uniqueBest(scores: (number | null)[]): number | null {
+  const valid = scores.filter((s): s is number => s != null);
+  if (valid.length < 2) return null;
+  const max = Math.max(...valid);
+  return valid.filter((s) => s === max).length === 1 ? max : null;
+}
+
+function ScoreValue({ score, isBest }: { score: number; isBest: boolean }) {
+  const pct = Math.round(score * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-bold tabular-nums w-10">{pct}%</span>
+      {/* Neutral track: the default primary-tinted one put a green wash
+          behind amber and red bars. */}
+      <Progress value={pct} className={cn("h-1.5 flex-1 bg-muted", scoreBarColor(score))} />
+      {/* A quiet tag rather than a filled cell: green is for primary actions,
+          and a filled cell in most rows stopped meaning anything. */}
+      {isBest && (
+        <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
+          Best
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LabelCell({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
     <div
@@ -69,21 +97,13 @@ function LabelCell({ children, className }: { children?: React.ReactNode; classN
 
 function ValueCell({
   children,
-  isBest,
   className,
 }: {
   children?: React.ReactNode;
-  isBest?: boolean;
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "px-4 py-3 border-b border-l border-border text-sm",
-        isBest && "bg-success/40 shadow-[inset_0_0_0_1px_var(--success-edge)]",
-        className
-      )}
-    >
+    <div className={cn("px-4 py-3 border-b border-l border-border text-sm", className)}>
       {children}
     </div>
   );
@@ -113,8 +133,7 @@ function ScoreRow({
     const bd = c.candidate_id ? loaded(breakdowns[c.candidate_id]) : null;
     return bd ? getScore(bd) : null;
   });
-  const valid = scores.filter((s): s is number => s != null);
-  const best = valid.length >= 2 ? Math.max(...valid) : null;
+  const best = uniqueBest(scores);
 
   return (
     <>
@@ -126,15 +145,9 @@ function ScoreRow({
         const score = scores[i];
         const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
         return (
-          <ValueCell key={c.candidate_id ?? i} isBest={best != null && score === best}>
+          <ValueCell key={c.candidate_id ?? i}>
             {score != null ? (
-              <div className="flex items-center gap-2">
-                <span className="font-bold tabular-nums w-10">{Math.round(score * 100)}%</span>
-                <Progress
-                  value={Math.round(score * 100)}
-                  className={cn("h-1.5 flex-1", scoreBarColor(score))}
-                />
-              </div>
+              <ScoreValue score={score} isBest={best != null && score === best} />
             ) : (
               <PendingCell bd={bd} />
             )}
@@ -190,9 +203,7 @@ export function CandidateCompareDialog({
     return lookup;
   }, [candidates, breakdowns]);
 
-  const finalScores = candidates.map((c) => c.final_score);
-  const validFinal = finalScores.filter((s): s is number => s != null);
-  const bestFinal = validFinal.length >= 2 ? Math.max(...validFinal) : null;
+  const bestFinal = uniqueBest(candidates.map((c) => c.final_score));
 
   const anyError = candidates.some(
     (c) => c.candidate_id && breakdowns[c.candidate_id] === "error"
@@ -201,7 +212,7 @@ export function CandidateCompareDialog({
   const sectionHeader = (label: string, extraClass?: string) => (
     <div
       className={cn(
-        "px-4 py-2 bg-muted/60 border-b border-border text-[10px] font-bold uppercase tracking-widest text-muted-foreground",
+        "px-4 py-2 bg-muted/60 border-b border-border text-xs font-semibold text-foreground",
         extraClass
       )}
       style={{ gridColumn: `1 / span ${n + 1}` }}
@@ -215,19 +226,21 @@ export function CandidateCompareDialog({
       <DialogContent className="sm:max-w-[95vw] lg:max-w-6xl h-[90vh] flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle className="text-base font-bold">
-            Compare Candidates ({n})
+            Compare candidates ({n})
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">
           <div
             className="grid min-w-fit"
-            style={{ gridTemplateColumns: `150px repeat(${n}, minmax(200px, 1fr))` }}
+            style={{ gridTemplateColumns: `200px repeat(${n}, minmax(200px, 1fr))` }}
           >
-            {/* Candidate header row */}
-            <LabelCell className="bg-background" />
+            {/* Candidate header row, pinned to the top so the names stay in
+                view through a long skill matrix. The corner sits above both
+                sticky axes. */}
+            <LabelCell className="top-0 z-30 bg-background" />
             {candidates.map((c, i) => (
-              <ValueCell key={c.candidate_id ?? i} className="py-4">
+              <ValueCell key={c.candidate_id ?? i} className="py-4 sticky top-0 z-20 bg-background">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-bold text-foreground truncate">
@@ -240,8 +253,9 @@ export function CandidateCompareDialog({
                   {c.candidate_id && (
                     <button
                       onClick={() => onRemove(c.candidate_id!)}
+                      type="button"
                       className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 cursor-pointer"
-                      title="Remove from comparison"
+                      aria-label={`Remove ${c.candidate_name ?? c.filename} from comparison`}
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -251,29 +265,21 @@ export function CandidateCompareDialog({
             ))}
 
             {/* Overall */}
-            <LabelCell>Overall Score</LabelCell>
+            <LabelCell>Overall score</LabelCell>
             {candidates.map((c, i) => (
-              <ValueCell
-                key={c.candidate_id ?? i}
-                isBest={bestFinal != null && c.final_score === bestFinal}
-              >
+              <ValueCell key={c.candidate_id ?? i}>
                 {c.final_score != null ? (
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold tabular-nums w-10">
-                      {Math.round(c.final_score * 100)}%
-                    </span>
-                    <Progress
-                      value={Math.round(c.final_score * 100)}
-                      className={cn("h-1.5 flex-1", scoreBarColor(c.final_score))}
-                    />
-                  </div>
+                  <ScoreValue
+                    score={c.final_score}
+                    isBest={bestFinal != null && c.final_score === bestFinal}
+                  />
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
               </ValueCell>
             ))}
 
-            <LabelCell>Hire Signal</LabelCell>
+            <LabelCell>Hire signal</LabelCell>
             {candidates.map((c, i) => (
               <ValueCell key={c.candidate_id ?? i}>
                 {c.hire_signal ? (
@@ -286,8 +292,32 @@ export function CandidateCompareDialog({
               </ValueCell>
             ))}
 
+            {/* A critical gap halves the skill score, so it is the quickest way
+                to tell candidates apart: surfaced here rather than left as one
+                badge among many in the matrix. */}
+            <LabelCell>Critical gaps</LabelCell>
+            {candidates.map((c, i) => {
+              const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
+              const skills = loaded(bd)?.skills;
+              return (
+                <ValueCell key={c.candidate_id ?? i}>
+                  {skills ? (
+                    skills.critical_gaps.length > 0 ? (
+                      <p className="text-error-foreground font-medium break-words">
+                        {skills.critical_gaps.join(", ")}
+                      </p>
+                    ) : (
+                      <span className="text-muted-foreground">None</span>
+                    )
+                  ) : (
+                    <PendingCell bd={bd} />
+                  )}
+                </ValueCell>
+              );
+            })}
+
             {/* Sub-scores */}
-            {sectionHeader("Component Scores")}
+            {sectionHeader("Component scores")}
             <ScoreRow
               label="Skills"
               icon={<Zap className="w-3.5 h-3.5" />}
@@ -311,7 +341,7 @@ export function CandidateCompareDialog({
             />
 
             {/* Skill matrix */}
-            {skillRows.size > 0 && sectionHeader("Skill Matrix")}
+            {skillRows.size > 0 && sectionHeader("Skill matrix")}
             {SKILL_TIERS.map((tier) => {
               const rows = skillRows.get(tier);
               if (!rows || rows.length === 0) return null;
@@ -324,7 +354,7 @@ export function CandidateCompareDialog({
                   >
                     <span
                       className={cn(
-                        "inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
+                        "inline-block rounded-md border px-2 py-0.5 text-xs font-semibold",
                         tierBadgeStyles[tier]
                       )}
                     >
@@ -398,7 +428,7 @@ export function CandidateCompareDialog({
                             100
                           )}
                           className={cn(
-                            "h-1.5",
+                            "h-1.5 bg-muted",
                             exp.effective_years >= exp.required_years
                               ? "[&>div]:bg-success-bar"
                               : exp.effective_years >= exp.required_years * 0.7

@@ -13,7 +13,7 @@ import { CompareBar } from '@/components/evaluation/compare-bar';
 import { FilterControls } from '@/components/evaluation/filter-controls';
 import { JobDescriptionSheet } from '@/components/evaluation/job-description-sheet';
 import { ProcessingProgress } from '@/components/evaluation/processing-progress';
-import { ResultsTable } from '@/components/evaluation/results-table';
+import { ExpandAllToggle, ResultsTable } from '@/components/evaluation/results-table';
 import { ResumeSheet } from '@/components/evaluation/resume-sheet';
 import { StatsSummary } from '@/components/evaluation/stats-summary';
 import { ResumeFileUpload } from '@/components/resume-file-upload';
@@ -526,7 +526,9 @@ function EvaluationPageInner() {
   const handleExpandAll = () => {
     if (allExpanded) { setExpandedIds(new Set()); return; }
     setExpandedIds(new Set(expandableIds));
-    expandableIds.forEach(id => { if (!breakdownCache[id]) handleRowClick(id); });
+    // Load directly rather than via handleRowClick: that toggles, and would
+    // collapse every row it was meant to fill.
+    expandableIds.forEach(id => ensureBreakdown(id));
   };
 
   return (
@@ -604,22 +606,25 @@ function EvaluationPageInner() {
         </div>
       </div>
 
-      {/* Stats Summary */}
-      <StatsSummary
-        candidateCount={data.results.length}
-        processingTimeSeconds={data.processing_time_seconds}
-        bestScore={bestScore}
-        topMatchCount={topMatchCount}
-        isProcessing={isProcessing}
-      />
-
-      {/* Progress Card */}
       {isProcessing && (
         <ProcessingProgress
           processed={data.progress.processed}
           total={data.progress.total}
           failed={data.progress.failed}
           percent={Math.round(progressPercent)}
+          className="mb-8"
+        />
+      )}
+
+      {/* Withheld until something has scored: before then every stat but
+          the count is a dash, and the progress card already carries it. */}
+      {(!isProcessing || completedResults.length > 0) && (
+        <StatsSummary
+          candidateCount={data.results.length}
+          bestScore={bestScore}
+          topMatchCount={topMatchCount}
+          failedCount={data.progress.failed}
+          className="mb-10"
         />
       )}
 
@@ -637,19 +642,16 @@ function EvaluationPageInner() {
             isFiltered={isFiltered}
             shownCount={displayResults.length}
             totalCount={sourceResults.length}
+            actions={
+              <ExpandAllToggle allExpanded={allExpanded} onToggle={handleExpandAll} />
+            }
           />
         )}
 
-        {/* Results table — shown when completed, or when partial results exist during processing */}
-        {(!isProcessing || completedResults.length > 0) && (
+        {/* Shown from the start of a batch: the pending rows name each
+            resume being scored, so the wait has something to look at. */}
+        {(!isProcessing || data.results.length > 0) && (
           <>
-            {isProcessing && (
-              <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
-                Results So Far
-              </div>
-            )}
-
             {!isProcessing && data.results.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
@@ -670,8 +672,6 @@ function EvaluationPageInner() {
                 onRowClick={(item) => handleRowClick(item.candidate_id)}
                 onToggleCompare={toggleCompare}
                 onViewResume={handleViewResume}
-                allExpanded={allExpanded}
-                onExpandAll={handleExpandAll}
                 isProcessing={isProcessing}
                 isFiltered={needsFilter}
                 showEmptyFilterRow={displayResults.length === 0}

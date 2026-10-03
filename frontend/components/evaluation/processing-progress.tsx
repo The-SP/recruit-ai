@@ -1,49 +1,66 @@
 "use client";
 
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 
+/**
+ * Run-level progress while resumes are scoring. Framed like StatStrip so it
+ * sits in the same visual family as the stats it precedes; the per-candidate
+ * view is the pending rows in ResultsTable.
+ */
 export function ProcessingProgress({
   processed,
   total,
   failed,
   percent,
+  className,
 }: {
   processed: number;
   total: number;
   failed: number;
   percent: number;
+  className?: string;
 }) {
+  const started = processed > 0;
+
   return (
-    <Card className="p-8 shadow-xl border-border rounded-3xl bg-card mb-8">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4 text-sm font-black text-foreground uppercase tracking-widest">
-          <span className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            Analyzing Resumes
-          </span>
-          <span className="tabular-nums">{percent}%</span>
-        </div>
-        <div className="relative h-3 w-full bg-muted rounded-full overflow-hidden border border-border/50">
-          <div
-            className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 rounded-full shadow-[0_0_10px_theme(colors.primary/30%)]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground font-medium pt-0.5">
-          <span>
-            {processed} of {total} candidates completed
-            {failed > 0 && (
-              <span className="text-error-foreground ml-1">({failed} failed)</span>
-            )}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <RefreshCw className="w-3 h-3" />
-            Auto-refreshing every 10s
-          </span>
-        </div>
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn("bg-card border rounded-2xl shadow-sm px-5 py-3.5", className)}
+    >
+      {/* One row: label, bar, count. On phones the bar drops to its own line
+          beneath the other two. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <p className="flex items-center gap-2 font-medium shrink-0">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          Scoring resumes
+        </p>
+        {/* Before the first resume lands there is no progress to draw; a
+            pulsing track says "working" where an empty bar reads as stuck. */}
+        <Progress
+          value={percent}
+          aria-label="Scoring progress"
+          className={cn(
+            "h-1.5 bg-muted flex-1 min-w-24 max-sm:order-last max-sm:basis-full",
+            !started && "animate-pulse"
+          )}
+        />
+        <p className="text-muted-foreground tabular-nums shrink-0 ml-auto">
+          {processed} of {total} scored
+          {failed > 0 && <span className="text-destructive"> · {failed} failed</span>}
+        </p>
       </div>
-    </Card>
+      {/* Only while the card is alone on the page. Once rows are scoring,
+          their "Scoring…" lines say the same thing. */}
+      {!started && (
+        <p className="text-xs text-muted-foreground mt-2.5">
+          Results appear below as each resume finishes. You can leave this page;
+          scoring continues in the background.
+        </p>
+      )}
+    </div>
   );
 }

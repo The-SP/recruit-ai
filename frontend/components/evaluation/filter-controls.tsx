@@ -30,6 +30,7 @@ export function FilterControls({
   shownCount,
   totalCount,
   filterOptions = SIGNAL_OPTIONS,
+  actions,
 }: {
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -41,6 +42,8 @@ export function FilterControls({
   // Lets the Interviews tab filter by interview state instead of hire
   // signal; the search box and the "n of m" readout are identical either way.
   filterOptions?: { value: string; label: string }[];
+  // Right-aligned controls that act on the table below, e.g. expand all.
+  actions?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -70,6 +73,7 @@ export function FilterControls({
           {shownCount} of {totalCount}
         </span>
       )}
+      {actions && <div className="ml-auto flex items-center gap-3">{actions}</div>}
     </div>
   );
 }

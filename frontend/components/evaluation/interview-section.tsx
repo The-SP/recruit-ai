@@ -70,18 +70,52 @@ export function InterviewSection({
 
   return (
     <div className="space-y-3 pt-4 border-t border-border">
-      <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-        <MessageSquareText className="w-3.5 h-3.5" />
-        AI Interview
-        {detail && (
-          <Badge
-            variant="outline"
-            className={cn("ml-1 normal-case", interviewStatusStyles[detail.status] ?? "")}
-          >
-            {interviewStatusLabels[detail.status] ?? detail.status}
-          </Badge>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <MessageSquareText className="w-3.5 h-3.5" />
+          AI interview
+          {detail && (
+            <Badge
+              variant="outline"
+              className={cn("ml-1", interviewStatusStyles[detail.status] ?? "")}
+            >
+              {interviewStatusLabels[detail.status] ?? detail.status}
+            </Badge>
+          )}
+        </h3>
+
+        {/* No interview yet: the whole section is this one row. The "what
+            happens next" copy lives in the tooltip, since the click only opens
+            a review page and nothing is sent until approval. */}
+        {interview === null && onGenerate && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => runAction(onGenerate)}
+                disabled={isWorking}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isWorking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating questions...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Set up interview
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Review questions before any invite is created
+            </TooltipContent>
+          </Tooltip>
         )}
-      </h3>
+      </div>
 
       {locked && (
         <div className="space-y-2">
@@ -131,34 +165,6 @@ export function InterviewSection({
 
       {interview === "error" && (
         <p className="text-sm text-error-foreground">Failed to load interview details.</p>
-      )}
-
-      {interview === null && onGenerate && (
-        <div className="space-y-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => runAction(onGenerate)}
-            disabled={isWorking}
-            className="gap-2 font-semibold cursor-pointer"
-          >
-            {isWorking ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating questions...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Set up interview
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Confirm what to ask, then review the questions before the invite
-            link is created.
-          </p>
-        </div>
       )}
 
       {detail && (

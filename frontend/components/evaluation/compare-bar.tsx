@@ -3,7 +3,7 @@
 import { Columns2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { EvaluationItem } from "@/lib/evaluation-types";
+import { MAX_COMPARE, type EvaluationItem } from "@/lib/evaluation-types";
 
 export function CompareBar({
   candidates,
@@ -21,12 +21,19 @@ export function CompareBar({
   onOpen: () => void;
 }) {
   if (candidates.length === 0) return null;
+  const canCompare = candidates.length >= 2;
 
   return (
-    <div className="sticky bottom-6 z-40 mx-auto mt-8 w-full max-w-3xl">
+    // Full width of the page column, so it lines up with the table above.
+    <div className="sticky bottom-6 z-40 mt-8 w-full">
       <div className="bg-card border border-border rounded-2xl shadow-xl px-4 py-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
-          Compare
+        {/* The count carries the limit up front, rather than leaving it to a
+            greyed-out checkbox. With one pick it says what's missing instead,
+            visible on touch and to keyboard users, unlike a title tooltip. */}
+        <span className="text-sm text-muted-foreground shrink-0 mr-1 tabular-nums">
+          {canCompare
+            ? `${candidates.length} of ${MAX_COMPARE} selected`
+            : "Select one more to compare"}
         </span>
         <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
           {candidates.map(c => (
@@ -36,31 +43,32 @@ export function CompareBar({
             >
               <span className="truncate">{c.candidate_name ?? c.filename}</span>
               <button
+                type="button"
                 onClick={() => onRemove(c.candidate_id!)}
-                className="p-0.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
-                title="Remove from comparison"
+                className="p-1 -my-0.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors cursor-pointer"
+                aria-label={`Remove ${c.candidate_name ?? c.filename} from comparison`}
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </span>
           ))}
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           <button
+            type="button"
             onClick={onClear}
             className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2"
           >
-            Clear
+            Clear selection
           </button>
           <Button
             size="sm"
             onClick={onOpen}
-            disabled={candidates.length < 2}
+            disabled={!canCompare}
             className="h-9 px-4 font-bold rounded-xl gap-2 cursor-pointer"
-            title={candidates.length < 2 ? "Select at least 2 candidates to compare" : undefined}
           >
             <Columns2 className="w-4 h-4" />
-            Compare ({candidates.length})
+            Compare
           </Button>
         </div>
       </div>

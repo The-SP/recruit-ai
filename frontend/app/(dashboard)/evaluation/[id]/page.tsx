@@ -4,7 +4,7 @@ import {
   ArrowLeft,
   Download,
   Ellipsis,
-  Link2,
+  FileText,
   Loader2,
   MessageSquareText,
   Plus,
@@ -34,13 +34,21 @@ import {
   type InterviewSortColumn,
 } from "@/components/evaluation/interview-table";
 import { ProcessingProgress } from "@/components/evaluation/processing-progress";
-import { ResultsTable } from "@/components/evaluation/results-table";
+import { ExpandAllToggle, ResultsTable } from "@/components/evaluation/results-table";
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
 import { StatsSummary } from "@/components/evaluation/stats-summary";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,11 +57,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   candidateDeleteDescription,
   runDeleteDescription,
 } from "@/lib/delete-copy";
-import { interviewStatusLabels, recommendationLabels } from "@/lib/evaluation-styles";
+import {
+  interviewStatusLabels,
+  recommendationLabels,
+  statusLabels,
+  statusStyles,
+} from "@/lib/evaluation-styles";
 import { MAX_COMPARE, type ResumePanelState, type SortBy } from "@/lib/evaluation-types";
 import type { CachedInterview } from "@/lib/interview-types";
 import { useInviteActions } from "@/lib/use-invite-actions";
@@ -699,28 +713,30 @@ function RunDetailPageInner({
   function handleExpandAll() {
     if (allExpanded) { setExpandedIds(new Set()); return; }
     setExpandedIds(new Set(expandableIds));
-    expandableIds.forEach(id => {
-      const item = filteredItems.find(i => i.item_id === id);
-      if (item && !breakdownCache[id]) handleRowClick(item);
+    // Load directly rather than via handleRowClick: that toggles, and would
+    // collapse every row it was meant to fill. Both are no-ops once fetched.
+    filteredItems.forEach(item => {
+      ensureBreakdown(item);
+      ensureInterview(item);
     });
   }
 
   if (loading) {
     return (
-      <main className="px-6 py-24 flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
+      <div className="py-24 flex flex-col items-center justify-center">
         <div className="relative">
           <div className="w-16 h-16 rounded-full border-4 border-primary/10 animate-pulse" />
           <Loader2 className="absolute top-0 left-0 w-16 h-16 animate-spin text-primary border-4 border-transparent border-t-primary rounded-full" />
         </div>
         <p className="mt-6 text-foreground font-bold text-lg">Fetching your results...</p>
         <p className="text-muted-foreground text-sm mt-1">This will only take a moment</p>
-      </main>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <main className="px-6 py-12 max-w-5xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <Card className="p-8 text-center border-destructive/30 bg-destructive/5 text-destructive">
           <p className="font-semibold">{error}</p>
           <Button asChild variant="outline" className="mt-4">
@@ -730,7 +746,7 @@ function RunDetailPageInner({
             </Link>
           </Button>
         </Card>
-      </main>
+      </div>
     );
   }
 
@@ -740,50 +756,72 @@ function RunDetailPageInner({
 
   return (
     <>
-      <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-8 border-b border-border">
-          <div className="space-y-2">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-1"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Dashboard
-            </Link>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight">
-                {jobTitle}
-              </h1>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 rounded-lg">
-                {isActive ? "Processing" : "Completed"}
+      <div className="max-w-5xl mx-auto">
+        {/* Header: title + context left, the page's primary action right.
+            The way back is the top-bar breadcrumb trail. */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold">{jobTitle}</h1>
+              <Badge
+                variant="outline"
+                className={statusStyles[data.status] ?? "bg-muted text-muted-foreground border-border"}
+              >
+                {statusLabels[data.status] ?? data.status}
               </Badge>
+              {/* A run can complete with some resumes failed; the run status
+                  alone would hide that, and with it the reason to retry. */}
+              {data.status === "completed" && failedCount > 0 && (
+                <Badge variant="outline" className={statusStyles.failed}>
+                  {failedCount} failed
+                </Badge>
+              )}
             </div>
-            {data.company_name && data.company_name !== "null" && (
-              <p className="text-sm text-muted-foreground">{data.company_name}</p>
-            )}
-            <button
-              type="button"
-              onClick={handleOpenDescription}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-primary cursor-pointer"
-            >
-              <Link2 className="w-4 h-4" />
-              View Job Description
-            </button>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              {data.company_name && data.company_name !== "null" && (
+                <>
+                  <span>{data.company_name}</span>
+                  <span aria-hidden>·</span>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={handleOpenDescription}
+                className="inline-flex items-center gap-1.5 font-medium transition-colors hover:text-primary cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                View job description
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center self-start md:self-end">
+          <div className="flex items-center gap-2">
+            {/* Withheld while processing: the backend refuses to add to a run
+                in flight. */}
+            {!isActive && (
+              <Button onClick={() => setAddOpen(true)} className="gap-1.5 cursor-pointer">
+                <Plus className="w-4 h-4" />
+                Add candidates
+              </Button>
+            )}
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Evaluation actions"
-                  className="w-10 h-10 border-border text-muted-foreground hover:bg-muted cursor-pointer"
-                >
-                  <Ellipsis className="w-5 h-5" />
-                </Button>
-              </DropdownMenuTrigger>
+              {/* Open styling keys off aria-expanded, not data-state: the
+                  tooltip trigger also writes data-state onto this button. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Evaluation actions"
+                      className="text-muted-foreground cursor-pointer aria-expanded:bg-accent aria-expanded:text-accent-foreground dark:aria-expanded:bg-input/50"
+                    >
+                      <Ellipsis className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Actions</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end">
                 {!isActive && failedCount > 0 && (
                   <DropdownMenuItem onSelect={handleRetryAll} disabled={retryingAll}>
@@ -829,21 +867,23 @@ function RunDetailPageInner({
           </TabsList>
 
           <TabsContent value="screening" className="space-y-8">
-          <StatsSummary
-            candidateCount={data.total_count}
-            processingTimeSeconds={data.processing_time_seconds}
-            bestScore={bestScore}
-            topMatchCount={topMatchCount}
-            isProcessing={isActive}
-          />
-
-          {/* Progress Card */}
           {isActive && (
             <ProcessingProgress
               processed={data.processed_count}
               total={data.total_count}
               failed={failedCount}
               percent={progressPercent}
+            />
+          )}
+
+          {/* Withheld until something has scored: before then every stat but
+              the count is a dash, and the progress card already carries it. */}
+          {(!isActive || completedItems.length > 0) && (
+            <StatsSummary
+              candidateCount={data.total_count}
+              bestScore={bestScore}
+              topMatchCount={topMatchCount}
+              failedCount={failedCount}
             />
           )}
 
@@ -860,25 +900,23 @@ function RunDetailPageInner({
               isFiltered={isFiltered}
               shownCount={filteredItems.length}
               totalCount={sourceItems.length}
+              actions={
+                <ExpandAllToggle allExpanded={allExpanded} onToggle={handleExpandAll} />
+              }
             />
           )}
 
-          {(!isActive || completedItems.length > 0) && (
+          {/* Shown from the start of a run: the pending rows name each
+              resume being scored, so the wait has something to look at. */}
+          {(!isActive || data.items.length > 0) && (
             <>
-              {isActive && (
-                <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                  <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
-                  Results So Far
-                </div>
-              )}
-
               {!isActive && data.items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
                     <Users className="w-7 h-7 text-muted-foreground" />
                   </div>
                   <p className="text-foreground font-bold text-lg">No candidates yet</p>
-                  <p className="text-muted-foreground text-sm mt-1">Add resumes below to start evaluating candidates.</p>
+                  <p className="text-muted-foreground text-sm mt-1">Use Add candidates to upload resumes for this job.</p>
                 </div>
               ) : (
                 <ResultsTable
@@ -892,8 +930,6 @@ function RunDetailPageInner({
                   onRowClick={handleRowClick}
                   onToggleCompare={toggleCompare}
                   onViewResume={handleViewResume}
-                  allExpanded={allExpanded}
-                  onExpandAll={handleExpandAll}
                   isProcessing={isActive}
                   isFiltered={isFiltered}
                   showEmptyFilterRow={filteredItems.length === 0}
@@ -1010,76 +1046,6 @@ function RunDetailPageInner({
           </TabsContent>
         </Tabs>
 
-        <div className="space-y-8">
-          {/* Add more candidates */}
-          <div className="space-y-6 pt-2">
-            {!isActive && (
-              <div className="space-y-3">
-                {!addOpen ? (
-                  <button
-                    onClick={() => { setAddOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 text-base font-bold text-primary rounded-xl hover:bg-primary/10 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add More Candidates
-                  </button>
-                ) : (
-                  <Card className="p-6 border-zinc-200 rounded-2xl shadow-sm space-y-5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-primary text-base">Add More Candidates</h3>
-                      <button
-                        onClick={() => { setAddOpen(false); setAddFiles([]); setAddError(null); setAddFilesError(null); }}
-                        className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {addError && (
-                      <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-                        <X className="w-4 h-4 shrink-0 mt-0.5" />
-                        <p className="font-medium">{addError}</p>
-                      </div>
-                    )}
-
-                    <ResumeFileUpload
-                      files={addFiles}
-                      onChange={(f) => { setAddFiles(f); setAddFilesError(null); }}
-                      error={addFilesError}
-                    />
-
-                    <Button
-                      onClick={handleAddCandidates}
-                      disabled={addSubmitting || addFiles.length === 0}
-                      className="w-full h-12 font-bold rounded-xl cursor-pointer"
-                    >
-                      {addSubmitting ? (
-                        <span className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Uploading...
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          Evaluate {addFiles.length > 0 ? `${addFiles.length} ` : ""}Candidate{addFiles.length !== 1 ? "s" : ""}
-                          <Sparkles className="w-4 h-4" />
-                        </span>
-                      )}
-                    </Button>
-                  </Card>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-center pt-6 border-t border-border">
-              <Link href="/dashboard/new">
-                <Button variant="outline" className="gap-2 cursor-pointer">
-                  New evaluation
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-
         {/* Floating compare bar */}
         <CompareBar
           candidates={compareItems}
@@ -1088,7 +1054,7 @@ function RunDetailPageInner({
           onClear={() => setCompareItemIds(new Set())}
           onOpen={handleOpenCompare}
         />
-      </main>
+      </div>
 
       <CandidateCompareDialog
         open={isCompareOpen}
@@ -1108,6 +1074,58 @@ function RunDetailPageInner({
         error={descriptionError}
         onCopy={() => navigator.clipboard.writeText(jobDescription ?? "")}
       />
+
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          // Don't let a stray click drop an upload mid-flight.
+          if (addSubmitting) return;
+          setAddOpen(open);
+          if (!open) { setAddFiles([]); setAddError(null); setAddFilesError(null); }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add candidates</DialogTitle>
+            <DialogDescription>
+              New resumes are scored against this run&apos;s job description.
+            </DialogDescription>
+          </DialogHeader>
+
+          {addError && (
+            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+              <X className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="font-medium">{addError}</p>
+            </div>
+          )}
+
+          <ResumeFileUpload
+            files={addFiles}
+            onChange={(f) => { setAddFiles(f); setAddFilesError(null); }}
+            error={addFilesError}
+          />
+
+          <DialogFooter>
+            <Button
+              onClick={handleAddCandidates}
+              disabled={addSubmitting || addFiles.length === 0}
+              className="gap-2 cursor-pointer"
+            >
+              {addSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  Evaluate {addFiles.length > 0 ? `${addFiles.length} ` : ""}candidate{addFiles.length !== 1 ? "s" : ""}
+                  <Sparkles className="w-4 h-4" />
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
 

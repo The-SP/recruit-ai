@@ -286,14 +286,14 @@ export default function InterviewReviewPage({
   // exists, so there is nothing left to review.
   if (inviteUrl) {
     return (
-      <main className="px-6 py-10 max-w-3xl mx-auto min-h-[calc(100vh-80px)]">
+      <div className="max-w-3xl mx-auto">
         <ApprovedNotice
           inviteUrl={inviteUrl}
           copied={copied}
           backHref={backHref}
           onCopy={() => runAction(async () => copyInviteUrl(inviteUrl))}
         />
-      </main>
+      </div>
     );
   }
 

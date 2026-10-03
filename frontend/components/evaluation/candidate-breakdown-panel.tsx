@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Briefcase, Loader2, X, Zap } from "lucide-react";
+import { BookOpen, Briefcase, ChevronDown, Loader2, X, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { InterviewSection } from "@/components/evaluation/interview-section";
@@ -54,7 +54,7 @@ export function CandidateBreakdownPanel({
         isExpanded ? "max-h-[3000px] opacity-100" : "max-h-0 opacity-0"
       )}
     >
-      <div className="px-6 py-6 bg-muted/50 border-t border-border space-y-6 overflow-hidden w-full">
+      <div className="px-6 py-6 bg-muted/50 border-t border-b border-border space-y-6 overflow-hidden w-full">
         {breakdown === "loading" && (
           <div className="flex items-center gap-3 py-4 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -71,13 +71,12 @@ export function CandidateBreakdownPanel({
 
         {breakdown && breakdown !== "loading" && breakdown !== "error" && (
           <>
-            {breakdown.summary && (
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {breakdown.summary}
-              </p>
-            )}
+            {/* breakdown.summary is deliberately not rendered: it is a
+                templated restatement of the scores below, truncated rather
+                than rounded server-side, so it disagreed with the bars. */}
 
-            {/* Clickable score bars */}
+            {/* Score cards double as the section toggles; the chevron and
+                aria-expanded say so. */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {([
                 { key: "skills" as BreakdownSection, label: "Skills", value: breakdown.skill_score, icon: <Zap className="w-4 h-4" /> },
@@ -88,11 +87,13 @@ export function CandidateBreakdownPanel({
                 return (
                   <button
                     key={key}
+                    type="button"
                     onClick={() => handleBarClick(key)}
+                    aria-expanded={isActive}
                     className={cn(
                       "text-left rounded-xl p-3 space-y-1.5 border transition-all cursor-pointer select-none",
                       isActive
-                        ? "bg-card border-border shadow-sm"
+                        ? "bg-card border-foreground/30 shadow-sm"
                         : "bg-card/50 border-border/60 hover:border-border hover:bg-card hover:shadow-sm"
                     )}
                   >
@@ -101,33 +102,57 @@ export function CandidateBreakdownPanel({
                         {icon}
                         {label}
                       </span>
-                      <span className={isActive ? "text-foreground" : "text-muted-foreground"}>
+                      <span className={cn("flex items-center gap-1", isActive ? "text-foreground" : "text-muted-foreground")}>
                         {value != null ? `${Math.round(value * 100)}%` : "N/A"}
+                        <ChevronDown
+                          className={cn("w-3.5 h-3.5 transition-transform", isActive && "rotate-180")}
+                          aria-hidden
+                        />
                       </span>
                     </div>
+                    {/* Neutral track: the default primary-tinted one put a
+                        green wash behind amber and red bars. */}
                     <Progress
                       value={value != null ? Math.round(value * 100) : 0}
-                      className={cn("h-2", value != null && scoreBarColor(value))}
+                      className={cn("h-2 bg-muted", value != null && scoreBarColor(value))}
                     />
                   </button>
                 );
               })}
             </div>
 
+            {/* The two facts that explain the score, visible without opening
+                a section. A critical gap halves the skill score, so it leads. */}
+            {breakdown.skills &&
+              (breakdown.skills.critical_gaps.length > 0 ||
+                breakdown.skills.llm_response.strengths.length > 0) && (
+                <div className="space-y-1.5 text-sm">
+                  {breakdown.skills.critical_gaps.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium text-error-foreground">Critical gaps: </span>
+                      <span className="text-foreground">
+                        {breakdown.skills.critical_gaps.join(", ")}
+                      </span>
+                    </p>
+                  )}
+                  {breakdown.skills.llm_response.strengths.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium text-foreground">Strengths: </span>
+                      <span className="text-muted-foreground">
+                        {breakdown.skills.llm_response.strengths.join(", ")}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+
             {/* Skills section */}
             {activeSection === "skills" && breakdown.skills && (
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Zap className="w-3.5 h-3.5" />
-                  Skill Evaluation
+                  Skill evaluation
                 </h3>
-
-                {breakdown.skills.critical_gaps.length > 0 && (
-                  <div className="text-xs text-error-foreground bg-error border border-error-edge rounded-lg px-3 py-2">
-                    <span className="font-bold">Critical gaps: </span>
-                    {breakdown.skills.critical_gaps.join(", ")}
-                  </div>
-                )}
 
                 {SKILL_TIERS.map((tier) => {
                   const evsForTier = breakdown.skills!.llm_response.evaluations.filter(
@@ -137,7 +162,7 @@ export function CandidateBreakdownPanel({
                   const { label, headerClass } = tierSectionStyles[tier];
                   return (
                     <div key={tier} className="space-y-1.5">
-                      <p className={cn("text-[10px] font-bold uppercase tracking-widest", headerClass)}>
+                      <p className={cn("text-xs font-semibold", headerClass)}>
                         {label}
                       </p>
                       <div className="space-y-2">
@@ -170,23 +195,16 @@ export function CandidateBreakdownPanel({
                     </div>
                   );
                 })}
-
-                {breakdown.skills.llm_response.strengths.length > 0 && (
-                  <div className="text-xs text-success-foreground bg-success border border-success-edge rounded-lg px-3 py-2">
-                    <span className="font-bold">Strengths: </span>
-                    {breakdown.skills.llm_response.strengths.join(", ")}
-                  </div>
-                )}
               </div>
             )}
 
             {/* Experience section */}
             {activeSection === "experience" && breakdown.experience && (
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Briefcase className="w-3.5 h-3.5" />
-                  Experience Evaluation
-                  <span className="ml-auto text-muted-foreground normal-case font-medium">
+                  Experience evaluation
+                  <span className="ml-auto text-xs text-muted-foreground font-medium">
                     {breakdown.experience.effective_years.toFixed(1)} yrs effective
                     {" / "}
                     {breakdown.experience.required_years.toFixed(1)} yrs required
@@ -240,7 +258,7 @@ export function CandidateBreakdownPanel({
             {/* Education section */}
             {activeSection === "education" && breakdown.education && (
               <div className="space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <BookOpen className="w-3.5 h-3.5" />
                   Education
                 </h3>

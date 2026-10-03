@@ -93,7 +93,7 @@ export default function InterviewTemplatePage({
   };
 
   return (
-    <main className="px-6 py-10 max-w-3xl mx-auto min-h-[calc(100vh-80px)]">
+    <div className="max-w-3xl mx-auto">
       <div className="pb-6 border-b border-border space-y-4">
         <Link
           href={`/evaluation/${runId}?tab=interviews`}
@@ -146,6 +146,6 @@ export default function InterviewTemplatePage({
           </p>
         )}
       </div>
-    </main>
+    </div>
   );
 }

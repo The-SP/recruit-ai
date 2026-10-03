@@ -12,10 +12,12 @@ Loaded alongside the root `CLAUDE.md` when working in `frontend/`. These are dec
 - **Colour carries meaning, not decoration:**
   - green (`primary`) is the page's primary action;
   - red (`destructive`, a true red) means something broke;
-  - amber means it is waiting on the user.
+  - amber means it is waiting on the user;
+  - active/selected states (open menu, expanded row, "best" value) are neutral: `text-foreground` on `bg-muted`, not green.
 
 ## Layout patterns
 
+- **Page wrapper:** `components/dashboard-layout.tsx` already renders the `<main>` and its padding (`p-4 md:p-6`). A page under `app/(dashboard)/` starts with a plain `<div className="max-w-… mx-auto">`: no `<main>` of its own and no `px-*`/`py-*`, or the padding doubles and the title sits far below the top bar. Pages outside the group (`/demo`, `/evaluation?token=`, `/interview`) have no layout padding and keep their own.
 - **Page header:** title + subtitle on the left, primary CTA top-right, no icon tile. Hide the header CTA when an empty state on the page carries its own (see the dashboard's onboarding and `/history`'s empty state).
 - **Breadcrumbs** live in the top bar (`components/dashboard-breadcrumbs.tsx`). A new page under `app/(dashboard)/` must be added to `buildCrumbs`, and a page with a dynamic id must call `useBreadcrumbLabel(id, label)` once it has fetched the name; otherwise the trail is blank or falls back to "Evaluation"/"Candidate". On phones the trail collapses to a back link to the parent.
 - **Clickable table rows** use a real link stretched over the row (`after:absolute after:inset-0` on the link, `relative` on the row), never `onClick` on `<tr>`, so cmd/middle-click, the status-bar URL and keyboard focus keep working. Any other control in the row needs `relative z-10` to sit above the overlay.
@@ -29,6 +31,8 @@ Reuse these rather than rebuilding them per page:
 - `components/dashboard-onboarding.tsx` copies its step markup from `components/how-it-works.tsx`; change both together.
 - `components/submit-form.tsx` (`/demo`) mirrors the new-evaluation wizard's field markup, input sizes and "Start evaluation" button; change both together.
 - shadcn `Card` already puts `gap-6` between its children, so `space-y-*` on a card stacks with it and doubles the spacing. Set `gap-*` on the card instead.
+- shadcn `Progress` has a `bg-primary/20` track; add `bg-muted` when the bar colour varies, or amber/red bars sit on a green wash.
+- When a `Tooltip` wraps a Radix trigger, style open state with `aria-expanded:`, not `data-[state=open]:`: both write `data-state` and the tooltip's can win.
 
 ## Debugging
 

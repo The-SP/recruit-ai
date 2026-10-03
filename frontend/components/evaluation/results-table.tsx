@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ArrowDown, ArrowUp, ChevronDown, ChevronUp, FileText, Loader2, Trash2,
+  ArrowDown, ArrowUp, ChevronDown, Columns2, FileText, Loader2, Trash2,
 } from "lucide-react";
 import React from "react";
 
@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { scoreBarColor, signalLabels, signalStyles } from "@/lib/evaluation-styles";
 import { MAX_COMPARE, type EvaluationItem, type SortBy } from "@/lib/evaluation-types";
@@ -31,8 +32,6 @@ interface ResultsTableProps<T extends EvaluationItem> {
   onRowClick: (item: T) => void;
   onToggleCompare: (id: string) => void;
   onViewResume: (e: React.MouseEvent, item: T) => void;
-  onExpandAll: () => void;
-  allExpanded: boolean;
   isProcessing: boolean;
   isFiltered: boolean;
   onClearFilters: () => void;
@@ -74,8 +73,6 @@ export function ResultsTable<T extends EvaluationItem>({
   onRowClick,
   onToggleCompare,
   onViewResume,
-  onExpandAll,
-  allExpanded,
   isProcessing,
   isFiltered,
   onClearFilters,
@@ -97,9 +94,19 @@ export function ResultsTable<T extends EvaluationItem>({
         <TableHeader>
           <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
             <TableHead className="w-12 text-center">
-              <span className="sr-only">Select for comparison</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex align-middle cursor-default">
+                    <Columns2 className="w-4 h-4" aria-hidden />
+                    <span className="sr-only">Select for comparison</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Select up to {MAX_COMPARE} candidates to compare</p>
+                </TooltipContent>
+              </Tooltip>
             </TableHead>
-            <TableHead className="w-20 text-center">Rank</TableHead>
+            <TableHead className="w-14 text-center">Rank</TableHead>
             <TableHead>
               <button
                 onClick={onSort}
@@ -116,14 +123,9 @@ export function ResultsTable<T extends EvaluationItem>({
                 <ArrowDown className={cn("w-3 h-3", sortBy === "score_desc" ? "text-primary" : "text-transparent")} />
               </span>
             </TableHead>
-            <TableHead className="w-40 text-center">Hire Signal</TableHead>
+            <TableHead className="w-40 text-center">Hire signal</TableHead>
             <TableHead className="w-24 text-right pr-4">
-              <button
-                onClick={onExpandAll}
-                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                {allExpanded ? "Collapse all" : "Expand all"}
-              </button>
+              <span className="sr-only">Actions</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -159,8 +161,7 @@ export function ResultsTable<T extends EvaluationItem>({
                   onClick={() => !isFailed && onRowClick(item)}
                   className={cn(
                     "select-none",
-                    isFailed ? "opacity-60" : "cursor-pointer",
-                    isExpanded && "bg-muted/50"
+                    isFailed ? "opacity-60" : "cursor-pointer"
                   )}
                 >
                   <TableCell
@@ -245,9 +246,27 @@ export function ResultsTable<T extends EvaluationItem>({
                       {rowAction != null
                         ? rowAction
                         : (!isFailed && item.candidate_id && (
-                            isExpanded
-                              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                              : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            // The real disclosure control: the row's onClick
+                            // is a mouse shortcut and can't take focus.
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRowClick(item);
+                              }}
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? "Hide" : "Show"} details for ${item.candidate_name ?? item.filename}`}
+                              className={cn(
+                                "p-1.5 rounded-lg transition-colors cursor-pointer hover:text-foreground hover:bg-muted",
+                                // Expanded reads as "on": full-strength icon on a
+                                // filled chip. Not green, which is for primary actions.
+                                isExpanded ? "text-foreground bg-muted" : "text-muted-foreground"
+                              )}
+                            >
+                              <ChevronDown
+                                className={cn("w-4 h-4 transition-transform", isExpanded && "rotate-180")}
+                              />
+                            </button>
                           ))}
                     </div>
                   </TableCell>
@@ -284,33 +303,68 @@ export function ResultsTable<T extends EvaluationItem>({
             );
           })}
 
-          {/* Skeleton rows for candidates still being processed */}
-          {isProcessing && pendingItems.map((item, i) => (
-            <TableRow key={`pending-${item.filename}-${i}`} className="opacity-50">
-              <TableCell />
-              <TableCell className="text-center">
-                <div className="h-4 w-4 rounded bg-muted animate-pulse mx-auto" />
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 text-muted-foreground/40 animate-spin shrink-0" />
-                  <div className="space-y-1.5">
-                    <div className="h-3.5 w-40 rounded bg-muted animate-pulse" />
-                    <div className="h-2.5 w-28 rounded bg-muted/50 animate-pulse" />
+          {/* Rows for candidates still being processed. The filename is
+              known up front, so name the resume rather than draw a bar. An
+              unscored row can also be one that already failed: say so instead
+              of claiming it is still scoring. */}
+          {isProcessing && pendingItems.map((item, i) => {
+            const isFailed = item.status === "failed";
+            return (
+              <TableRow key={`pending-${item.filename}-${i}`} className="hover:bg-transparent">
+                <TableCell />
+                <TableCell />
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    {isFailed ? (
+                      <FileText className="w-5 h-5 text-error-border shrink-0" />
+                    ) : (
+                      <Loader2 className="w-5 h-5 text-muted-foreground animate-spin shrink-0" />
+                    )}
+                    <div>
+                      <span className="font-medium text-muted-foreground">{item.filename}</span>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          isFailed ? "text-error-foreground font-medium" : "text-muted-foreground"
+                        )}
+                      >
+                        {isFailed ? "Evaluation failed" : "Scoring…"}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell className="text-center">
-                <div className="h-3.5 w-10 rounded bg-muted animate-pulse mx-auto" />
-              </TableCell>
-              <TableCell className="text-center">
-                <div className="h-6 w-24 rounded-full bg-muted/50 animate-pulse mx-auto" />
-              </TableCell>
-              <TableCell />
-            </TableRow>
-          ))}
+                </TableCell>
+                <TableCell className="text-center">
+                  {!isFailed && <div className="h-3.5 w-10 rounded bg-muted animate-pulse mx-auto" />}
+                </TableCell>
+                <TableCell className="text-center">
+                  {!isFailed && <div className="h-6 w-24 rounded-full bg-muted animate-pulse mx-auto" />}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+/** The table's expand/collapse-all toggle. Lives in the filter row rather than
+ *  a header cell, where it read as a column label. */
+export function ExpandAllToggle({
+  allExpanded,
+  onToggle,
+}: {
+  allExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+    >
+      {allExpanded ? "Collapse all" : "Expand all"}
+    </button>
   );
 }

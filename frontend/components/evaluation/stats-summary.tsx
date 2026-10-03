@@ -1,46 +1,59 @@
 "use client";
 
-import { CheckCircle, Clock, Sparkles, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle, Sparkles, Users } from "lucide-react";
 
-import { countOrDash, StatTile } from "@/components/evaluation/stat-tile";
+import { countOrDash, StatCell, StatStrip } from "@/components/stat-strip";
+import { cn } from "@/lib/utils";
 
 export function StatsSummary({
   candidateCount,
-  processingTimeSeconds,
   bestScore,
   topMatchCount,
-  isProcessing,
+  failedCount,
+  className,
 }: {
   candidateCount: number;
-  processingTimeSeconds: number | null;
   bestScore: number | null;
   topMatchCount: number;
-  isProcessing: boolean;
+  failedCount: number;
+  // Spacing is the caller's: the owned page stacks this in a space-y parent,
+  // the anonymous page doesn't.
+  className?: string;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-      <StatTile icon={Users} iconClassName="text-primary" label="Candidates">
-        {candidateCount}
-      </StatTile>
-      {!isProcessing && (
-        <StatTile icon={Clock} iconClassName="text-amber-500" label="Proc. Time">
-          {processingTimeSeconds ? Math.round(processingTimeSeconds) : "—"}
-          <span className="text-xs font-bold text-muted-foreground ml-1 uppercase">
-            s
-          </span>
-        </StatTile>
+    // Literal classes for both layouts so Tailwind can see them.
+    <StatStrip
+      className={cn(
+        failedCount > 0 ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3",
+        className
       )}
-      <StatTile icon={Sparkles} iconClassName="text-emerald-500" label="Best Score">
-        {bestScore != null ? `${bestScore}%` : "—"}
-      </StatTile>
-      <StatTile
+    >
+      <StatCell icon={Users} label="Candidates" value={candidateCount} loading={false} />
+      <StatCell
+        icon={Sparkles}
+        label="Best score"
+        value={bestScore != null ? `${bestScore}%` : "—"}
+        loading={false}
+      />
+      <StatCell
         icon={CheckCircle}
-        iconClassName="text-blue-500"
-        label="Top Matches"
-        tooltip="Candidates with a Strong Match or Good Match hire signal (≥ 70%)"
-      >
-        {countOrDash(topMatchCount)}
-      </StatTile>
-    </div>
+        label="Top matches"
+        value={countOrDash(topMatchCount)}
+        tooltip="Candidates rated Strong or Good match (70% or above)"
+        loading={false}
+      />
+      {/* Replaces processing time: a failed resume is something the recruiter
+          can act on (retry it), a duration is not. Hidden at zero, like the
+          header's "N failed" badge. */}
+      {failedCount > 0 && (
+        <StatCell
+          icon={AlertTriangle}
+          label="Failed"
+          value={failedCount}
+          tone="warn"
+          loading={false}
+        />
+      )}
+    </StatStrip>
   );
 }
