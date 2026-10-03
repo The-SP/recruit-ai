@@ -152,11 +152,11 @@ export default function AdminRunsPage() {
           <p className="text-sm text-muted-foreground">
             Showing {items.length} of {total}
           </p>
-          <Card className="overflow-hidden">
+          <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                     <TableHead>Date</TableHead>
                     <TableHead>Job Title</TableHead>
                     <TableHead>Submitted By</TableHead>
@@ -166,7 +166,7 @@ export default function AdminRunsPage() {
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="[&_tr]:border-foreground/10 [&_td]:py-3">
                   {items.map((run) => (
                     <TableRow key={run.id}>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -228,7 +228,7 @@ export default function AdminRunsPage() {
                 </TableBody>
               </Table>
             </div>
-          </Card>
+          </div>
         </>
       )}
     </div>

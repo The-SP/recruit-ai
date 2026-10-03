@@ -40,11 +40,13 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  hint,
   loading,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
+  hint?: string;
   loading: boolean;
 }) {
   return (
@@ -61,7 +63,10 @@ function StatCard({
         {loading ? (
           <Skeleton className="h-8 w-20" />
         ) : (
-          <p className="text-3xl font-bold">{value}</p>
+          <>
+            <p className="text-3xl font-bold whitespace-nowrap">{value}</p>
+            {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+          </>
         )}
       </CardContent>
     </Card>
@@ -133,15 +138,17 @@ export default function DashboardPage() {
           icon={Clock}
           label="Last Active"
           value={
-            stats
-              ? stats.last_active != null
-                ? new Date(stats.last_active).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-                : "—"
+            stats?.last_active != null
+              ? new Date(stats.last_active).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
               : "—"
+          }
+          hint={
+            stats?.last_active != null
+              ? String(new Date(stats.last_active).getFullYear())
+              : undefined
           }
           loading={statsLoading}
         />
@@ -182,10 +189,10 @@ export default function DashboardPage() {
             </Button>
           </Card>
         ) : (
-          <Card className="overflow-hidden">
-            <Table>
+          <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
+            <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                   <TableHead>Date</TableHead>
                   <TableHead>Job Title</TableHead>
                   <TableHead>Company</TableHead>
@@ -194,7 +201,7 @@ export default function DashboardPage() {
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="[&_tr]:border-foreground/10 [&_td]:py-3">
                 {runs.map((run) => (
                   <TableRow key={run.id}>
                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -249,7 +256,7 @@ export default function DashboardPage() {
                 ))}
               </TableBody>
             </Table>
-          </Card>
+          </div>
         )}
 
         {runs.length > 0 && (

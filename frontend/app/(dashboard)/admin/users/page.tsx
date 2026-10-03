@@ -123,11 +123,11 @@ export default function AdminUsersPage() {
           <p className="text-sm text-muted-foreground">
             Showing {users.length} of {userTotal}
           </p>
-          <Card className="overflow-hidden">
+          <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                     <TableHead>User</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead className="text-center">Runs</TableHead>
@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
                     <TableHead>Flags</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="[&_tr]:border-foreground/10 [&_td]:py-3">
                   {users.map((u) => (
                     <TableRow key={u.id}>
                       <TableCell>
@@ -187,7 +187,7 @@ export default function AdminUsersPage() {
                 </TableBody>
               </Table>
             </div>
-          </Card>
+          </div>
         </>
       )}
     </div>

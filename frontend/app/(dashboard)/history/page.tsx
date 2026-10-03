@@ -92,10 +92,10 @@ export default function HistoryPage() {
       )}
 
       {!loading && !error && items.length > 0 && (
-        <Card className="overflow-hidden">
-          <Table>
+        <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
+          <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                 <TableHead>Date</TableHead>
                 <TableHead>Job Title</TableHead>
                 <TableHead>Company</TableHead>
@@ -105,7 +105,7 @@ export default function HistoryPage() {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="[&_tr]:border-foreground/10 [&_td]:py-3">
               {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -165,7 +165,7 @@ export default function HistoryPage() {
               ))}
             </TableBody>
           </Table>
-        </Card>
+        </div>
       )}
 
       <ConfirmDeleteDialog
