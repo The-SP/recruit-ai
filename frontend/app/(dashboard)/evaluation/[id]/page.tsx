@@ -192,27 +192,36 @@ function RunDetailPageInner({
   const requestedBreakdowns = useRef<Set<string>>(new Set());
   const requestedInterviews = useRef<Set<string>>(new Set());
 
-  const fetchData = useCallback(
-    async (silent = false) => {
-      if (!silent) setLoading(true);
-      else setRefreshing(true);
-      try {
-        const run = await getEvaluationRun(runId);
-        setData(run);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Failed to load run.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
+  // `loading` starts true, so the mount fetch has nothing to set before the
+  // request; only refreshes flag themselves up front.
+  const loadRun = useCallback(
+    () =>
+      getEvaluationRun(runId)
+        .then((run) => {
+          setData(run);
+          setError(null);
+        })
+        .catch((err) => {
+          setError(err instanceof ApiError ? err.message : "Failed to load run.");
+        })
+        .finally(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }),
     [runId]
   );
 
+  const fetchData = useCallback(
+    async (silent = false) => {
+      if (silent) setRefreshing(true);
+      return loadRun();
+    },
+    [loadRun]
+  );
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    loadRun();
+  }, [loadRun]);
 
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current);

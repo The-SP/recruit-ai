@@ -48,7 +48,7 @@ function InterviewPageInner() {
   const token = searchParams.get("token");
 
   const [state, setState] = useState<InterviewState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!!token);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -73,31 +73,27 @@ function InterviewPageInner() {
   // stream error. SSE events only advance live state between fetches.
   const fetchState = useCallback(async () => {
     if (!token) return;
-    try {
-      const s = await getInterviewState(token);
-      setState(s);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(
-          err.status === 404
-            ? "This interview link is invalid or no longer exists."
-            : err.message
-        );
-      } else {
-        setError("Something went wrong. Please refresh the page.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    return getInterviewState(token)
+      .then((s) => {
+        setState(s);
+        setError(null);
+      })
+      .catch((err) => {
+        if (err instanceof ApiError) {
+          setError(
+            err.status === 404
+              ? "This interview link is invalid or no longer exists."
+              : err.message
+          );
+        } else {
+          setError("Something went wrong. Please refresh the page.");
+        }
+      })
+      .finally(() => setIsLoading(false));
   }, [token]);
 
   useEffect(() => {
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
-    fetchState();
+    if (token) fetchState();
   }, [token, fetchState]);
 
   const handleStart = async () => {

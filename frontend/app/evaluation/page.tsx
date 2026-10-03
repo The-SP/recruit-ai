@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { CandidateCompareDialog } from '@/components/candidate-compare-dialog';
 import { CompareBar } from '@/components/evaluation/compare-bar';
@@ -160,7 +160,7 @@ function EvaluationPageInner() {
 
   const [tokenInput, setTokenInput] = useState("");
   const [data, setData] = useState<BatchStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!token);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -180,26 +180,55 @@ function EvaluationPageInner() {
   const [descriptionLoading, setDescriptionLoading] = useState(false);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
 
-  const fetchStatus = async (t: string, isRefresh = false) => {
-    if (isRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
+  // Adjust state during render rather than in an effect, so nothing paints
+  // with stale values first. A new token (submitted from the token form, so
+  // the page stays mounted) means a fresh initial load; a new run resets the
+  // table controls.
+  const [prevToken, setPrevToken] = useState(token);
+  if (token !== prevToken) {
+    setPrevToken(token);
+    setIsLoading(!!token);
+  }
 
-    try {
-      const data = await getBatchStatus(t);
-      setData(data);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.status === 404 ? 'Invalid or expired token' : err.message);
-      }
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
+  const runId = data?.run_id;
+  const [prevRunId, setPrevRunId] = useState(runId);
+  if (runId !== prevRunId) {
+    setPrevRunId(runId);
+    setSearchQuery("");
+    setFilterSignal("all");
+    setSortBy("score_desc");
+    setCompareIds(new Set());
+    setIsCompareOpen(false);
+  }
+
+  // Initial loads are flagged by `isLoading` starting true (above); the
+  // other non-refresh callers already have data, where `isLoading` is unused.
+  const loadStatus = useCallback(
+    (t: string) =>
+      getBatchStatus(t)
+        .then((data) => {
+          setData(data);
+          setError(null);
+        })
+        .catch((err) => {
+          if (err instanceof ApiError) {
+            setError(err.status === 404 ? 'Invalid or expired token' : err.message);
+          }
+        })
+        .finally(() => {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }),
+    []
+  );
+
+  const fetchStatus = useCallback(
+    async (t: string, isRefresh = false) => {
+      if (isRefresh) setIsRefreshing(true);
+      return loadStatus(t);
+    },
+    [loadStatus]
+  );
 
   useEffect(() => {
     // In demo mode there is only one saved evaluation, so a missing token
@@ -208,8 +237,8 @@ function EvaluationPageInner() {
       if (IS_DEMO_MODE) router.replace(`/evaluation?token=${DEMO_TOKEN}`);
       return;
     }
-    fetchStatus(token);
-  }, [token, router]);
+    loadStatus(token);
+  }, [token, router, loadStatus]);
 
   const isProcessing = data?.status === "processing" || data?.status === "pending";
 
@@ -218,16 +247,7 @@ function EvaluationPageInner() {
     if (!token || !isProcessing) return;
     const interval = setInterval(() => fetchStatus(token, true), 10000);
     return () => clearInterval(interval);
-  }, [token, isProcessing]);
-
-  // Reset controls when a new batch is loaded
-  useEffect(() => {
-    setSearchQuery("");
-    setFilterSignal("all");
-    setSortBy("score_desc");
-    setCompareIds(new Set());
-    setIsCompareOpen(false);
-  }, [data?.run_id]);
+  }, [token, isProcessing, fetchStatus]);
 
   const handleRefresh = () => {
     if (token) fetchStatus(token, true);

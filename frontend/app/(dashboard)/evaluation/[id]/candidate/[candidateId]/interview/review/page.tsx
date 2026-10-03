@@ -114,24 +114,26 @@ export default function InterviewReviewPage({
    * questions" calls the model. Revisiting a draft that already exists lands
    * straight on step 2.
    */
-  const loadExisting = useCallback(async () => {
-    setLocalError(null);
-    try {
-      const existing = await getRunCandidateInterview(runId, candidateId);
-      if (existing) {
-        setInterview(existing);
-        setScript(scriptFrom(existing));
-        if (existing.invite_url) setInviteUrl(existing.invite_url);
-      }
-    } catch (err) {
-      setLocalError(
-        err instanceof Error ? err.message : "Could not load the interview."
-      );
-    }
-  }, [runId, candidateId]);
+  const loadExisting = useCallback(
+    () =>
+      getRunCandidateInterview(runId, candidateId)
+        .then((existing) => {
+          setLocalError(null);
+          if (existing) {
+            setInterview(existing);
+            setScript(scriptFrom(existing));
+            if (existing.invite_url) setInviteUrl(existing.invite_url);
+          }
+        })
+        .catch((err) => {
+          setLocalError(
+            err instanceof Error ? err.message : "Could not load the interview."
+          );
+        }),
+    [runId, candidateId]
+  );
 
   useEffect(() => {
-    // Legitimate fetch-on-mount/param-change; not a derived-state sync.
     loadExisting();
   }, [loadExisting]);
 
