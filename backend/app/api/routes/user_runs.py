@@ -142,11 +142,15 @@ async def create_evaluation_run(
     job_title = job_title.strip()
     company_name = company_name.strip() if company_name else None
     if not job_title:
-        raise ValidationError("Job title is required")
+        raise ValidationError("Job title is required", field="job_title")
     if len(job_title) > 255:
-        raise ValidationError("Job title must be 255 characters or fewer")
+        raise ValidationError(
+            "Job title must be 255 characters or fewer", field="job_title"
+        )
     if company_name and len(company_name) > 255:
-        raise ValidationError("Company name must be 255 characters or fewer")
+        raise ValidationError(
+            "Company name must be 255 characters or fewer", field="company_name"
+        )
 
     # Signed-in runs have no resume cap (that is the point of an account), so
     # the hourly unit budget is the only thing bounding this endpoint. Charged
@@ -156,7 +160,8 @@ async def create_evaluation_run(
     jd = parse_job_description(job_text)
     if not jd.is_job_description:
         raise ValidationError(
-            f"Invalid job description. Detected: {jd.document_type or 'unknown document type'}"
+            f"Invalid job description. Detected: {jd.document_type or 'unknown document type'}",
+            field="job_text",
         )
 
     job_repo = JobRepository(db)

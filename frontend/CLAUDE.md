@@ -27,6 +27,8 @@ Reuse these rather than rebuilding them per page:
 - `components/runs-table.tsx`: the owned-runs table on the dashboard and `/history`.
 - `components/stat-strip.tsx`: `StatStrip` / `StatCell` on the dashboard and `/admin`. Pass grid columns as full literal classes (`"sm:grid-cols-2 xl:grid-cols-4"`) so Tailwind can see them.
 - `components/dashboard-onboarding.tsx` copies its step markup from `components/how-it-works.tsx`; change both together.
+- `components/submit-form.tsx` (`/demo`) mirrors the new-evaluation wizard's field markup, input sizes and "Start evaluation" button; change both together.
+- shadcn `Card` already puts `gap-6` between its children, so `space-y-*` on a card stacks with it and doubles the spacing. Set `gap-*` on the card instead.
 
 ## Debugging
 

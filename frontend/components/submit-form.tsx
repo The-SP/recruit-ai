@@ -80,8 +80,8 @@ export function SubmitForm() {
   };
 
   return (
-    <Card className="max-w-3xl mx-auto p-0 shadow-2xl border-border overflow-hidden rounded-3xl">
-      <div className="bg-primary px-8 py-8 text-primary-foreground flex items-center justify-between relative overflow-hidden">
+    <Card className="max-w-3xl mx-auto p-0 gap-0 shadow-2xl border-border overflow-hidden rounded-3xl">
+      <div className="bg-primary px-6 py-6 sm:px-8 sm:py-8 text-primary-foreground flex items-center justify-between relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl" />
         <div className="relative z-10">
           <h2 className="text-2xl font-black flex items-center gap-3 tracking-tight">
@@ -92,7 +92,7 @@ export function SubmitForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-10">
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-8">
         {IS_DEMO_MODE && <DemoBanner variant="submit" />}
 
         {/* Stated up front rather than on rejection: people shouldn't discover
@@ -119,48 +119,46 @@ export function SubmitForm() {
           </div>
         )}
 
-        <div className="space-y-10">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-4">
-              <Label htmlFor="job-title" className="text-sm font-bold text-foreground ml-1">
-                Job Title <span className="text-destructive">*</span>
-              </Label>
+        <div className="space-y-8">
+          <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="job-title">Job title</Label>
               <Input
+                className="h-12 px-4 md:text-base"
                 id="job-title"
                 placeholder="e.g. Senior Software Engineer"
                 required
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
               />
             </div>
-            <div className="space-y-4">
-              <Label htmlFor="company-name" className="text-sm font-bold text-foreground ml-1">
-                Company Name
+            <div className="space-y-2">
+              <Label htmlFor="company-name">
+                Company name
+                <span className="font-normal text-muted-foreground">(optional)</span>
               </Label>
               <Input
+                className="h-12 px-4 md:text-base"
                 id="company-name"
                 placeholder="e.g. Acme Inc."
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                className="h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
               />
             </div>
           </div>
 
-          <div className="space-y-4">
-            <Label htmlFor="job-description" className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
-              <Briefcase className="w-4 h-4 text-primary" />
-              Job Description <span className="text-destructive">*</span>
+          <div className="space-y-2">
+            <Label htmlFor="job-description">
+              <Briefcase className="w-4 h-4 text-muted-foreground" />
+              Job description
             </Label>
             <Textarea
               id="job-description"
-              placeholder="Paste the job description or requirements here..."
-              rows={8}
+              placeholder="Paste the full job description here: requirements, responsibilities, qualifications…"
+              className="min-h-48 max-h-80 overflow-y-auto resize-none px-4 py-3 md:text-base"
               required
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              className="resize-none border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 p-4 text-base transition-all"
             />
           </div>
 
@@ -170,10 +168,12 @@ export function SubmitForm() {
             error={filesError}
           />
 
-          <div className="space-y-4 pt-2">
-            <Label htmlFor="email" className="text-sm font-bold text-foreground flex items-center gap-2.5 ml-1">
-              <Mail className="w-4 h-4 text-primary" />
-              Notification Email <span className="text-destructive">*</span>
+          {/* The one field the wizard doesn't have: anonymous runs have no
+              account to notify, so the results link goes to this address. */}
+          <div className="space-y-2">
+            <Label htmlFor="email">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              Notification email
             </Label>
             <div className="relative">
               <Input
@@ -183,35 +183,36 @@ export function SubmitForm() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-5 h-14 border-border focus:ring-primary focus:border-primary rounded-2xl bg-muted/30 text-base"
+                className="h-12 px-4 md:text-base pr-11"
               />
-              <div className="absolute right-5 top-1/2 -translate-y-1/2">
-                <CheckCircle2 className={`w-6 h-6 transition-all duration-300 ${email.includes('@') && email.includes('.') ? "text-emerald-500 scale-100 opacity-100" : "scale-50 opacity-0"}`} />
-              </div>
+              <CheckCircle2
+                className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary transition-opacity duration-300 ${email.includes("@") && email.includes(".") ? "opacity-100" : "opacity-0"}`}
+              />
             </div>
-            <p className="text-xs text-muted-foreground font-semibold ml-1.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-              We&apos;ll notify you here as soon as the results are ready.
+            <p className="text-sm text-muted-foreground">
+              We&apos;ll email you a link as soon as the results are ready.
             </p>
           </div>
         </div>
 
-        <div className="pt-6">
+        {/* Same button as the signed-in wizard's final step. */}
+        <div className="flex justify-end">
           <Button
             type="submit"
-            className="group relative w-full h-16 text-lg font-black bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 cursor-pointer"
+            size="lg"
             disabled={isSubmitting}
+            className="group w-full sm:w-auto gap-2 h-11 px-6 has-[>svg]:px-6 text-base font-semibold shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-shadow"
           >
             {isSubmitting ? (
-              <div className="flex items-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span>Processing Resumes...</span>
-              </div>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Starting…
+              </>
             ) : (
-              <div className="flex items-center justify-center gap-3 w-full">
-                <span>Submit for Evaluation</span>
-                <Sparkles className="w-6 h-6 group-hover:rotate-12 transition-transform duration-300" />
-              </div>
+              <>
+                Start evaluation
+                <Sparkles className="w-4 h-4 motion-safe:group-hover:rotate-12 transition-[rotate] duration-300" />
+              </>
             )}
           </Button>
         </div>

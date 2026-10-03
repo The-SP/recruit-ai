@@ -17,10 +17,15 @@ class NotFoundError(Exception):
 
 
 class ValidationError(Exception):
-    """Raised when input validation fails."""
+    """Raised when input validation fails.
 
-    def __init__(self, message: str):
+    `field` names the form field at fault, when there is one, so a client can
+    put the message next to that field instead of matching on its wording.
+    """
+
+    def __init__(self, message: str, field: str | None = None):
         self.message = message
+        self.field = field
         super().__init__(self.message)
 
 
@@ -76,7 +81,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def validation_error_handler(
         request: Request, exc: ValidationError
     ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": exc.message})
+        content: dict[str, str] = {"detail": exc.message}
+        if exc.field:
+            content["field"] = exc.field
+        return JSONResponse(status_code=400, content=content)
 
     @app.exception_handler(ConflictError)
     async def conflict_error_handler(

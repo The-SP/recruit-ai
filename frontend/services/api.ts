@@ -9,7 +9,10 @@ export class ApiError extends Error {
     /** Seconds to wait before retrying, from a 429. The backend sends this in
      * the body as well as the Retry-After header because CORS hides response
      * headers by default. Undefined for every other status. */
-    public retryAfter?: number
+    public retryAfter?: number,
+    /** The form field a 400 is about (e.g. "job_text"), when the backend names
+     * one, so a form can show the message next to that field. */
+    public field?: string
   ) {
     super(message);
     this.name = "ApiError";
@@ -36,9 +39,10 @@ export function authHeaders(): Record<string, string> {
  * fields come out of a single read. */
 export async function errorDetails(
   res: Response
-): Promise<{ message: string; retryAfter?: number }> {
+): Promise<{ message: string; retryAfter?: number; field?: string }> {
   let message = `Request failed with status ${res.status}`;
   let retryAfter: number | undefined;
+  let field: string | undefined;
 
   try {
     const data = await res.json();
@@ -51,6 +55,9 @@ export async function errorDetails(
     if (typeof data.retry_after === "number") {
       retryAfter = data.retry_after;
     }
+    if (typeof data.field === "string") {
+      field = data.field;
+    }
   } catch {
     // Response body is not JSON, use default message
   }
@@ -61,7 +68,7 @@ export async function errorDetails(
     if (Number.isFinite(header) && header > 0) retryAfter = header;
   }
 
-  return { message, retryAfter };
+  return { message, retryAfter, field };
 }
 
 export async function apiRequest<T>(
@@ -115,8 +122,8 @@ export async function apiFetch(
   }
 
   if (!res.ok) {
-    const { message, retryAfter } = await errorDetails(res);
-    throw new ApiError(message, res.status, retryAfter);
+    const { message, retryAfter, field } = await errorDetails(res);
+    throw new ApiError(message, res.status, retryAfter, field);
   }
 
   return res;

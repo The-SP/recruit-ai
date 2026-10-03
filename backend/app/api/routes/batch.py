@@ -117,7 +117,8 @@ async def submit_batch(
     jd = parse_job_description(job_text)
     if not jd.is_job_description:
         raise ValidationError(
-            f"Invalid job description. Detected: {jd.document_type or 'unknown document type'}"
+            f"Invalid job description. Detected: {jd.document_type or 'unknown document type'}",
+            field="job_text",
         )
 
     # Create job record
