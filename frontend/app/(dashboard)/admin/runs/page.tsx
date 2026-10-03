@@ -95,7 +95,7 @@ export default function AdminRunsPage() {
             <Layers className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">All Runs</h1>
+            <h1 className="text-2xl font-bold">All runs</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               Every evaluation run across all accounts, newest first.
             </p>

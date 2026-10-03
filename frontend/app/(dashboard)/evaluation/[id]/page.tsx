@@ -1071,7 +1071,7 @@ function RunDetailPageInner({
             <div className="flex justify-center pt-6 border-t border-border">
               <Link href="/dashboard/new">
                 <Button variant="outline" className="gap-2 cursor-pointer">
-                  New Evaluation
+                  New evaluation
                 </Button>
               </Link>
             </div>

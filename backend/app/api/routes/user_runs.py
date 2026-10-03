@@ -32,6 +32,8 @@ from app.api.schemas.public import (
     RetryFailedResponse,
 )
 from app.api.schemas.runs import (
+    AttentionItem,
+    DashboardAttentionResponse,
     DashboardStatsResponse,
     EvaluationRunDetail,
     EvaluationRunListResponse,
@@ -887,4 +889,25 @@ def get_dashboard_stats(
             current_user.id
         ),
         last_active=run_repo.last_active_by_user(current_user.id),
+    )
+
+
+@dashboard_router.get("/attention", response_model=DashboardAttentionResponse)
+def get_dashboard_attention(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> DashboardAttentionResponse:
+    """Return per-run items that need the current user's action."""
+    rows = EvaluationRunRepository(db).attention_by_user(current_user.id)
+    return DashboardAttentionResponse(
+        items=[
+            AttentionItem(
+                run_id=row.run_id,
+                job_title=row.job_title,
+                company_name=row.company_name,
+                kind=row.kind,
+                count=row.total,
+            )
+            for row in rows
+        ]
     )

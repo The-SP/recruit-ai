@@ -86,7 +86,7 @@ export function SubmitForm() {
         <div className="relative z-10">
           <h2 className="text-2xl font-black flex items-center gap-3 tracking-tight">
             <Sparkles className="w-6 h-6 text-primary-foreground/80" />
-            New Evaluation
+            New evaluation
           </h2>
           <p className="text-primary-foreground/70 text-sm mt-1.5 font-medium">Fill in the details to start the AI screening</p>
         </div>

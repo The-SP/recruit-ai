@@ -76,3 +76,18 @@ class DashboardStatsResponse(BaseModel):
     # is expected to sit well below total_candidates.
     interviews_completed: int
     last_active: datetime | None
+
+
+class AttentionItem(BaseModel):
+    """One run-scoped thing needing the recruiter. See
+    EvaluationRunRepository.attention_by_user for the kinds."""
+
+    run_id: UUID
+    job_title: str | None
+    company_name: str | None
+    kind: str
+    count: int
+
+
+class DashboardAttentionResponse(BaseModel):
+    items: list[AttentionItem]

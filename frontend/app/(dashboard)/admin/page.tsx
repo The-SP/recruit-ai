@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  AlertTriangle,
+  Activity,
+  Clock,
   Gauge,
   Layers,
   MessageSquare,
@@ -11,59 +12,12 @@ import {
   Users,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { StatCell, StatStrip } from "@/components/stat-strip";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
 import { getAdminStats, type AdminStatsResponse } from "@/services/admin";
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  loading,
-  tone,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  hint?: string;
-  loading: boolean;
-  // "warn" flags an operational concern (e.g. circuit breaker tripped) with
-  // destructive styling instead of the neutral primary treatment.
-  tone?: "warn";
-}) {
-  const warn = tone === "warn";
-
-  return (
-    <Card className={warn ? "border-destructive/40" : undefined}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {label}
-        </CardTitle>
-        <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            warn ? "bg-destructive/10" : "bg-primary/10"
-          }`}
-        >
-          <Icon className={`w-4 h-4 ${warn ? "text-destructive" : "text-primary"}`} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-8 w-20" />
-        ) : (
-          <>
-            <p className={`text-3xl font-bold ${warn ? "text-destructive" : ""}`}>
-              {value}
-            </p>
-            {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 // Coarse relative time (minutes/hours/days) rather than a library: the last-run
 // card only needs "how stale is this", not calendar precision.
@@ -104,18 +58,25 @@ export default function AdminOverviewPage() {
     };
   }, []);
 
+  const budgetPercent = stats
+    ? Math.min(
+        100,
+        Math.round(
+          (stats.budget_units_used / (stats.budget_units_limit || 1)) * 100
+        )
+      )
+    : 0;
+  const budgetExhausted =
+    stats != null && stats.budget_units_used >= stats.budget_units_limit;
+  const breakerTripped = stats?.circuit_breaker_active ?? false;
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex items-center gap-3">
-        <div className="bg-primary/10 p-2 rounded-xl">
-          <Shield className="w-6 h-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Admin Overview</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Usage across every account.
-          </p>
-        </div>
+    <div className="max-w-7xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold">Admin overview</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Usage across every account.
+        </p>
       </div>
 
       {error && (
@@ -125,73 +86,112 @@ export default function AdminOverviewPage() {
       )}
 
       {!error && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard
-            icon={Users}
-            label="Users"
-            value={stats ? String(stats.total_users) : "—"}
-            hint={stats ? `${stats.new_users_7d} joined in the last 7 days` : undefined}
-            loading={loading}
-          />
-          <StatCard
-            icon={Layers}
-            label="Runs"
-            value={stats ? String(stats.total_runs) : "—"}
-            hint={
-              stats ? `${stats.runs_24h} in 24h · ${stats.runs_7d} in 7d` : undefined
-            }
-            loading={loading}
-          />
-          <StatCard
-            icon={UserPlus}
-            label="Resumes Scored"
-            value={stats ? String(stats.total_candidates) : "—"}
-            loading={loading}
-          />
-          <StatCard
-            icon={Shield}
-            label="Anonymous Runs"
-            value={stats ? String(stats.anonymous_runs) : "—"}
-            loading={loading}
-          />
-          <StatCard
-            icon={Gauge}
-            label="LLM Budget Today"
-            value={
-              stats ? `${stats.budget_units_used} / ${stats.budget_units_limit}` : "—"
-            }
-            hint={
-              stats
-                ? `${((stats.budget_units_used / (stats.budget_units_limit || 1)) * 100).toFixed(0)}% used, resets at UTC midnight`
-                : undefined
-            }
-            loading={loading}
-          />
-          <StatCard
-            icon={MessageSquare}
-            label="Interviews Completed"
-            value={stats ? String(stats.completed_interviews) : "—"}
-            loading={loading}
-          />
-          <StatCard
-            icon={Layers}
-            label="Last Run"
-            value={stats?.last_run_at ? timeAgo(stats.last_run_at) : "—"}
-            loading={loading}
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="Circuit Breaker"
-            value={stats ? (stats.circuit_breaker_active ? "TRIPPED" : "OK") : "—"}
-            hint={
-              stats?.circuit_breaker_active
-                ? "Gemini rate limit hit -- make circuit-reset"
-                : undefined
-            }
-            tone={stats?.circuit_breaker_active ? "warn" : undefined}
-            loading={loading}
-          />
-        </div>
+        <>
+          <section className="space-y-3">
+            <h2 className="text-base font-semibold">Usage</h2>
+            <StatStrip className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <StatCell
+                icon={Users}
+                label="Users"
+                value={stats ? String(stats.total_users) : "—"}
+                hint={stats ? `+${stats.new_users_7d} in 7d` : undefined}
+                loading={loading}
+              />
+              <StatCell
+                icon={Layers}
+                label="Runs"
+                value={stats ? String(stats.total_runs) : "—"}
+                hint={
+                  stats ? `${stats.runs_24h} in 24h · ${stats.runs_7d} in 7d` : undefined
+                }
+                loading={loading}
+              />
+              <StatCell
+                icon={UserPlus}
+                label="Resumes scored"
+                value={stats ? String(stats.total_candidates) : "—"}
+                loading={loading}
+              />
+              <StatCell
+                icon={Shield}
+                label="Anonymous runs"
+                value={stats ? String(stats.anonymous_runs) : "—"}
+                loading={loading}
+              />
+              <StatCell
+                icon={MessageSquare}
+                label="Interviews"
+                value={stats ? String(stats.completed_interviews) : "—"}
+                hint="completed"
+                loading={loading}
+              />
+              <StatCell
+                icon={Clock}
+                label="Last run"
+                value={stats?.last_run_at ? timeAgo(stats.last_run_at) : "—"}
+                loading={loading}
+              />
+            </StatStrip>
+          </section>
+
+          {/* Read-only on purpose: resetting either is make budget-reset /
+              circuit-reset over SSH, never a button here. See admin.py. */}
+          <section className="space-y-3">
+            <h2 className="text-base font-semibold">System health</h2>
+            <StatStrip className="sm:grid-cols-2">
+              <StatCell
+                icon={Gauge}
+                label="LLM budget today"
+                value={
+                  stats
+                    ? `${stats.budget_units_used} / ${stats.budget_units_limit}`
+                    : "—"
+                }
+                tone={budgetExhausted ? "warn" : undefined}
+                hint={
+                  stats
+                    ? `${budgetPercent}% used · resets at UTC midnight`
+                    : undefined
+                }
+                loading={loading}
+              >
+                <Progress
+                  value={budgetPercent}
+                  className={cn(
+                    "mt-2 h-1.5",
+                    budgetExhausted && "[&>[data-slot=progress-indicator]]:bg-destructive"
+                  )}
+                />
+              </StatCell>
+              <StatCell
+                icon={Activity}
+                label="Circuit breaker"
+                value={
+                  stats ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          breakerTripped ? "bg-destructive" : "bg-primary"
+                        )}
+                      />
+                      {breakerTripped ? "Tripped" : "OK"}
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+                tone={breakerTripped ? "warn" : undefined}
+                hint={
+                  breakerTripped
+                    ? "Gemini rate limit hit. Reset with make circuit-reset."
+                    : undefined
+                }
+                loading={loading}
+              />
+            </StatStrip>
+          </section>
+        </>
       )}
     </div>
   );

@@ -68,7 +68,7 @@ export default function NewEvaluationPage() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-2xl font-bold">New Evaluation</h1>
+          <h1 className="text-2xl font-bold">New evaluation</h1>
         </div>
         <div className="flex items-center gap-2 mt-4">
           <div

@@ -80,6 +80,25 @@ export interface DashboardStatsResponse {
   last_active: string | null;
 }
 
+export type AttentionKind =
+  | "run_failed"
+  | "resumes_failed"
+  | "awaiting_approval"
+  | "assessment_failed"
+  | "expired";
+
+export interface AttentionItem {
+  run_id: string;
+  job_title: string | null;
+  company_name: string | null;
+  kind: AttentionKind;
+  count: number;
+}
+
+export interface DashboardAttentionResponse {
+  items: AttentionItem[];
+}
+
 export interface AddCandidatesResponse {
   uploaded: number;
   failed: number;
@@ -168,6 +187,10 @@ export async function deleteRunItem(
 
 export async function getDashboardStats(): Promise<DashboardStatsResponse> {
   return apiRequest<DashboardStatsResponse>("/dashboard/stats");
+}
+
+export async function getDashboardAttention(): Promise<DashboardAttentionResponse> {
+  return apiRequest<DashboardAttentionResponse>("/dashboard/attention");
 }
 
 export async function getRunCandidateBreakdown(

@@ -35,7 +35,7 @@ type NavItem = { label: string; href: string; icon: React.ElementType };
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "New Evaluation", href: "/dashboard/new", icon: Plus },
+  { label: "New evaluation", href: "/dashboard/new", icon: Plus },
   { label: "History", href: "/history", icon: History },
   { label: "Profile", href: "/profile", icon: User },
 ];
@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { label: "Overview", href: "/admin", icon: Shield },
   { label: "Users", href: "/admin/users", icon: Users },
-  { label: "All Runs", href: "/admin/runs", icon: Layers },
+  { label: "All runs", href: "/admin/runs", icon: Layers },
 ];
 
 function NavItems({ items }: { items: NavItem[] }) {

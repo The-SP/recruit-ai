@@ -1,9 +1,9 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, NamedTuple, cast
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
@@ -35,7 +35,10 @@ from app.models.job import Job
 from app.models.user import User
 from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.deletion_audit_repository import DeletionAuditRepository
-from app.repositories.interview_repository import InterviewRepository
+from app.repositories.interview_repository import (
+    OVERDUE_STATUSES,
+    InterviewRepository,
+)
 
 logger = init_logger(__name__)
 
@@ -54,6 +57,24 @@ class InterviewRow(NamedTuple):
     expires_at: datetime | None
     completed_at: datetime | None
     assessed_at: datetime | None
+
+
+# How long a lapsed invite keeps showing as needing attention. Expired rows are
+# never cleaned up, so without a window a recruiter who decided not to reissue
+# would be nagged about it forever.
+EXPIRED_ATTENTION_WINDOW = timedelta(days=7)
+
+
+class AttentionRow(NamedTuple):
+    """One thing on one run that needs the recruiter, as read by
+    attention_by_user. `total` is how many rows in that run share the kind
+    (not `count`, which would shadow tuple.count)."""
+
+    run_id: UUID
+    job_title: str | None
+    company_name: str | None
+    kind: str
+    total: int
 
 
 class RunRollup(NamedTuple):
@@ -397,15 +418,122 @@ class EvaluationRunRepository:
         return self.db.scalar(self._completed_interviews_stmt(user_id)) or 0
 
     def last_active_by_user(self, user_id: UUID) -> datetime | None:
-        """Return created_at of the most recent completed run for a user."""
+        """Return created_at of the user's most recent non-draft run.
+
+        Any status counts: starting a run is activity, and filtering to
+        completed runs made the card lag behind a run still processing.
+        """
         stmt = (
             select(EvaluationRun.created_at)
             .where(EvaluationRun.user_id == user_id)
-            .where(EvaluationRun.status == RunStatus.COMPLETED.value)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
             .order_by(EvaluationRun.created_at.desc())
             .limit(1)
         )
         return self.db.scalar(stmt)
+
+    def attention_by_user(self, user_id: UUID) -> list[AttentionRow]:
+        """Per-run items needing the recruiter, for the dashboard.
+
+        Grouped by run rather than summed across runs, because a count like
+        "3 interviews awaiting approval" is only actionable once you know
+        which job it belongs to. Kinds:
+
+        - run_failed: the run failed outright (total is the resume count)
+        - resumes_failed: run completed, but some resumes failed
+        - awaiting_approval: draft interviews a human must approve
+        - assessment_failed: interview finished but its assessment errored
+        - expired: invite lapsed within EXPIRED_ATTENTION_WINDOW
+
+        In-flight runs are deliberately absent: there is nothing to act on, and
+        the recent-runs table already shows their status.
+
+        Expiry is lazy (interview.service.apply_lazy_expiry), so an overdue
+        invite may still read `created`/`in_progress`; it is matched by
+        expires_at here, the same way expire_overdue_for_run does.
+        """
+        now = datetime.now()
+        is_failed = EvaluationRun.status == RunStatus.FAILED.value
+        run_kind = case((is_failed, "run_failed"), else_="resumes_failed")
+        run_count = case(
+            (is_failed, EvaluationRun.total_count),
+            else_=EvaluationRun.failed_count,
+        )
+        run_stmt = (
+            select(
+                EvaluationRun.id,
+                Job.title,
+                Job.company_name,
+                run_kind.label("kind"),
+                run_count.label("total"),
+            )
+            .join(Job, Job.id == EvaluationRun.job_id, isouter=True)
+            .where(EvaluationRun.user_id == user_id)
+            .where(
+                or_(
+                    is_failed,
+                    (EvaluationRun.status == RunStatus.COMPLETED.value)
+                    & (EvaluationRun.failed_count > 0),
+                )
+            )
+        )
+
+        lapsed = (Interview.expires_at < now) & (
+            Interview.expires_at >= now - EXPIRED_ATTENTION_WINDOW
+        )
+        interview_kind = case(
+            (Interview.status == InterviewStatus.DRAFT.value, "awaiting_approval"),
+            (
+                Interview.assessment_error.is_not(None)
+                & (Interview.status != InterviewStatus.ASSESSED.value),
+                "assessment_failed",
+            ),
+            else_="expired",
+        )
+        interview_stmt = (
+            select(
+                EvaluationRun.id,
+                Job.title,
+                Job.company_name,
+                interview_kind.label("kind"),
+                func.count().label("total"),
+            )
+            .select_from(Interview)
+            .join(
+                EvaluationRunItem,
+                EvaluationRunItem.evaluation_id == Interview.evaluation_id,
+            )
+            .join(
+                EvaluationRun, EvaluationRun.id == EvaluationRunItem.evaluation_run_id
+            )
+            .join(Job, Job.id == EvaluationRun.job_id, isouter=True)
+            .where(EvaluationRun.user_id == user_id)
+            .where(EvaluationRun.status != RunStatus.DRAFT.value)
+            .where(
+                or_(
+                    Interview.status == InterviewStatus.DRAFT.value,
+                    Interview.assessment_error.is_not(None)
+                    & (Interview.status != InterviewStatus.ASSESSED.value),
+                    Interview.status.in_(
+                        (*OVERDUE_STATUSES, InterviewStatus.EXPIRED.value)
+                    )
+                    & lapsed,
+                )
+            )
+            .group_by(EvaluationRun.id, Job.title, Job.company_name, interview_kind)
+        )
+
+        return [
+            AttentionRow(
+                run_id=row[0],
+                job_title=row[1],
+                company_name=row[2],
+                kind=row.kind,
+                total=row.total,
+            )
+            for stmt in (run_stmt, interview_stmt)
+            for row in self.db.execute(stmt)
+        ]
 
     # -----------------------------------------------------------------------
     # Cross-tenant reads (admin only)
