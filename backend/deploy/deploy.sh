@@ -40,6 +40,14 @@ echo "==> Deploying ref '${REF}' from ${BACKEND_DIR}"
 AWS_REGION="${AWS_REGION}" SSM_PREFIX="${SSM_PREFIX}" OUTPUT=".env.prod" \
   "${SCRIPT_DIR}/render-env.sh"
 
+# Each build moves the api/worker/migrate tags to new images and leaves the
+# previous ones dangling (<none>:<none>); Docker never removes them itself, so
+# they pile up on the host's small root disk. Pruning before the build frees
+# that space for the build that needs it. Dangling images are untagged, so
+# nothing running uses them and the current stack stays up.
+echo "==> Pruning dangling images"
+docker image prune -f
+
 # --profile tools is load-bearing: the `migrate` service sits in that profile,
 # and a plain `build` skips it. `run --rm migrate` would then reuse a stale
 # image from an earlier deploy and fail *silently* -- an old image computes an
