@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   Check,
   Eye,
   Loader2,
@@ -41,6 +40,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { WizardSteps } from "@/components/wizard-steps";
 import { interviewModeLabels } from "@/lib/evaluation-styles";
 import type {
   InterviewDetail,
@@ -141,8 +142,9 @@ export type ScriptDraft = {
  * Service-free like RecruiterInterviewView: the page owns fetching and passes
  * bound callbacks.
  */
+const REVIEW_STEPS = ["Set up the interview", "Review questions"] as const;
+
 export function InterviewReviewView({
-  backHref,
   candidateName,
   jobTitle,
   interview,
@@ -162,7 +164,6 @@ export function InterviewReviewView({
   onAddQuestionToTemplate,
   onGenerateQuestion,
 }: {
-  backHref: string;
   candidateName: string | null;
   jobTitle: string | null;
   interview: InterviewDetail | null;
@@ -384,15 +385,10 @@ export function InterviewReviewView({
   };
 
   return (
-    <main className="px-6 py-10 max-w-3xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
+    // Fills the viewport below the top bar (and the layout's padding) so the
+    // sticky action bar sits at the bottom even when the step is short.
+    <div className="max-w-3xl mx-auto min-h-[calc(100svh-5.75rem)] md:min-h-[calc(100svh-6.75rem)] flex flex-col">
       <div className="pb-6 border-b border-border space-y-4">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to results
-        </Link>
 
         <div className="flex items-start justify-between gap-4">
           {/* Name and job title arrive from two fetches separate from the
@@ -407,16 +403,15 @@ export function InterviewReviewView({
                 {displayName}
               </h1>
             )}
-            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-              {headerLoading ? (
-                <Skeleton className="h-3.5 w-32 rounded" />
-              ) : (
-                jobTitle && <span className="truncate">{jobTitle} ·</span>
-              )}
-              <span className="shrink-0">
-                {step === 1 ? "Set up the interview" : "Review before sending"}
-              </span>
-            </p>
+            {headerLoading ? (
+              <Skeleton className="h-3.5 w-32 rounded mt-2" />
+            ) : (
+              jobTitle && (
+                <p className="text-sm text-muted-foreground mt-1 truncate">
+                  {jobTitle}
+                </p>
+              )
+            )}
           </div>
           <Badge
             variant="outline"
@@ -426,23 +421,13 @@ export function InterviewReviewView({
           </Badge>
         </div>
 
-        {/* Two-segment progress, matching the new-evaluation wizard. */}
         <div className="space-y-2">
-          <div className="flex gap-2">
-            <div className="h-2 flex-1 rounded-full bg-primary" />
-            <div
-              className={cn(
-                "h-2 flex-1 rounded-full transition-colors",
-                step === 2 ? "bg-primary" : "bg-muted"
-              )}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Step {step} of 2 —{" "}
-            {step === 1
-              ? "Confirm what to ask, then the questions get written"
-              : "No one can open this interview until you approve it"}
-          </p>
+          <WizardSteps steps={REVIEW_STEPS} current={step} />
+          {step === 2 && (
+            <p className="text-xs text-muted-foreground">
+              No one can open this interview until you approve it.
+            </p>
+          )}
         </div>
       </div>
 
@@ -520,7 +505,7 @@ export function InterviewReviewView({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Questions for {displayName}
+              Questions
             </h2>
             {script && !generating && (
               <Button
@@ -571,14 +556,15 @@ export function InterviewReviewView({
                 <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Opening
                 </span>
-                <textarea
+                <Textarea
                   rows={3}
+                  aria-label="Opening"
                   value={script.opening}
                   disabled={busy}
                   onChange={(e) =>
                     onScriptChange({ ...script, opening: e.target.value })
                   }
-                  className="w-full text-sm leading-relaxed bg-transparent border border-border rounded-xl px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="text-sm leading-relaxed"
                 />
               </div>
 
@@ -652,14 +638,15 @@ export function InterviewReviewView({
                 <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Closing
                 </span>
-                <textarea
+                <Textarea
                   rows={3}
+                  aria-label="Closing"
                   value={script.closing}
                   disabled={busy}
                   onChange={(e) =>
                     onScriptChange({ ...script, closing: e.target.value })
                   }
-                  className="w-full text-sm leading-relaxed bg-transparent border border-border rounded-xl px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="text-sm leading-relaxed"
                 />
               </div>
 
@@ -767,7 +754,7 @@ export function InterviewReviewView({
       )}
 
       {step === 2 && script && !generating && (
-        <div className="sticky bottom-0 -mx-6 px-6 py-4 border-t border-border bg-background/95 backdrop-blur flex items-center justify-between gap-4">
+        <div className="sticky bottom-0 py-4 border-t border-border bg-background/95 backdrop-blur flex items-center justify-between gap-4">
           {/* The blocked reason replaces the summary rather than sitting next
               to it: a disabled button with no visible explanation is the thing
               that sends people to the code to find out why. */}
@@ -809,7 +796,7 @@ export function InterviewReviewView({
           </Button>
         </div>
       )}
-    </main>
+    </div>
   );
 }
 

@@ -129,7 +129,7 @@ export function DashboardAttention({ items }: { items: AttentionItem[] }) {
                   return (
                     <span
                       key={item.kind}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-foreground/10 px-2 py-0.5 text-xs text-foreground/80"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-foreground/80"
                     >
                       <span
                         className={`size-1.5 rounded-full ${dotClass[meta.severity]}`}

@@ -72,7 +72,6 @@ export default function RunCandidateInterviewPage({
 
   return (
     <RecruiterInterviewView
-      backHref={`/evaluation/${runId}`}
       candidateName={breakdown?.candidate_name ?? null}
       resumeFilename={breakdown?.filename ?? null}
       resumeMarkdown={breakdown?.resume_markdown ?? null}

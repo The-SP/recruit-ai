@@ -20,9 +20,7 @@ export function StatStrip({
   return (
     <div
       className={cn(
-        // Dark mode lifts frame and dividers together: --border is barely
-        // lighter than --card there, so the strip read as one dark slab.
-        "grid grid-cols-1 gap-px bg-border border rounded-2xl overflow-hidden shadow-sm dark:bg-foreground/20 dark:border-foreground/20",
+        "grid grid-cols-1 gap-px bg-border border rounded-2xl overflow-hidden shadow-sm",
         className
       )}
     >

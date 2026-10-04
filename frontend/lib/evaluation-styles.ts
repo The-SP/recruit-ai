@@ -41,10 +41,11 @@ export const matchTypeLabels: Record<string, string> = {
   none: "No match",
 };
 
+// Amber is reserved for "waiting on the user", so the middle grade is blue.
 export const relevanceStyles: Record<string, string> = {
   high: "bg-success text-success-foreground border-success-edge",
-  medium: "bg-warning text-warning-foreground border-warning-edge",
-  low: "bg-warning text-warning-foreground border-warning-edge",
+  medium: "bg-info text-info-foreground border-info-edge",
+  low: "bg-muted text-muted-foreground border-border",
   none: "bg-muted text-muted-foreground border-border",
 };
 
@@ -120,5 +121,5 @@ export const SKILL_TIERS = ["critical", "required", "preferred"] as const;
 export const tierSectionStyles: Record<string, { label: string; headerClass: string }> = {
   critical: { label: "Critical", headerClass: "text-error-foreground" },
   required: { label: "Required", headerClass: "text-info-foreground" },
-  preferred: { label: "Preferred", headerClass: "text-muted-foreground" },
+  preferred: { label: "Preferred", headerClass: "text-foreground" },
 };

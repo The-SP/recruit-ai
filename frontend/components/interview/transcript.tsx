@@ -16,6 +16,7 @@ export function InterviewTranscript({
   autoScroll = true,
   onFetchTurnAudio,
   renderQuestionAudio,
+  variant = "live",
 }: {
   turns: InterviewTurnData[];
   showTyping?: boolean;
@@ -32,8 +33,14 @@ export function InterviewTranscript({
    * and threading either one's playback state through here would put a flow's
    * internals inside a component both flows share. */
   renderQuestionAudio?: (turn: InterviewTurnData) => ReactNode;
+  /** "live" is the candidate's chat: answers in brand green, no labels.
+   * "review" is the recruiter's read-back: neutral answer bubbles (green is
+   * the page's primary action, not a speaker) and a speaker line on each turn
+   * so a long transcript can be scanned by question. */
+  variant?: "live" | "review";
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isReview = variant === "review";
 
   useEffect(() => {
     if (!autoScroll) return;
@@ -47,19 +54,45 @@ export function InterviewTranscript({
         return (
           <div
             key={turn.seq}
-            className={cn("flex", isCandidate ? "justify-end" : "justify-start")}
+            className={cn(
+              "flex flex-col gap-1",
+              isCandidate ? "items-end" : "items-start"
+            )}
           >
+            {isReview && (
+              <span
+                className={cn(
+                  "px-1 text-[11px] font-semibold",
+                  // Speaker hues, not status colours: green, red and amber
+                  // already mean action, broken and waiting. Palette pairs
+                  // rather than the -foreground tokens, which are tuned for
+                  // badge fills and wash out on a light page.
+                  isCandidate
+                    ? "text-sky-600 dark:text-sky-400"
+                    : "text-violet-600 dark:text-violet-400"
+                )}
+              >
+                {speakerLabel(turn)}
+              </span>
+            )}
             <div
               className={cn(
                 "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words",
                 isCandidate
-                  ? "bg-primary text-primary-foreground rounded-br-md"
+                  ? isReview
+                    ? "bg-muted text-foreground rounded-br-md"
+                    : "bg-primary text-primary-foreground rounded-br-md"
                   : "bg-card border border-border text-foreground rounded-bl-md"
               )}
             >
               {turn.content}
               {isCandidate && turn.has_audio && onFetchTurnAudio && (
-                <div className="mt-2 pt-2 border-t border-primary-foreground/20">
+                <div
+                  className={cn(
+                    "mt-2 pt-2 border-t",
+                    isReview ? "border-border" : "border-primary-foreground/20"
+                  )}
+                >
                   <TurnAudioPlayer onFetch={() => onFetchTurnAudio(turn.seq)} />
                 </div>
               )}
@@ -91,4 +124,12 @@ export function InterviewTranscript({
       <div ref={bottomRef} />
     </div>
   );
+}
+
+function speakerLabel(turn: InterviewTurnData): string {
+  if (turn.role === "candidate") return "Candidate";
+  const n = turn.question_index !== null ? turn.question_index + 1 : null;
+  if (turn.kind === "question" && n !== null) return `Interviewer · Q${n}`;
+  if (turn.kind === "followup" && n !== null) return `Interviewer · Q${n} follow-up`;
+  return "Interviewer";
 }

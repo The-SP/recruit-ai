@@ -57,21 +57,24 @@
   --tracking-normal: 0em;
   --spacing: 0.27rem;
 
-  /* Semantic status colors */
-  --success: oklch(0.50 0.10 148);
-  --success-foreground: oklch(0.92 0.10 148);
-  --success-edge: oklch(0.60 0.12 148);
+  /* Semantic status colors. Same model as .dark, mirrored: a faint tint
+     fill and a saturated foreground. The foreground is used as plain text
+     on the page background too (labels, icons, outline buttons), so it must
+     read on white, not only on its own fill. */
+  --success: oklch(0.95 0.04 148);
+  --success-foreground: oklch(0.45 0.13 148);
+  --success-edge: oklch(0.85 0.07 148);
   --success-bar: oklch(0.50 0.18 148);
-  --warning: oklch(0.52 0.10 75);
-  --warning-foreground: oklch(0.95 0.10 85);
-  --warning-edge: oklch(0.62 0.11 75);
+  --warning: oklch(0.96 0.05 85);
+  --warning-foreground: oklch(0.50 0.12 65);
+  --warning-edge: oklch(0.86 0.09 80);
   --warning-bar: oklch(0.75 0.15 80);
-  --info: oklch(0.50 0.09 230);
-  --info-foreground: oklch(0.92 0.08 230);
-  --info-edge: oklch(0.60 0.10 230);
-  --error: oklch(0.50 0.10 25);
-  --error-foreground: oklch(0.95 0.08 25);
-  --error-edge: oklch(0.60 0.11 25);
+  --info: oklch(0.95 0.03 230);
+  --info-foreground: oklch(0.48 0.11 240);
+  --info-edge: oklch(0.85 0.06 230);
+  --error: oklch(0.95 0.03 25);
+  --error-foreground: oklch(0.52 0.19 25);
+  --error-edge: oklch(0.86 0.07 25);
   --error-bar: oklch(0.65 0.20 25);
 }
 
@@ -92,8 +95,10 @@
   --accent-foreground: oklch(0.9970 0 0);
   --destructive: oklch(0.6370 0.2370 25.3310);
   --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.2700 0.0019 286.2347);
-  --input: oklch(0.3523 0 0);
+  /* Edges have to read against --card (0.16) as well as the black page, so
+     they sit well clear of both; at 0.27 cards and fields lost their outline. */
+  --border: oklch(0.3400 0.0019 286.2347);
+  --input: oklch(0.4000 0 0);
   --ring: oklch(0.8545 0.1675 159.6564);
   --chart-1: oklch(0.8545 0.1675 159.6564);
   --chart-2: oklch(0.9173 0.1562 144.8458);

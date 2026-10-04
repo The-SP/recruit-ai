@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
+import { WizardSteps } from "@/components/wizard-steps";
 import { ApiError } from "@/services/api";
 import { createEvaluationRun } from "@/services/runs";
-import { cn } from "@/lib/utils";
 
 type Step = 1 | 2;
 
@@ -44,46 +44,6 @@ function FieldError({ field, message }: { field: Step1Field; message?: string })
 // Titles match the first two steps of components/dashboard-onboarding.tsx, so
 // the wizard reads as a continuation of the card the user just clicked from.
 const STEPS = ["Paste a job description", "Upload resumes"] as const;
-
-function WizardSteps({ current }: { current: Step }) {
-  return (
-    <ol className="flex items-center gap-3">
-      {STEPS.map((title, i) => {
-        const n = i + 1;
-        const done = n < current;
-        const active = n === current;
-        return (
-          <Fragment key={title}>
-            {i > 0 && <li aria-hidden className="h-px flex-1 bg-border" />}
-            <li
-              className="flex items-center gap-3 min-w-0"
-              aria-current={active ? "step" : undefined}
-            >
-              <div
-                className={cn(
-                  "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
-                  done || active
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                    : "border bg-card text-muted-foreground"
-                )}
-              >
-                {done ? <Check className="w-4 h-4" /> : n}
-              </div>
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  !done && !active && "text-muted-foreground"
-                )}
-              >
-                {title}
-              </span>
-            </li>
-          </Fragment>
-        );
-      })}
-    </ol>
-  );
-}
 
 export default function NewEvaluationPage() {
   const router = useRouter();
@@ -179,7 +139,7 @@ export default function NewEvaluationPage() {
         </p>
       </div>
 
-      <WizardSteps current={step} />
+      <WizardSteps steps={STEPS} current={step} />
 
       {step === 1 && (
         <Card className="p-6 gap-8">

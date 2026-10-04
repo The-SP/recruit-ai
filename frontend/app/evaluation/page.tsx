@@ -106,7 +106,7 @@ function AddCandidatesPanel({
           Add More Candidates
         </button>
       ) : (
-        <Card className="p-6 border-zinc-200 rounded-2xl shadow-sm space-y-5">
+        <Card className="p-6 rounded-2xl shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-primary text-base">Add More Candidates</h3>
             <button

@@ -299,7 +299,6 @@ export default function InterviewReviewPage({
 
   return (
     <InterviewReviewView
-      backHref={backHref}
       candidateName={breakdown?.candidate_name ?? breakdown?.filename ?? null}
       jobTitle={jobTitle}
       interview={interview}

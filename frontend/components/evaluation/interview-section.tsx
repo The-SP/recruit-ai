@@ -35,7 +35,7 @@ import { useInviteActions } from "@/lib/use-invite-actions";
 
 /**
  * Invite management stays inline; the transcript itself lives on a dedicated
- * page (RecruiterInterviewView), styled like the candidate's own chat. Once
+ * page (RecruiterInterviewView), laid out like the candidate's own chat. Once
  * assessed, the verdict renders here too. Service-agnostic: both results
  * pages pass wired callbacks.
  *
