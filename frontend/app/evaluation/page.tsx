@@ -533,7 +533,7 @@ function EvaluationPageInner() {
 
   return (
     <>
-    <main className="px-6 py-12 max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
+    <main className="px-6 py-12 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
       {IS_DEMO_MODE && <DemoBanner className="mb-8" />}
 
       {/* Header Info */}

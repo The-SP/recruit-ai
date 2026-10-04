@@ -20,7 +20,9 @@ export function StatStrip({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 gap-px bg-border border rounded-2xl overflow-hidden shadow-sm",
+        // Dark mode lifts frame and dividers together: --border is barely
+        // lighter than --card there, so the strip read as one dark slab.
+        "grid grid-cols-1 gap-px bg-border border rounded-2xl overflow-hidden shadow-sm dark:bg-foreground/20 dark:border-foreground/20",
         className
       )}
     >
@@ -47,8 +49,9 @@ export function StatCell({
   suffix?: string;
   /** Small muted line under the value. */
   hint?: string;
-  /** "warn" marks an operational problem: the value turns destructive. */
-  tone?: "warn";
+  /** "warn" marks an operational problem: the value turns destructive.
+   *  "attention" marks work waiting on the user: the value turns amber. */
+  tone?: "warn" | "attention";
   loading: boolean;
   /** Extra content under the value, e.g. a progress bar. */
   children?: React.ReactNode;
@@ -69,7 +72,10 @@ export function StatCell({
             <span
               className={cn(
                 "text-2xl font-semibold tabular-nums",
-                tone === "warn" && "text-destructive"
+                tone === "warn" && "text-destructive",
+                // warning-foreground is pale in light mode (it's meant for
+                // text on bg-warning), so light mode borrows the edge colour.
+                tone === "attention" && "text-warning-edge dark:text-warning-foreground"
               )}
             >
               {value}

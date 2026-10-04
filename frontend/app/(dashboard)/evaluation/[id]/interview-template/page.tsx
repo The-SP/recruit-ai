@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowLeft, X } from "lucide-react";
-import Link from "next/link";
+import { Info, X } from "lucide-react";
 import { use, useEffect, useState } from "react";
 
 import {
@@ -11,6 +10,7 @@ import {
   type TemplateDraft,
 } from "@/components/interview/template-editor";
 import type { InterviewTemplateData } from "@/lib/interview-types";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import {
   getEvaluationRun,
   getInterviewTemplate,
@@ -18,12 +18,27 @@ import {
 } from "@/services/runs";
 import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
+/** The fields a save would send, so "changed" means "would save something
+ * different". allowedTimeLimits is server metadata, not a setting, and the
+ * opening/closing are trimmed on save, so whitespace alone isn't an edit. */
+function savedShape(draft: TemplateDraft): string {
+  return JSON.stringify({
+    questionCount: Number(draft.questionCount),
+    followupsEnabled: draft.followupsEnabled,
+    timeLimitSeconds: draft.timeLimitSeconds,
+    opening: draft.opening.trim(),
+    closing: draft.closing.trim(),
+    fixedQuestions: draft.fixedQuestions,
+  });
+}
+
 /**
  * Standalone template editor for a run.
  *
  * The same TemplateEditor the review page embeds as its first step, on its own
  * route so the settings can be reached without picking a candidate first —
- * they apply to the whole run, so requiring one was backwards.
+ * they apply to the whole run, so requiring one was backwards. The way back
+ * is the breadcrumb trail, like every other dashboard page.
  */
 export default function InterviewTemplatePage({
   params,
@@ -33,6 +48,8 @@ export default function InterviewTemplatePage({
   const { id: runId } = use(params);
 
   const [template, setTemplate] = useState<TemplateDraft | null>(null);
+  // What the server last returned, to tell an edited form from a clean one.
+  const [savedTemplate, setSavedTemplate] = useState<TemplateDraft | null>(null);
   const [hasSaved, setHasSaved] = useState(false);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   useBreadcrumbLabel(runId, jobTitle);
@@ -44,7 +61,9 @@ export default function InterviewTemplatePage({
   useEffect(() => {
     getInterviewTemplate(runId)
       .then((data: InterviewTemplateData) => {
-        setTemplate(toDraft(data));
+        const draft = toDraft(data);
+        setTemplate(draft);
+        setSavedTemplate(draft);
         setHasSaved(data.is_saved);
       })
       .catch((err) =>
@@ -65,6 +84,12 @@ export default function InterviewTemplatePage({
       .catch(() => {});
   }, [runId]);
 
+  const isDirty =
+    template !== null &&
+    savedTemplate !== null &&
+    savedShape(template) !== savedShape(savedTemplate);
+  useUnsavedChangesGuard(isDirty);
+
   const handleSave = async (): Promise<boolean> => {
     if (!template) return false;
     setIsSaving(true);
@@ -78,7 +103,9 @@ export default function InterviewTemplatePage({
         closing: template.closing.trim() || null,
         fixed_questions: template.fixedQuestions,
       });
-      setTemplate(toDraft(saved));
+      const draft = toDraft(saved);
+      setTemplate(draft);
+      setSavedTemplate(draft);
       setHasSaved(true);
       setSavedAt(Date.now());
       return true;
@@ -93,59 +120,49 @@ export default function InterviewTemplatePage({
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="pb-6 border-b border-border space-y-4">
-        <Link
-          href={`/evaluation/${runId}?tab=interviews`}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to results
-        </Link>
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">
-            Interview template
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {jobTitle ? `${jobTitle} · ` : ""}
-            Applies to every interview generated from this run
-          </p>
-        </div>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-black tracking-tight">Interview template</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {jobTitle ? `${jobTitle} · ` : ""}
+          Applies to every new interview in this run. The questions themselves
+          are still written per resume.
+        </p>
       </div>
 
       {error && (
-        <div className="mt-5 bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+        <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
           <X className="w-4 h-4 shrink-0 mt-0.5" />
           <p className="font-medium">{error}</p>
         </div>
       )}
 
-      <div className="py-6 space-y-4">
-        {template ? (
-          <TemplateEditor
-            draft={template}
-            onChange={setTemplate}
-            interviewCount={interviewCount}
-            isSaving={isSaving}
-            variant="page"
-            onSave={handleSave}
-          />
-        ) : (
-          <TemplateEditorSkeleton />
-        )}
-
-        {savedAt !== null && (
-          <p className="text-sm font-medium text-success-foreground">
-            Template saved. New interviews will use these settings.
+      {/* Up top rather than under the card, where it sat below the fold. */}
+      {!hasSaved && template && (
+        <div className="bg-muted/50 border border-border text-muted-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>
+            Nothing saved yet. These are the defaults new interviews use until
+            you save.
           </p>
-        )}
+        </div>
+      )}
 
-        {!hasSaved && template && (
-          <p className="text-xs text-muted-foreground">
-            Nothing saved yet — these are the defaults new interviews would use.
-          </p>
-        )}
-      </div>
+      {template ? (
+        <TemplateEditor
+          draft={template}
+          onChange={setTemplate}
+          interviewCount={interviewCount}
+          isSaving={isSaving}
+          variant="page"
+          onSave={handleSave}
+          isDirty={isDirty}
+          justSaved={savedAt !== null && !isDirty}
+          canSaveUnchanged={!hasSaved}
+        />
+      ) : (
+        !error && <TemplateEditorSkeleton variant="page" />
+      )}
     </div>
   );
 }

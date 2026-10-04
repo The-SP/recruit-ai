@@ -6,6 +6,7 @@ import { Briefcase, LogOut } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const AUTH_PREFIXES = ["/dashboard", "/history", "/profile", "/evaluation/", "/admin"];
 
@@ -41,7 +42,14 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
-      <div className="flex items-center justify-between px-6 py-4 max-w-5xl mx-auto w-full">
+      {/* Matches the page below it: the anonymous results page is as wide
+          as the owned run page, so its header widens with it. */}
+      <div
+        className={cn(
+          "flex items-center justify-between px-6 py-4 mx-auto w-full",
+          pathname === "/evaluation" ? "max-w-7xl" : "max-w-5xl"
+        )}
+      >
         <Link href="/" className="flex items-center gap-2 group">
           <div className="bg-primary p-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
             <Briefcase className="w-5 h-5 text-primary-foreground" />

@@ -91,8 +91,15 @@ export function interviewSortDate(item: RunItemSummary): number {
   return stamp ? new Date(stamp).getTime() : 0;
 }
 
+/** "Oct 4", with the year only when it isn't this year: the column sits
+ *  beside two badges and the actions, so a full date pushed the table wide. */
 function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString();
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== new Date().getFullYear() && { year: "numeric" }),
+  });
 }
 
 /** A sortable column header. Module scope, not nested in InterviewTable, so
@@ -157,6 +164,8 @@ function InterviewDate({ item }: { item: RunItemSummary }) {
     const done = iv.assessed_at ?? iv.completed_at;
     return <span>{done ? `Completed ${formatDate(done)}` : "—"}</span>;
   }
+  // A draft has no expiry until its questions are approved.
+  if (!iv.expires_at) return <span className="text-muted-foreground">—</span>;
   if (iv.status === "expired") {
     return (
       <span className="text-muted-foreground">
@@ -183,6 +192,7 @@ export function InterviewTable({
   getInterviewHref,
   sort,
   onSort,
+  suggestedItemId = null,
 }: {
   items: RunItemSummary[];
   busyItemId: string | null;
@@ -201,7 +211,24 @@ export function InterviewTable({
   getInterviewHref: (item: RunItemSummary) => string | null;
   sort: InterviewSort;
   onSort: (column: InterviewSortColumn) => void;
+  // The row whose "Set up" is the tab's primary action. The page sets it
+  // only while the run has no interviews at all, so green appears on at most
+  // one button.
+  suggestedItemId?: string | null;
 }) {
+  /** Where clicking the row goes: the same place its link action does, so
+   *  only rows that already offer one (review, view, findings) are
+   *  clickable. A sent-but-unstarted invite has nothing to look at yet. */
+  function rowHref(item: RunItemSummary): string | null {
+    const iv = item.interview;
+    const href = getInterviewHref(item);
+    if (!iv || !href) return null;
+    if (iv.status === "draft") return `${href}/review`;
+    if (iv.status === "created") return null;
+    if (iv.status === "expired" && !iv.answered) return null;
+    return href;
+  }
+
   function renderActions(item: RunItemSummary) {
     const iv = item.interview;
     const isBusy = busyItemId === item.item_id;
@@ -217,7 +244,7 @@ export function InterviewTable({
         <Link
           href={href}
           title={title}
-          className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          className="relative z-10 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           {label}
           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -229,16 +256,17 @@ export function InterviewTable({
       icon: React.ReactNode,
       onClick: () => void,
       destructive = false,
-      title?: string
+      title?: string,
+      primary = false
     ) => (
       <Button
         size="sm"
-        variant="outline"
+        variant={primary ? "default" : "outline"}
         onClick={onClick}
         disabled={isBusy || otherBusy}
         title={title}
         className={cn(
-          "gap-1.5 font-semibold cursor-pointer",
+          "relative z-10 gap-1.5 font-semibold cursor-pointer",
           destructive && "text-error-foreground border-error-edge"
         )}
       >
@@ -247,23 +275,22 @@ export function InterviewTable({
       </Button>
     );
 
+    // Icon-only so a row's labelled action stays the one that reads first,
+    // and two labelled buttons don't push the table past the screen.
+    const copied = copiedItemId === item.item_id;
     const copyButton = (
       <Button
-        size="sm"
+        size="icon"
         variant="outline"
         onClick={() => onCopyLink(item)}
-        className="gap-1.5 shrink-0 cursor-pointer"
+        title={copied ? "Copied" : "Copy invite link"}
+        aria-label={copied ? "Copied" : "Copy invite link"}
+        className="relative z-10 h-8 w-8 shrink-0 cursor-pointer"
       >
-        {copiedItemId === item.item_id ? (
-          <>
-            <Check className="w-3.5 h-3.5 text-success-foreground" />
-            Copied
-          </>
+        {copied ? (
+          <Check className="w-3.5 h-3.5 text-success-foreground" />
         ) : (
-          <>
-            <Copy className="w-3.5 h-3.5" />
-            Copy link
-          </>
+          <Copy className="w-3.5 h-3.5" />
         )}
       </Button>
     );
@@ -277,7 +304,8 @@ export function InterviewTable({
         <Sparkles className="w-3.5 h-3.5" />,
         () => onGenerate(item),
         false,
-        "Choose what to ask, then review the questions before sending"
+        "Choose what to ask, then review the questions before sending",
+        item.item_id === suggestedItemId
       );
     }
 
@@ -292,9 +320,9 @@ export function InterviewTable({
               <Link
                 href={`${href}/review`}
                 title="Review the questions before sending this interview"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                className="relative z-10 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
               >
-                Review questions
+                Review
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
             ) : null}
@@ -325,10 +353,11 @@ export function InterviewTable({
           <div className="flex items-center justify-end gap-2">
             {iv.has_assessment_error
               ? actionButton(
-                  assessmentCopy.retry,
+                  "Retry",
                   <RotateCcw className="w-3.5 h-3.5" />,
                   () => onAssess(item),
-                  true
+                  true,
+                  assessmentCopy.retry
                 )
               : actionButton(
                   "Assess",
@@ -343,7 +372,7 @@ export function InterviewTable({
       case "assessed":
         return (
           <div className="flex items-center justify-end gap-2">
-            {viewLink(assessmentCopy.viewFindings)}
+            {viewLink("View", assessmentCopy.viewFindings)}
           </div>
         );
       case "expired":
@@ -351,12 +380,14 @@ export function InterviewTable({
           <div className="flex items-center justify-end gap-2">
             {iv.answered
               ? actionButton(
-                  assessmentCopy.assessPartial,
+                  "Assess",
                   <Sparkles className="w-3.5 h-3.5" />,
-                  () => onAssess(item)
+                  () => onAssess(item),
+                  false,
+                  assessmentCopy.assessPartial
                 )
               : actionButton(
-                  "Reissue invite",
+                  "Reissue",
                   <RotateCcw className="w-3.5 h-3.5" />,
                   () => onReissue(item),
                   false,
@@ -402,7 +433,7 @@ export function InterviewTable({
                         tooltip below, so it must not also carry a native one. */}
                     <SortHeader
                       column="score"
-                      label="Resume Score"
+                      label="Resume score"
                       sort={sort}
                       onSort={onSort}
                       className="justify-center"
@@ -428,7 +459,7 @@ export function InterviewTable({
                   className="justify-center"
                 />
               </TableHead>
-              <TableHead className="w-40 text-center font-semibold">
+              <TableHead className="w-36 text-center font-semibold">
                 <SortHeader
                   column="recommendation"
                   label="Recommendation"
@@ -437,7 +468,7 @@ export function InterviewTable({
                   className="justify-center"
                 />
               </TableHead>
-              <TableHead className="w-44 font-semibold">
+              <TableHead className="font-semibold">
                 <SortHeader
                   column="date"
                   label="Date"
@@ -445,7 +476,7 @@ export function InterviewTable({
                   onSort={onSort}
                 />
               </TableHead>
-              <TableHead className="w-64 text-right pr-4 font-semibold">
+              <TableHead className="text-right pr-4 font-semibold">
                 Actions
               </TableHead>
             </TableRow>
@@ -476,9 +507,20 @@ export function InterviewTable({
               const scorePct =
                 item.final_score != null ? Math.round(item.final_score * 100) : null;
               const isFailed = item.status === "failed";
+              const href = rowHref(item);
+              const name = item.candidate_name ?? item.filename;
 
               return (
-                <TableRow key={item.item_id} className={cn(isFailed && "opacity-60")}>
+                <TableRow
+                  key={item.item_id}
+                  className={cn(
+                    "relative",
+                    href
+                      ? "hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04]"
+                      : "hover:bg-transparent",
+                    isFailed && "opacity-60"
+                  )}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       {/* The resume lives on the Screening tab, but reading it
@@ -487,7 +529,7 @@ export function InterviewTable({
                         <button
                           onClick={(e) => onViewResume(e, item)}
                           title="View resume"
-                          className="p-1 -m-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
+                          className="relative z-10 p-1 -m-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer shrink-0"
                         >
                           <FileText className="w-5 h-5" />
                         </button>
@@ -500,9 +542,16 @@ export function InterviewTable({
                         />
                       )}
                       <div className="min-w-0">
-                        <span className="font-medium truncate">
-                          {item.candidate_name ?? item.filename}
-                        </span>
+                        {href ? (
+                          <Link
+                            href={href}
+                            className="font-medium truncate outline-none after:absolute after:inset-0 focus-visible:underline"
+                          >
+                            {name}
+                          </Link>
+                        ) : (
+                          <span className="font-medium truncate">{name}</span>
+                        )}
                         {item.candidate_name && (
                           <p className="text-xs text-muted-foreground truncate">
                             {item.filename}
@@ -523,7 +572,7 @@ export function InterviewTable({
                         <span className="font-bold">{scorePct}%</span>
                         <Progress
                           value={scorePct}
-                          className={cn("h-1 w-14", scoreBarColor(item.final_score!))}
+                          className={cn("h-1 w-14 bg-muted", scoreBarColor(item.final_score!))}
                         />
                       </div>
                     ) : (
@@ -569,7 +618,7 @@ export function InterviewTable({
                     <InterviewDate item={item} />
                   </TableCell>
 
-                  <TableCell className="text-right pr-4">
+                  <TableCell className="text-right pr-4 whitespace-nowrap">
                     {renderActions(item)}
                   </TableCell>
                 </TableRow>

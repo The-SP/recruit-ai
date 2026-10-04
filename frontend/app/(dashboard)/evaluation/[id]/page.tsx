@@ -24,6 +24,7 @@ import { CandidateCompareDialog } from "@/components/candidate-compare-dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { CompareBar } from "@/components/evaluation/compare-bar";
 import { FilterControls } from "@/components/evaluation/filter-controls";
+import { InterviewGetStarted } from "@/components/evaluation/interview-get-started";
 import { InterviewStatsStrip } from "@/components/evaluation/interview-stats-strip";
 import { JobDescriptionSheet } from "@/components/evaluation/job-description-sheet";
 import {
@@ -128,8 +129,8 @@ const RECOMMENDATION_ORDER: Record<string, number> = {
  *  from the badge the table renders in the same row. `all` and `not_sent` are
  *  filter-only: neither is a real interview status. */
 const INTERVIEW_FILTER_OPTIONS = [
-  { value: "all", label: "All Interviews" },
-  { value: "not_sent", label: "Not Sent" },
+  { value: "all", label: "All interviews" },
+  { value: "not_sent", label: "Not sent" },
   ...INTERVIEW_STATUS_FILTER_VALUES.map((value) => ({
     value,
     label: interviewStatusLabels[value],
@@ -551,26 +552,64 @@ function RunDetailPageInner({
     [data?.items]
   );
 
-  // One pass rather than three filters: this recomputes on every poll tick
-  // while a run is active, and the result is four integers.
+  // One pass rather than five filters: this recomputes on every poll tick
+  // while a run is active, and the result is a handful of integers.
   const interviewStats = useMemo(() => {
-    // Counted by status rather than with a running total per tile: a draft has
-    // no invite link, so "Invited" must exclude it. Bucketing first means the
-    // next status is a display decision here, not an off-by-one in the strip.
+    // Bucketed by status first, so the next status is a display decision
+    // here rather than an off-by-one in the strip. An expired interview the
+    // candidate answered can still be assessed (partially), so it counts as
+    // ready; an unanswered one only waits on a reissue and sits in no tile.
     const byStatus: Record<string, number> = {};
+    let notSent = 0;
+    let expiredAnswered = 0;
     for (const i of interviewableItems) {
-      if (!i.interview) continue;
+      if (!i.interview) {
+        notSent++;
+        continue;
+      }
       byStatus[i.interview.status] = (byStatus[i.interview.status] ?? 0) + 1;
+      if (i.interview.status === "expired" && i.interview.answered) expiredAnswered++;
     }
     const count = (...statuses: string[]) =>
       statuses.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0);
     return {
-      total: interviewableItems.length,
-      invited: count("created", "in_progress", "completed", "assessed", "expired"),
-      awaiting: count("created"),
+      notSent,
+      needsReview: count("draft"),
+      withCandidate: count("created", "in_progress"),
+      readyToAssess: count("completed") + expiredAnswered,
       assessed: count("assessed"),
     };
   }, [interviewableItems]);
+
+  // Nothing has been set up yet, so the funnel would be all dashes. The tab
+  // swaps the strip for a getting-started card and lights up one row's
+  // "Set up" as the primary action: the best-scoring candidate, since the
+  // table's default order is score and that row sits on top.
+  const hasAnyInterview = interviewableItems.some(i => i.interview);
+  const suggestedInterviewItemId = useMemo(() => {
+    if (hasAnyInterview || interviewableItems.length === 0) return null;
+    return interviewableItems.reduce((best, i) =>
+      (i.final_score ?? 0) > (best.final_score ?? 0) ? i : best
+    ).item_id;
+  }, [hasAnyInterview, interviewableItems]);
+
+  // Run-level settings get a run-level entry point, rather than being
+  // reachable only inside one candidate's review page. Rides in the filter
+  // row's actions slot, like Screening's expand-all toggle.
+  const templateHref = `/evaluation/${runId}/interview-template`;
+  const templateButton = (
+    <Button
+      asChild
+      variant="outline"
+      size="sm"
+      className="h-9 px-3 gap-2 cursor-pointer"
+    >
+      <Link href={templateHref}>
+        <Settings2 className="w-4 h-4" />
+        Interview template
+      </Link>
+    </Button>
+  );
 
   // Kept separate from the screening filters: the two tabs filter on
   // different axes, and carrying a hire-signal filter across would silently
@@ -736,7 +775,7 @@ function RunDetailPageInner({
 
   if (error) {
     return (
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <Card className="p-8 text-center border-destructive/30 bg-destructive/5 text-destructive">
           <p className="font-semibold">{error}</p>
           <Button asChild variant="outline" className="mt-4">
@@ -756,7 +795,7 @@ function RunDetailPageInner({
 
   return (
     <>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header: title + context left, the page's primary action right.
             The way back is the top-bar breadcrumb trail. */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
@@ -798,8 +837,14 @@ function RunDetailPageInner({
           <div className="flex items-center gap-2">
             {/* Withheld while processing: the backend refuses to add to a run
                 in flight. */}
+            {/* Green only on Screening: on Interviews the primary action is
+                the row-level one, and two green buttons would compete. */}
             {!isActive && (
-              <Button onClick={() => setAddOpen(true)} className="gap-1.5 cursor-pointer">
+              <Button
+                onClick={() => setAddOpen(true)}
+                variant={tab === "interviews" ? "outline" : "default"}
+                className="gap-1.5 cursor-pointer"
+              >
                 <Plus className="w-4 h-4" />
                 Add candidates
               </Button>
@@ -960,23 +1005,12 @@ function RunDetailPageInner({
           </TabsContent>
 
           <TabsContent value="interviews" className="space-y-8">
-            <InterviewStatsStrip {...interviewStats} />
-
-            {/* Run-level settings get a run-level entry point, rather than
-                being reachable only inside one candidate's review page. */}
-            <div className="flex justify-end -mt-4">
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-10 px-4 border-border text-muted-foreground hover:bg-muted font-semibold gap-2 cursor-pointer"
-              >
-                <Link href={`/evaluation/${runId}/interview-template`}>
-                  <Settings2 className="w-4 h-4" />
-                  Interview template
-                </Link>
-              </Button>
-            </div>
+            {interviewableItems.length > 0 &&
+              (hasAnyInterview ? (
+                <InterviewStatsStrip {...interviewStats} />
+              ) : (
+                <InterviewGetStarted templateHref={templateHref} />
+              ))}
 
             {interviewableItems.length > 0 && (
               <FilterControls
@@ -988,6 +1022,7 @@ function RunDetailPageInner({
                 shownCount={interviewFiltered.length}
                 totalCount={interviewableItems.length}
                 filterOptions={INTERVIEW_FILTER_OPTIONS}
+                actions={templateButton}
               />
             )}
 
@@ -1008,13 +1043,17 @@ function RunDetailPageInner({
                     ? "Interviews are generated from a candidate's evaluation, so they unlock as each resume finishes scoring."
                     : "Add resumes and let them finish scoring to start interviewing candidates."}
                 </p>
+                {/* The template is run-level, so it can be set up before any
+                    candidate is ready; the filter row that normally carries
+                    it isn't rendered yet. */}
+                <div className="mt-6">{templateButton}</div>
               </div>
             ) : (
             <>
             {isActive && (
               <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 <Sparkles className="w-3.5 h-3.5 text-success-foreground" />
-                Scored So Far
+                Scored so far
               </div>
             )}
             <InterviewTable
@@ -1035,6 +1074,7 @@ function RunDetailPageInner({
               onViewResume={handleViewResume}
               sort={interviewSort}
               onSort={handleInterviewSort}
+              suggestedItemId={suggestedInterviewItemId}
               getInterviewHref={(item) =>
                 item.candidate_id
                   ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`

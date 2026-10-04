@@ -87,9 +87,15 @@ function buildCrumbs(pathname: string, labels: Labels): Crumb[] {
     case "evaluation": {
       if (!id) return [];
       const runHref = `/evaluation/${id}`;
+      // The template and candidate interview pages are reached from the
+      // Interviews tab, so their run crumb (and the mobile back link) returns
+      // there rather than to the default Screening tab.
       const crumbs: Crumb[] = [
         { label: "History", href: "/history" },
-        { label: labels[id] ?? "Evaluation", href: runHref },
+        {
+          label: labels[id] ?? "Evaluation",
+          href: sub ? `${runHref}?tab=interviews` : runHref,
+        },
       ];
       if (sub === "interview-template") {
         crumbs.push({ label: "Interview template", href: `${runHref}/interview-template` });

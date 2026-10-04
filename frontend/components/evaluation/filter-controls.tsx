@@ -13,12 +13,12 @@ import {
 
 /** Hire-signal options: the default filter, used by both results pages. */
 const SIGNAL_OPTIONS = [
-  { value: "all", label: "All Signals" },
-  { value: "strong_match", label: "Strong Match" },
-  { value: "good_match", label: "Good Match" },
-  { value: "partial_match", label: "Partial Match" },
-  { value: "weak_match", label: "Weak Match" },
-  { value: "no_match", label: "No Match" },
+  { value: "all", label: "All signals" },
+  { value: "strong_match", label: "Strong match" },
+  { value: "good_match", label: "Good match" },
+  { value: "partial_match", label: "Partial match" },
+  { value: "weak_match", label: "Weak match" },
+  { value: "no_match", label: "No match" },
 ];
 
 export function FilterControls({
@@ -48,12 +48,12 @@ export function FilterControls({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="relative w-56">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         <Input
           placeholder="Search by name or file…"
           value={searchQuery}
           onChange={e => onSearchChange(e.target.value)}
-          className="pl-9 h-9 rounded-xl border-zinc-200 text-sm"
+          className="pl-9 h-9 rounded-xl text-sm"
         />
       </div>
       <Select value={filterSignal} onValueChange={onFilterChange}>

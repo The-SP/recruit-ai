@@ -206,7 +206,7 @@ export function ResultsTable<T extends EvaluationItem>({
                         <span className="font-bold">{scorePct}%</span>
                         <Progress
                           value={scorePct}
-                          className={cn("h-1 w-16", scoreBarColor(item.final_score!))}
+                          className={cn("h-1 w-16 bg-muted", scoreBarColor(item.final_score!))}
                         />
                       </div>
                     ) : "—"}

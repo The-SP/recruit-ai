@@ -1,39 +1,66 @@
 "use client";
 
-import { CheckCircle, MessageSquareText, Send, Users } from "lucide-react";
+import {
+  CheckCircle,
+  CircleDashed,
+  ClipboardCheck,
+  Inbox,
+  Send,
+} from "lucide-react";
 
 import { countOrDash, StatCell, StatStrip } from "@/components/stat-strip";
 
 /**
  * The Interviews tab's counterpart to StatsSummary — same StatStrip treatment
- * so the two tabs read as one page, but counting the interview funnel rather
+ * so the two tabs read as one page, but walking the interview funnel rather
  * than resume scores.
+ *
+ * The two cells that wait on the recruiter (a draft to review, an answered
+ * interview to assess) turn amber when non-zero; the rest wait on the
+ * candidate or are done, so they stay neutral.
  */
 export function InterviewStatsStrip({
-  total,
-  invited,
-  awaiting,
+  notSent,
+  needsReview,
+  withCandidate,
+  readyToAssess,
   assessed,
 }: {
-  total: number;
-  invited: number;
-  awaiting: number;
+  notSent: number;
+  needsReview: number;
+  withCandidate: number;
+  readyToAssess: number;
   assessed: number;
 }) {
   return (
-    <StatStrip className="grid-cols-2 md:grid-cols-4">
-      <StatCell icon={Users} label="Total" value={total} loading={false} />
+    <StatStrip className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
       <StatCell
-        icon={MessageSquareText}
-        label="Invited"
-        value={countOrDash(invited)}
+        icon={CircleDashed}
+        label="Not sent"
+        value={countOrDash(notSent)}
+        loading={false}
+      />
+      <StatCell
+        icon={ClipboardCheck}
+        label="Needs review"
+        value={countOrDash(needsReview)}
+        tone={needsReview > 0 ? "attention" : undefined}
+        tooltip="Questions generated, waiting for you to review and send"
         loading={false}
       />
       <StatCell
         icon={Send}
-        label="Awaiting"
-        value={countOrDash(awaiting)}
-        tooltip="Invite sent, candidate hasn't started yet"
+        label="With candidate"
+        value={countOrDash(withCandidate)}
+        tooltip="Invite sent, or the candidate is mid-interview"
+        loading={false}
+      />
+      <StatCell
+        icon={Inbox}
+        label="Ready to assess"
+        value={countOrDash(readyToAssess)}
+        tone={readyToAssess > 0 ? "attention" : undefined}
+        tooltip="Candidate has answered, waiting for you to run the assessment"
         loading={false}
       />
       <StatCell

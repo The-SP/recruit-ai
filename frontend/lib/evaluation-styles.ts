@@ -22,11 +22,11 @@ export const signalStyles: Record<string, string> = {
 };
 
 export const signalLabels: Record<string, string> = {
-  strong_match: "Strong Match",
-  good_match: "Good Match",
-  partial_match: "Partial Match",
-  weak_match: "Weak Match",
-  no_match: "No Match",
+  strong_match: "Strong match",
+  good_match: "Good match",
+  partial_match: "Partial match",
+  weak_match: "Weak match",
+  no_match: "No match",
 };
 
 export const matchTypeStyles: Record<string, string> = {
@@ -36,9 +36,9 @@ export const matchTypeStyles: Record<string, string> = {
 };
 
 export const matchTypeLabels: Record<string, string> = {
-  exact: "Exact Match",
-  partial: "Partial Match",
-  none: "No Match",
+  exact: "Exact match",
+  partial: "Partial match",
+  none: "No match",
 };
 
 export const relevanceStyles: Record<string, string> = {
@@ -61,9 +61,9 @@ export const interviewStatusStyles: Record<string, string> = {
 };
 
 export const interviewStatusLabels: Record<string, string> = {
-  draft: "Needs Review",
-  created: "Invite Sent",
-  in_progress: "In Progress",
+  draft: "Needs review",
+  created: "Invite sent",
+  in_progress: "In progress",
   completed: "Completed",
   assessed: "Assessed",
   expired: "Expired",
@@ -92,7 +92,7 @@ export const recommendationStyles: Record<string, string> = {
 export const recommendationLabels: Record<string, string> = {
   advance: "Advance",
   borderline: "Borderline",
-  do_not_advance: "Do Not Advance",
+  do_not_advance: "Do not advance",
 };
 
 export const answerQualityStyles: Record<string, string> = {
@@ -106,7 +106,7 @@ export const answerQualityLabels: Record<string, string> = {
   strong: "Strong",
   adequate: "Adequate",
   weak: "Weak",
-  not_answered: "Not Answered",
+  not_answered: "Not answered",
 };
 
 export function scoreBarColor(value: number): string {
