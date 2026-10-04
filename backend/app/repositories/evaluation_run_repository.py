@@ -205,6 +205,25 @@ class EvaluationRunRepository:
             run.total_count += delta
             self.db.commit()
 
+    def _recount_items(self, run: EvaluationRun) -> None:
+        """Set processed/failed counts from the run's items (caller commits)."""
+        item_repo = EvaluationRunItemRepository(self.db)
+        run.processed_count = item_repo.count_by_status(run.id, ItemStatus.COMPLETED)
+        run.failed_count = item_repo.count_by_status(run.id, ItemStatus.FAILED)
+
+    def remove_item_counts(self, run_id: UUID) -> None:
+        """Shrink the total by one and recount after an item is deleted.
+
+        processed/failed are otherwise only recounted when a run finishes, so
+        removing a scored candidate from a finished run would leave them above
+        the new total (e.g. 13/12).
+        """
+        run = self.get_by_id(run_id)
+        if run:
+            run.total_count -= 1
+            self._recount_items(run)
+            self.db.commit()
+
     def mark_pending(self, run_id: UUID) -> None:
         """Transition from draft to pending (ready to start)."""
         run = self.get_by_id(run_id)
@@ -233,11 +252,7 @@ class EvaluationRunRepository:
     def mark_completed(self, run_id: UUID) -> None:
         run = self.get_by_id(run_id)
         if run:
-            item_repo = EvaluationRunItemRepository(self.db)
-            run.processed_count = item_repo.count_by_status(
-                run_id, ItemStatus.COMPLETED
-            )
-            run.failed_count = item_repo.count_by_status(run_id, ItemStatus.FAILED)
+            self._recount_items(run)
             run.status = RunStatus.COMPLETED.value
             run.completed_at = datetime.now()
             if run.started_at:
@@ -251,11 +266,7 @@ class EvaluationRunRepository:
     def mark_failed(self, run_id: UUID, error: str) -> None:
         run = self.get_by_id(run_id)
         if run:
-            item_repo = EvaluationRunItemRepository(self.db)
-            run.processed_count = item_repo.count_by_status(
-                run_id, ItemStatus.COMPLETED
-            )
-            run.failed_count = item_repo.count_by_status(run_id, ItemStatus.FAILED)
+            self._recount_items(run)
             run.status = RunStatus.FAILED.value
             run.completed_at = datetime.now()
             self.db.commit()
@@ -920,7 +931,7 @@ class EvaluationRunItemRepository:
         self.db.delete(item)
         self.db.commit()
 
-        EvaluationRunRepository(self.db).adjust_total_count(run_id, -1)
+        EvaluationRunRepository(self.db).remove_item_counts(run_id)
         logger.info(
             f"Deleted run item fully: id={item_id}, run={run_id}, "
             f"candidate={candidate_id}, interview={interview_id}, "

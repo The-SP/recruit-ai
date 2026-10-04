@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Layers, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -90,16 +90,11 @@ export default function AdminRunsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary/10 p-2 rounded-xl">
-            <Layers className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">All runs</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Every evaluation run across all accounts, newest first.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold">All runs</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Every evaluation run across all accounts, newest first.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative w-64">
@@ -158,8 +153,8 @@ export default function AdminRunsPage() {
                 <TableHeader>
                   <TableRow className="bg-foreground/[0.06] hover:bg-foreground/[0.06] border-b-2 border-foreground/15">
                     <TableHead>Date</TableHead>
-                    <TableHead>Job Title</TableHead>
-                    <TableHead>Submitted By</TableHead>
+                    <TableHead>Job title</TableHead>
+                    <TableHead>Submitted by</TableHead>
                     <TableHead className="text-center">Resumes</TableHead>
                     <TableHead className="text-center">Failed</TableHead>
                     <TableHead className="text-center">Time</TableHead>

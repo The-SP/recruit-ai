@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -74,16 +74,11 @@ export default function AdminUsersPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary/10 p-2 rounded-xl">
-            <Users className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Users</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Every signed-in account, newest first.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold">Users</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Every signed-in account, newest first.
+          </p>
         </div>
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -131,8 +126,7 @@ export default function AdminUsersPage() {
                     <TableHead>User</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead className="text-center">Runs</TableHead>
-                    <TableHead>Last Run</TableHead>
-                    <TableHead>Flags</TableHead>
+                    <TableHead>Last run</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody className="[&_tr]:border-foreground/10 [&_td]:py-3">
@@ -151,9 +145,20 @@ export default function AdminUsersPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="font-medium truncate">
-                              {u.full_name ?? "—"}
-                            </p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="font-medium truncate">
+                                {u.full_name ?? "—"}
+                              </p>
+                              {u.is_admin && <Badge variant="outline">Admin</Badge>}
+                              {!u.is_active && (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-error text-error-foreground border-error-edge"
+                                >
+                                  Inactive
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground truncate">
                               {u.email}
                             </p>
@@ -168,19 +173,6 @@ export default function AdminUsersPage() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {u.last_run_at ? shortDate(u.last_run_at) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1.5">
-                          {u.is_admin && <Badge variant="outline">Admin</Badge>}
-                          {!u.is_active && (
-                            <Badge
-                              variant="outline"
-                              className="bg-error text-error-foreground border-error-edge"
-                            >
-                              Inactive
-                            </Badge>
-                          )}
-                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
