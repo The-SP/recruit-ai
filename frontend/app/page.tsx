@@ -1,49 +1,50 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
-  MessageSquareText,
-  Shield,
+  Briefcase,
+  ListChecks,
+  Mic,
+  SearchCheck,
   Sparkles,
-  Zap,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { HowItWorks } from "@/components/how-it-works";
+import { LandingResultsPreview } from "@/components/landing-results-preview";
 import { useAuth } from "@/contexts/auth-context";
+import { MAX_ANONYMOUS_RESUMES } from "@/lib/evaluation-types";
+import { getToken } from "@/services/auth";
 
+// What sets the scoring apart. The upload, rank, interview flow itself is
+// told once, by HowItWorks below, so these deliberately don't repeat it.
 const features = [
   {
-    icon: Zap,
-    title: "Instant Ranking",
+    icon: SearchCheck,
+    title: "Scores you can check",
     description:
-      "Upload resumes and get AI-ranked candidates against your JD in minutes, not hours.",
+      "Every score comes with the evidence and reasoning behind it, skill by skill, so you can see why a candidate ranked where they did.",
   },
   {
-    icon: BarChart3,
-    title: "Detailed Breakdowns",
+    icon: ListChecks,
+    title: "Must-haves count most",
     description:
-      "Skills, experience, and education scored separately with evidence and reasoning.",
+      "Critical skills weigh heaviest, and each one missing pulls the score down, however strong a candidate is elsewhere.",
   },
   {
-    icon: Shield,
-    title: "Consistent & Unbiased",
+    icon: Mic,
+    title: "Interviews you can verify",
     description:
-      "Same evaluation criteria applied to every candidate, every time.",
-  },
-  {
-    icon: MessageSquareText,
-    title: "AI Interviews",
-    description:
-      "Invite a shortlisted candidate to an interview with questions generated from their resume and your job description.",
+      "Questions are drafted from each candidate's evaluation. You get the transcript, an assessment, and the recording when answers are spoken.",
   },
 ];
+
+const noopSubscribe = () => () => {};
 
 export default function LandingPage() {
   const { user, isLoading } = useAuth();
@@ -55,10 +56,21 @@ export default function LandingPage() {
     }
   }, [isLoading, user, router]);
 
+  // A stored token means this is probably a signed-in user about to be sent
+  // to the dashboard, so hide the marketing page while auth resolves. Read via
+  // useSyncExternalStore so the server render (no localStorage) still matches
+  // on hydration; the server HTML can still paint for a moment before this.
+  const hasToken = useSyncExternalStore(
+    noopSubscribe,
+    () => getToken() !== null,
+    () => false
+  );
+  if (user || (isLoading && hasToken)) return null;
+
   return (
     <main className="min-h-screen">
       {/* Hero */}
-      <section className="px-6 pt-16 pb-12 md:pt-24 md:pb-16">
+      <section className="px-6 pt-12 pb-12 md:pt-16 md:pb-16">
         <div className="max-w-5xl mx-auto text-center space-y-6">
           <Badge
             variant="outline"
@@ -87,21 +99,22 @@ export default function LandingPage() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="gap-2 px-6">
-              <Link href="/demo">Try demo without signing up</Link>
+              <Link href="/demo">Try it free, no sign-up</Link>
             </Button>
           </div>
+        </div>
+
+        <div className="max-w-5xl mx-auto pt-10 md:pt-12">
+          <LandingResultsPreview />
         </div>
       </section>
 
       {/* Feature cards */}
       <section className="px-6 py-12">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
           {features.map((f) => (
-            <Card
-              key={f.title}
-              className="p-6 space-y-3 hover:shadow-md transition-shadow"
-            >
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Card key={f.title} className="p-6 gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-1">
                 <f.icon className="w-5 h-5 text-primary" />
               </div>
               <h3 className="font-semibold">{f.title}</h3>
@@ -123,33 +136,52 @@ export default function LandingPage() {
       {/* CTA strip */}
       <section className="px-6 py-16">
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card className="p-8 space-y-4 border-primary/20 bg-primary/5">
+          <Card className="p-8 gap-4">
             <h3 className="text-xl font-bold">Sign in to interview candidates</h3>
-            <p className="text-sm text-muted-foreground">
-              AI interviews are available on a free account, along with saved run
-              history, cross-run stats, and candidate comparison.
+            <p className="text-sm text-muted-foreground flex-1">
+              A free account adds AI interviews, unlimited resumes per run, and
+              saved run history with side-by-side comparison within each run.
             </p>
             <Button asChild className="w-full gap-2">
               <Link href="/login">
-                Sign in with Google <ArrowRight className="w-4 h-4" />
+                Create a free account <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
           </Card>
 
-          <Card className="p-8 space-y-4">
+          <Card className="p-8 gap-4">
             <h3 className="text-xl font-bold">Just want to try it?</h3>
-            <p className="text-sm text-muted-foreground">
-              No account needed. Submit a batch and get results via a shareable
-              link, with no data saved to your profile.
+            <p className="text-sm text-muted-foreground flex-1">
+              No account needed. Evaluate up to {MAX_ANONYMOUS_RESUMES} resumes
+              against a job description and get results by email and a
+              shareable link.
             </p>
             <Button asChild variant="outline" className="w-full gap-2">
               <Link href="/demo">
-                Try demo <ArrowRight className="w-4 h-4" />
+                Try it free <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
           </Card>
         </div>
       </section>
+
+      <footer className="border-t px-6 py-8">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Briefcase className="w-4 h-4" />
+            <span className="font-medium text-foreground">Recruit AI</span>
+            <span>· AI resume screening and interviews</span>
+          </div>
+          <nav className="flex items-center gap-6">
+            <Link href="/demo" className="hover:text-foreground transition-colors">
+              Try it free
+            </Link>
+            <Link href="/login" className="hover:text-foreground transition-colors">
+              Sign in
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </main>
   );
 }

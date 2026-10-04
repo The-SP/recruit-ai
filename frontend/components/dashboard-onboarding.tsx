@@ -38,20 +38,20 @@ export function DashboardOnboarding() {
           </Link>
         </Button>
       </div>
-      <ol className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
+      <ol className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-6">
         {/* Same step markup as components/how-it-works.tsx, so the dashboard
             matches the landing page and /demo. */}
         {steps.map((step, i) => (
-          <li key={step.title} className="flex gap-4">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shadow-sm shadow-primary/20">
-              {i + 1}
-            </div>
-            <div>
+          <li key={step.title}>
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/15 ring-1 ring-primary/25 text-primary flex items-center justify-center text-xs font-bold">
+                {i + 1}
+              </div>
               <h3 className="font-bold text-foreground leading-tight">{step.title}</h3>
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                {step.body}
-              </p>
             </div>
+            <p className="text-sm text-muted-foreground mt-2 pl-9 leading-relaxed">
+              {step.body}
+            </p>
           </li>
         ))}
       </ol>

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { setToken } from "@/services/auth";
+import { setToken, takeNextPath } from "@/services/auth";
 import { useAuth } from "@/contexts/auth-context";
 
 function CallbackHandler() {
@@ -14,9 +14,9 @@ function CallbackHandler() {
     const token = searchParams.get("token");
     if (token) {
       setToken(token);
-      refresh().then(() => router.replace("/dashboard"));
+      refresh().then(() => router.replace(takeNextPath()));
     } else {
-      router.replace("/login");
+      router.replace("/login?error=failed");
     }
   }, [searchParams, router, refresh]);
 

@@ -62,7 +62,7 @@ export function Header() {
             href="/demo"
             className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors bg-muted/50 hover:bg-primary/5 px-4 py-2 rounded-full border hover:border-primary/20"
           >
-            Try Demo
+            Try it free
           </Link>
 
           {!isLoading && (
@@ -78,18 +78,19 @@ export function Header() {
                   variant="ghost"
                   size="icon"
                   onClick={logout}
-                  title="Logout"
+                  title="Sign out"
+                  aria-label="Sign out"
                   className="rounded-full"
                 >
                   <LogOut className="w-4 h-4" />
                 </Button>
               </div>
-            ) : (
+            ) : pathname !== "/login" && (
               <Link
                 href="/login"
                 className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors bg-muted/50 hover:bg-primary/5 px-4 py-2 rounded-full border hover:border-primary/20"
               >
-                Login
+                Sign in
               </Link>
             )
           )}

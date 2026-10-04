@@ -1,3 +1,4 @@
+from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -23,7 +24,14 @@ async def login_with_google(request: Request) -> object:
 async def google_callback(
     request: Request, db: Session = Depends(get_db)
 ) -> RedirectResponse:
-    token = await google.authorize_access_token(request)  # type: ignore[no-untyped-call]
+    try:
+        token = await google.authorize_access_token(request)  # type: ignore[no-untyped-call]
+    except OAuthError as exc:
+        # Cancelling Google's consent screen (or a stale state cookie) lands
+        # here; send the user back to the login page with a reason instead
+        # of a raw 500 from the API domain.
+        reason = "cancelled" if exc.error == "access_denied" else "failed"
+        return RedirectResponse(f"{Config.FRONTEND_URL}/login?error={reason}")
     userinfo = token.get("userinfo") or await google.userinfo(token=token)
     user = UserRepository(db).get_or_create(dict(userinfo))
     access_token = create_access_token({"sub": user.google_id})
