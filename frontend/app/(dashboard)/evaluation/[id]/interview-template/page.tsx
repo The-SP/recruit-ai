@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, X } from "lucide-react";
+import { Info,} from "lucide-react";
 import { use, useEffect, useState } from "react";
 
 import {
@@ -17,6 +17,7 @@ import {
   saveInterviewTemplate,
 } from "@/services/runs";
 import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
+import { ErrorBanner } from "@/components/ui/error-banner";
 
 /** The fields a save would send, so "changed" means "would save something
  * different". allowedTimeLimits is server metadata, not a setting, and the
@@ -131,10 +132,7 @@ export default function InterviewTemplatePage({
       </div>
 
       {error && (
-        <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-          <X className="w-4 h-4 shrink-0 mt-0.5" />
-          <p className="font-medium">{error}</p>
-        </div>
+        <ErrorBanner>{error}</ErrorBanner>
       )}
 
       {/* Up top rather than under the card, where it sat below the fold. */}

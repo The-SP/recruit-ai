@@ -1,12 +1,17 @@
 "use client";
 
-import { AlertCircle, Loader2, Mic, MicOff, RotateCcw, Send, Square } from "lucide-react";
+import { Loader2, Mic, MicOff, RotateCcw, Send, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AudioLevelBars } from "@/components/interview/audio-level-bars";
 import { MicPermissionDenied } from "@/components/interview/mic-check";
+import { RecordingPlayer } from "@/components/interview/recording-player";
+import { isSendShortcut, SendShortcutHint } from "@/components/interview/send-shortcut";
 import { pickMimeType, type MicStream } from "@/components/interview/use-mic-stream";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Kbd } from "@/components/ui/kbd";
 import { formatClock } from "@/lib/utils";
 
 /** Mirrors MAX_ANSWER_AUDIO_SECONDS in backend/app/interview/constants.py. The
@@ -160,6 +165,33 @@ export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecord
     setUiState("ready");
   };
 
+  // No deps: re-subscribing each render keeps the handler on current state,
+  // and renders here are at most once a second.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.altKey) return;
+      // A focused control already handles its own keys (Space presses a
+      // button, types into a field); acting here as well would fire twice.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("button, input, textarea, select, a, audio, [contenteditable]")) return;
+
+      if (e.key === " " && !e.ctrlKey && !e.metaKey) {
+        if (uiState === "ready") {
+          e.preventDefault();
+          startRecording();
+        } else if (uiState === "recording") {
+          e.preventDefault();
+          stopRecording();
+        }
+      } else if (isSendShortcut(e) && uiState === "recorded") {
+        e.preventDefault();
+        void submit();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   if (!mic.isSupported) {
     return (
       <Card className="p-6 rounded-2xl border-error-edge bg-error/40 space-y-2">
@@ -213,18 +245,17 @@ export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecord
   return (
     <div className="space-y-3 pb-2">
       {message && (
-        <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <p className="font-medium">{message}</p>
-        </div>
+        <ErrorBanner>{message}</ErrorBanner>
       )}
 
       <Card className="p-6 rounded-2xl border-border/60">
         {uiState === "ready" && (
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              Speak your answer, then stop when you&apos;re done. You can listen back
-              and re-record before submitting.
+              Answer out loud. You can listen back before sending.
+              <span className="hidden sm:inline">
+                {" "}Press <Kbd>Space</Kbd> to start.
+              </span>
             </p>
             <Button
               onClick={startRecording}
@@ -238,16 +269,16 @@ export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecord
 
         {uiState === "recording" && (
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <span className="w-3 h-3 rounded-full bg-error-foreground animate-pulse shrink-0" />
               <span className="font-mono font-bold text-foreground tabular-nums">
                 {formatClock(elapsed)}
               </span>
-              <span className="text-xs text-muted-foreground truncate">
-                {remaining <= WARN_AT_REMAINING
-                  ? `${remaining}s left — recording stops automatically`
-                  : "Recording your answer"}
-              </span>
+              {/* Live input level: a flat line here means the mic is not
+                  hearing them, which is worth knowing before they finish. */}
+              {mic.stream && (
+                <AudioLevelBars stream={mic.stream} className="flex-1 min-w-0 h-6" />
+              )}
             </div>
             <Button
               onClick={stopRecording}
@@ -260,9 +291,26 @@ export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecord
           </div>
         )}
 
+        {uiState === "recording" && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {remaining <= WARN_AT_REMAINING ? (
+              <span className="font-semibold text-warning-foreground">
+                {remaining}s left. Recording stops automatically.
+              </span>
+            ) : (
+              <>
+                Recording your answer.
+                <span className="hidden sm:inline">
+                  {" "}Press <Kbd>Space</Kbd> to stop.
+                </span>
+              </>
+            )}
+          </p>
+        )}
+
         {uiState === "recorded" && recording && (
           <div className="space-y-4">
-            <audio src={recording.url} controls className="w-full" />
+            <RecordingPlayer src={recording.url} />
             <div className="flex items-center justify-between gap-3">
               <Button
                 onClick={reRecord}
@@ -280,6 +328,9 @@ export function AnswerRecorder({ mic, onSubmit, onRecordingStart }: AnswerRecord
                 <Send className="w-4 h-4 ml-2" />
               </Button>
             </div>
+            <p className="hidden sm:block text-right text-xs text-muted-foreground">
+              <SendShortcutHint /> to send
+            </p>
           </div>
         )}
 

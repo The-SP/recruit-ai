@@ -14,7 +14,6 @@ import {
   Sparkles,
   Trash2,
   Users,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -39,6 +38,7 @@ import { ExpandAllToggle, ResultsTable } from "@/components/evaluation/results-t
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
 import { StatsSummary } from "@/components/evaluation/stats-summary";
 import { ResumeFileUpload } from "@/components/resume-file-upload";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -507,7 +507,7 @@ function RunDetailPageInner({
       item.final_score != null ? (item.final_score * 100).toFixed(1) : "N/A",
       item.hire_signal ?? "N/A",
       item.status,
-      item.interview ? (interviewStatusLabels[item.interview.status] ?? item.interview.status) : "Not sent",
+      item.interview ? (interviewStatusLabels[item.interview.status] ?? item.interview.status) : "No interview",
       item.interview?.recommendation
         ? (recommendationLabels[item.interview.recommendation] ?? item.interview.recommendation)
         : "N/A",
@@ -1133,10 +1133,7 @@ function RunDetailPageInner({
           </DialogHeader>
 
           {addError && (
-            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-              <X className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="font-medium">{addError}</p>
-            </div>
+            <ErrorBanner>{addError}</ErrorBanner>
           )}
 
           <ResumeFileUpload

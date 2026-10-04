@@ -32,6 +32,7 @@ import {
     addCandidatesToBatch, getCandidateBreakdown,
     getBatchJobDescription, getBatchStatus, retryAllFailed, retrySingleFailed
 } from '@/services/batch';
+import { ErrorBanner } from "@/components/ui/error-banner";
 
 function AddCandidatesPanel({
   token,
@@ -118,10 +119,7 @@ function AddCandidatesPanel({
           </div>
 
           {error && (
-            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-              <X className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="font-medium">{error}</p>
-            </div>
+            <ErrorBanner>{error}</ErrorBanner>
           )}
 
           <ResumeFileUpload
@@ -417,10 +415,7 @@ function EvaluationPageInner() {
 
           <Card className="p-8 shadow-xl border-border/60 rounded-3xl">
             {error && (
-              <div className="mb-6 bg-error border border-error-edge text-error-foreground text-sm p-4 rounded-xl flex items-start gap-3">
-                <X className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <p className="font-medium">{error}</p>
-              </div>
+              <ErrorBanner className="mb-6">{error}</ErrorBanner>
             )}
             <form onSubmit={handleTokenSubmit} className="space-y-6">
               <div className="space-y-3">

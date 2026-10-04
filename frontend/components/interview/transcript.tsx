@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useEffect, useRef } from "react";
+import { Bot } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
 import { cn } from "@/lib/utils";
@@ -13,16 +14,13 @@ import type { InterviewTurnData } from "@/lib/interview-types";
 export function InterviewTranscript({
   turns,
   showTyping = false,
-  autoScroll = true,
   onFetchTurnAudio,
   renderQuestionAudio,
   variant = "live",
+  activeSeq = null,
 }: {
   turns: InterviewTurnData[];
   showTyping?: boolean;
-  /** Off for static read-back views (e.g. inside a collapsible), where
-   * scrolling to the bottom on mount would yank the viewport. */
-  autoScroll?: boolean;
   /** Bound by the owning (recruiter) page to fetch one answer's recording.
    * Omitted on the candidate surface, which never serves audio back. */
   onFetchTurnAudio?: (seq: number) => Promise<Blob>;
@@ -38,14 +36,12 @@ export function InterviewTranscript({
    * the page's primary action, not a speaker) and a speaker line on each turn
    * so a long transcript can be scanned by question. */
   variant?: "live" | "review";
+  /** The interviewer turn the candidate is answering right now, drawn
+   * stronger than the turns around it. Live variant only; null when nothing
+   * is awaiting an answer. */
+  activeSeq?: number | null;
 }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const isReview = variant === "review";
-
-  useEffect(() => {
-    if (!autoScroll) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns.length, showTyping, autoScroll]);
 
   return (
     <div className="space-y-3">
@@ -59,6 +55,14 @@ export function InterviewTranscript({
               isCandidate ? "items-end" : "items-start"
             )}
           >
+            {!isReview && !isCandidate && (
+              <span className="flex items-center gap-1.5 px-1 text-[11px] font-semibold text-muted-foreground">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-muted">
+                  <Bot className="w-2.5 h-2.5" />
+                </span>
+                {speakerLabel(turn, "live")}
+              </span>
+            )}
             {isReview && (
               <span
                 className={cn(
@@ -72,7 +76,7 @@ export function InterviewTranscript({
                     : "text-violet-600 dark:text-violet-400"
                 )}
               >
-                {speakerLabel(turn)}
+                {speakerLabel(turn, "review")}
               </span>
             )}
             <div
@@ -82,7 +86,10 @@ export function InterviewTranscript({
                   ? isReview
                     ? "bg-muted text-foreground rounded-br-md"
                     : "bg-primary text-primary-foreground rounded-br-md"
-                  : "bg-card border border-border text-foreground rounded-bl-md"
+                  : "bg-card border border-border text-foreground rounded-bl-md",
+                // Neutral emphasis, not green: this marks what is selected,
+                // and green is reserved for the action.
+                turn.seq === activeSeq && "border-foreground/30 shadow-md text-[15px]"
               )}
             >
               {turn.content}
@@ -120,16 +127,19 @@ export function InterviewTranscript({
           </div>
         </div>
       )}
-
-      <div ref={bottomRef} />
     </div>
   );
 }
 
-function speakerLabel(turn: InterviewTurnData): string {
+/** The candidate reads "Question 2"; the recruiter scans "Q2" down a long
+ * read-back, where follow-ups also carry their question number. */
+function speakerLabel(turn: InterviewTurnData, variant: "live" | "review"): string {
   if (turn.role === "candidate") return "Candidate";
   const n = turn.question_index !== null ? turn.question_index + 1 : null;
-  if (turn.kind === "question" && n !== null) return `Interviewer · Q${n}`;
-  if (turn.kind === "followup" && n !== null) return `Interviewer · Q${n} follow-up`;
+  const live = variant === "live";
+  if (turn.kind === "question" && n !== null)
+    return `Interviewer · ${live ? `Question ${n}` : `Q${n}`}`;
+  if (turn.kind === "followup" && (live || n !== null))
+    return live ? "Interviewer · Follow-up" : `Interviewer · Q${n} follow-up`;
   return "Interviewer";
 }

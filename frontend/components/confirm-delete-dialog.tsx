@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/services/api";
 
@@ -76,9 +77,7 @@ export function ConfirmDeleteDialog({
         </AlertDialogHeader>
 
         {error && (
-          <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl">
-            <p className="font-medium">{error}</p>
-          </div>
+          <ErrorBanner>{error}</ErrorBanner>
         )}
 
         <AlertDialogFooter>

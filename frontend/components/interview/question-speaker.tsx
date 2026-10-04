@@ -39,14 +39,36 @@ export function QuestionSpeaker({
       type="button"
       onClick={() => onReplay(voiceKey)}
       aria-label={playing ? "Playing question" : "Play question aloud"}
-      className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer",
+        playing ? "text-primary" : "text-muted-foreground hover:text-foreground"
+      )}
     >
       {loading ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : playing ? (
+        <SpeakingBars />
       ) : (
-        <Volume2 className={cn("w-3.5 h-3.5", playing && "text-primary")} />
+        <Volume2 className="w-3.5 h-3.5" />
       )}
-      {loading ? "Loading audio…" : playing ? "Playing…" : "Play"}
+      {loading ? "Loading audio…" : playing ? "Speaking…" : "Play"}
     </button>
+  );
+}
+
+/** A canned equalizer, not a level meter: the clip plays through a plain
+ * audio element, and wiring an analyser into it for a 14px glyph would be
+ * machinery for nothing. It only has to say "this one is talking". */
+function SpeakingBars() {
+  return (
+    <span aria-hidden className="flex items-end gap-[2px] h-3.5 w-3.5">
+      {[0, 200, 400].map((delay) => (
+        <span
+          key={delay}
+          className="w-[3px] h-full rounded-full bg-current origin-bottom animate-speaking motion-reduce:animate-none"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </span>
   );
 }

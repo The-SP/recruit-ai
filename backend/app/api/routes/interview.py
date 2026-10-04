@@ -99,6 +99,16 @@ def _event_frame(event: engine.EngineEvent, content: str, voice: bool) -> str | 
     return None
 
 
+# Statuses after which GET state returns no turns; see get_interview_state.
+_TRANSCRIPT_WITHHELD = frozenset(
+    {
+        InterviewStatus.COMPLETED.value,
+        InterviewStatus.ASSESSED.value,
+        InterviewStatus.EXPIRED.value,
+    }
+)
+
+
 def _load_by_token(db: Session, token: str) -> Interview:
     interview = InterviewRepository(db).get_by_token(token)
     if not interview:
@@ -111,8 +121,16 @@ def get_interview_state(
     token: str, db: Session = Depends(get_db)
 ) -> InterviewStateResponse:
     """Current state + transcript so far. The client renders from this on
-    every mount and reconnect; SSE events only advance live state."""
+    every mount and reconnect; SSE events only advance live state.
+
+    Once the interview is over the transcript is withheld. The token is the
+    only credential and it outlives the interview, so a forwarded or leaked
+    invite must not read back the candidate's answers; nothing on the
+    candidate surface needs them after the fact. Recruiters read the
+    transcript through the JWT-gated run endpoints instead."""
     interview = _load_by_token(db, token)
+    if interview.status in _TRANSCRIPT_WITHHELD:
+        return build_state_response(interview, [])
     turns = InterviewRepository(db).get_turns(interview.id)
     return build_state_response(interview, turns)
 

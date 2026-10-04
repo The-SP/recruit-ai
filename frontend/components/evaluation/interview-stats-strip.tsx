@@ -52,7 +52,7 @@ export function InterviewStatsStrip({
         icon={Send}
         label="With candidate"
         value={countOrDash(withCandidate)}
-        tooltip="Invite sent, or the candidate is mid-interview"
+        tooltip="Link created, or the candidate is mid-interview"
         loading={false}
       />
       <StatCell

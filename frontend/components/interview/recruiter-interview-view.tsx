@@ -9,7 +9,6 @@ import {
   MessageSquareText,
   RotateCcw,
   Sparkles,
-  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,6 +20,7 @@ import { InterviewTranscript } from "@/components/interview/transcript";
 import { TranscriptSheet } from "@/components/interview/transcript-sheet";
 import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
 import { ResumeSheet } from "@/components/evaluation/resume-sheet";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -202,10 +202,7 @@ export function RecruiterInterviewView({
           </div>
         )}
         {error && (
-          <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-            <X className="w-4 h-4 shrink-0 mt-0.5" />
-            <p className="font-medium">{error}</p>
-          </div>
+          <ErrorBanner>{error}</ErrorBanner>
         )}
 
         {/* Invite link while the candidate hasn't finished. Guarded on the
@@ -315,12 +312,7 @@ export function RecruiterInterviewView({
         {/* Assessment task failed: surface the error and offer a retry */}
         {interview.status === "completed" && interview.assessment_error && (
           <div className="space-y-2">
-            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-              <X className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="font-medium">
-                {assessmentCopy.failedPrefix} {interview.assessment_error}
-              </p>
-            </div>
+            <ErrorBanner>{assessmentCopy.failedPrefix} {interview.assessment_error}</ErrorBanner>
             <Button
               size="sm"
               variant="outline"
@@ -386,7 +378,6 @@ export function RecruiterInterviewView({
           <div className="py-6">
             <InterviewTranscript
               turns={interview.turns}
-              autoScroll={false}
               variant="review"
               onFetchTurnAudio={onFetchTurnAudio}
               renderQuestionAudio={renderQuestionAudio}

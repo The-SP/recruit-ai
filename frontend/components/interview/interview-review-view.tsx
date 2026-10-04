@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  ArrowLeft,
   Check,
+  Clock,
   Eye,
   Loader2,
   Pencil,
@@ -9,7 +11,6 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
@@ -28,6 +29,7 @@ import {
   withValue,
   type TemplateDraft,
 } from "@/components/interview/template-editor";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,7 +44,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { WizardSteps } from "@/components/wizard-steps";
-import { interviewModeLabels } from "@/lib/evaluation-styles";
+import {
+  interviewModeLabels,
+  interviewStatusLabels,
+  interviewStatusStyles,
+} from "@/lib/evaluation-styles";
 import type {
   InterviewDetail,
   InterviewQuestionData,
@@ -438,10 +444,7 @@ export function InterviewReviewView({
       )}
 
       {error && (
-        <div className="mt-5 bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-          <X className="w-4 h-4 shrink-0 mt-0.5" />
-          <p className="font-medium">{error}</p>
-        </div>
+        <ErrorBanner className="mt-5">{error}</ErrorBanner>
       )}
 
       {step === 1 && (
@@ -546,7 +549,7 @@ export function InterviewReviewView({
                 How the interview reads to {displayName}. Follow-ups aren&apos;t
                 shown — those are written live from real answers.
               </p>
-              <InterviewTranscript turns={previewTurns} autoScroll={false} />
+              <InterviewTranscript turns={previewTurns} />
             </div>
           )}
 
@@ -800,44 +803,175 @@ export function InterviewReviewView({
   );
 }
 
-/** Shown after approval, in place of the editor. */
+/** Where an approved interview stands, as far as this page is concerned.
+ *
+ * `created` with a past expiry counts as expired: the backend flips the status
+ * lazily, so a link can be dead while the row still says `created`. */
+function approvedState(status: string, expiresAt: string | null) {
+  if (status === "created") {
+    return expiresAt && new Date(expiresAt) < new Date() ? "expired" : "live";
+  }
+  if (status === "in_progress") return "in_progress";
+  if (status === "expired") return "expired";
+  return "finished";
+}
+
+const APPROVED_COPY = {
+  in_progress: {
+    title: "Interview in progress",
+    body: (name: string) =>
+      `${name} has started. The transcript fills in as they answer.`,
+    action: "View interview",
+  },
+  finished: {
+    title: "Interview completed",
+    body: (name: string) =>
+      `${name} has finished. Read the transcript and the assessment on the interview page.`,
+    action: "View interview",
+  },
+  expired: {
+    title: "Invite link expired",
+    body: (name: string) =>
+      `This link no longer works. Reissue a fresh one for ${name} from the interview page.`,
+    action: "Reissue link",
+  },
+} as const;
+
+/** Shown after approval, in place of the editor. Revisiting the review URL
+ * also lands here, so it reflects the interview's current status rather than
+ * always announcing a live link. */
 export function ApprovedNotice({
   inviteUrl,
+  status,
+  expiresAt,
+  answerMode,
+  candidateName,
+  jobTitle,
+  headerLoading,
   onCopy,
   copied,
   backHref,
+  interviewHref,
 }: {
   inviteUrl: string;
+  status: string;
+  expiresAt: string | null;
+  answerMode: string | null;
+  candidateName: string | null;
+  jobTitle: string | null;
+  headerLoading: boolean;
   onCopy: () => void;
   copied: boolean;
   backHref: string;
+  interviewHref: string;
 }) {
+  const name = candidateName ?? "the candidate";
+  const state = approvedState(status, expiresAt);
+  const badgeStatus = state === "expired" ? "expired" : status;
+
+  const meta = [
+    expiresAt && state === "live"
+      ? `Expires ${new Date(expiresAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}`
+      : null,
+    answerMode ? interviewModeLabels[answerMode] ?? null : null,
+  ].filter(Boolean);
+
   return (
-    <div className="rounded-2xl border border-success-edge bg-success p-5 space-y-3">
-      <p className="font-bold text-success-foreground flex items-center gap-2">
-        <Check className="w-4 h-4" />
-        Interview approved
-      </p>
-      <p className="text-sm text-success-foreground/90">
-        The invite link is live. Send it to the candidate.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <code className="text-xs bg-background/60 rounded-lg px-3 py-2 truncate max-w-full">
-          {inviteUrl}
-        </code>
-        <Button
-          size="sm"
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          {headerLoading ? (
+            <Skeleton className="h-8 w-56 rounded-lg" />
+          ) : (
+            <h1 className="text-2xl font-bold tracking-tight truncate">
+              Interview for {candidateName ?? "candidate"}
+            </h1>
+          )}
+          {headerLoading ? (
+            <Skeleton className="h-3.5 w-32 rounded mt-2" />
+          ) : (
+            jobTitle && (
+              <p className="text-sm text-muted-foreground mt-1 truncate">
+                {jobTitle}
+              </p>
+            )
+          )}
+        </div>
+        <Badge
           variant="outline"
-          onClick={onCopy}
-          className="cursor-pointer font-semibold gap-2"
+          className={cn("font-semibold shrink-0", interviewStatusStyles[badgeStatus])}
         >
-          {copied ? <Check className="w-3.5 h-3.5" /> : null}
-          {copied ? "Copied" : "Copy link"}
-        </Button>
-        <Button asChild size="sm" className="cursor-pointer font-semibold">
-          <Link href={backHref}>Back to results</Link>
-        </Button>
+          {interviewStatusLabels[badgeStatus] ?? badgeStatus}
+        </Badge>
       </div>
+
+      <div className="rounded-2xl border bg-card p-6 space-y-5">
+        {state === "live" ? (
+          <>
+            <div className="space-y-1.5">
+              <p className="font-semibold flex items-center gap-2">
+                <Check className="w-4 h-4 text-success-foreground" />
+                Interview approved
+              </p>
+              <p className="text-sm text-muted-foreground">
+                The invite link is live. Send it to {name}.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex">
+                <input
+                  readOnly
+                  value={inviteUrl}
+                  aria-label="Invite link"
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="min-w-0 flex-1 h-10 rounded-l-lg border border-r-0 bg-muted/40 px-3 font-mono text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                />
+                <Button
+                  onClick={onCopy}
+                  className="h-10 rounded-l-none rounded-r-lg gap-2 font-semibold cursor-pointer shrink-0"
+                >
+                  {copied && <Check className="w-4 h-4" />}
+                  {copied ? "Copied" : "Copy link"}
+                </Button>
+              </div>
+              {meta.length > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {meta.join(" · ")}
+                </p>
+              )}
+            </div>
+
+            <p className="text-sm text-muted-foreground border-t pt-4">
+              Track progress in the Interviews tab. Once {name} finishes, run
+              the assessment for a transcript and a recommendation.
+            </p>
+          </>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="font-semibold">{APPROVED_COPY[state].title}</p>
+              <p className="text-sm text-muted-foreground">
+                {APPROVED_COPY[state].body(name)}
+              </p>
+            </div>
+            <Button asChild className="font-semibold">
+              <Link href={interviewHref}>{APPROVED_COPY[state].action}</Link>
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <Button asChild variant="ghost" size="sm" className="gap-1.5 -ml-2 text-muted-foreground">
+        <Link href={backHref}>
+          <ArrowLeft className="w-4 h-4" />
+          Back to results
+        </Link>
+      </Button>
     </div>
   );
 }

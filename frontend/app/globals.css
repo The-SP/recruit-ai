@@ -217,6 +217,13 @@
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+
+  /* The interviewer's "speaking" glyph on the candidate interview page. */
+  --animate-speaking: speaking 0.9s ease-in-out infinite;
+  @keyframes speaking {
+    0%, 100% { transform: scaleY(0.35); }
+    50% { transform: scaleY(1); }
+  }
 }
 
 @layer base {

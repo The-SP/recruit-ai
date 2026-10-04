@@ -176,6 +176,11 @@ row lock (so the SSE-visible outcome can never disagree with it).
 Reconnection has no special-cased protocol: `GET /interviews/{token}` returns
 current state as the source of truth, and the client just re-opens SSE for
 whatever happens next — a hard refresh or dropped connection loses nothing.
+The one exception is deliberate: once the interview is completed, assessed or
+expired, that endpoint returns status with an empty `turns` list. The token
+outlives the interview, so a forwarded invite must not read back the
+candidate's answers; the page shows a plain "submitted" confirmation instead,
+and recruiters read the transcript through the JWT-gated run endpoints.
 An audio answer is persisted under its *next* sequence number before
 streaming starts, so retrying a failed submission simply overwrites the same
 file rather than accumulating orphaned recordings.

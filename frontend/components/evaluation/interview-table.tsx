@@ -10,13 +10,13 @@ import {
   Loader2,
   RotateCcw,
   Sparkles,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 
 import { DemoNotice } from "@/components/demo-notice";
 import { assessmentCopy } from "@/components/interview/assessment-view";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -406,10 +406,7 @@ export function InterviewTable({
       {demoNotice && <DemoNotice>{demoNotice}</DemoNotice>}
 
       {error && (
-        <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-          <X className="w-4 h-4 shrink-0 mt-0.5" />
-          <p className="font-medium">{error}</p>
-        </div>
+        <ErrorBanner>{error}</ErrorBanner>
       )}
 
       <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">

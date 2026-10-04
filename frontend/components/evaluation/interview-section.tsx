@@ -9,7 +9,6 @@ import {
   MessageSquareText,
   RotateCcw,
   Sparkles,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -18,6 +17,7 @@ import {
   assessmentCopy,
   InterviewVerdictSummary,
 } from "@/components/interview/assessment-view";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,10 +150,7 @@ export function InterviewSection({
       {demoNotice && <DemoNotice>{demoNotice}</DemoNotice>}
 
       {error && (
-        <div className="bg-error border border-error-edge text-error-foreground text-xs px-3 py-2 rounded-lg flex items-start gap-2">
-          <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-          <p className="font-medium">{error}</p>
-        </div>
+        <ErrorBanner size="sm">{error}</ErrorBanner>
       )}
 
       {interview === "loading" && (
@@ -276,12 +273,7 @@ export function InterviewSection({
           {/* Assessment task failed: surface the error and offer a retry */}
           {detail.status === "completed" && detail.assessment_error && (
             <div className="space-y-2">
-              <div className="bg-error border border-error-edge text-error-foreground text-xs px-3 py-2 rounded-lg flex items-start gap-2">
-                <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <p className="font-medium">
-                  {assessmentCopy.failedPrefix} {detail.assessment_error}
-                </p>
-              </div>
+              <ErrorBanner size="sm">{assessmentCopy.failedPrefix} {detail.assessment_error}</ErrorBanner>
               {onAssess && (
                 <Button
                   size="sm"

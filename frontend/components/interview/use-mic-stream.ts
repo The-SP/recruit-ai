@@ -28,8 +28,10 @@ export interface MicStream {
   stream: MediaStream | null;
   isSupported: boolean;
   /** Idempotent: a no-op once a live stream is held, which is what keeps the
-   * whole session down to a single permission prompt. */
-  request: () => Promise<void>;
+   * whole session down to a single permission prompt. Resolves to the stream
+   * (null if denied), so a caller can act on it in the same click without
+   * waiting for a re-render to deliver `stream`. */
+  request: () => Promise<MediaStream | null>;
 }
 
 /** Owns the microphone for the whole interview page: the pre-start mic check
@@ -56,7 +58,7 @@ export function useMicStream(): MicStream {
     // produce a second prompt on the browsers that re-ask.
     if (hasLiveStream()) {
       setStatus("ready");
-      return;
+      return streamRef.current;
     }
     setStatus("requesting");
     try {
@@ -64,10 +66,12 @@ export function useMicStream(): MicStream {
       streamRef.current = s;
       setStream(s);
       setStatus("ready");
+      return s;
     } catch {
       streamRef.current = null;
       setStream(null);
       setStatus("denied");
+      return null;
     }
   }, []);
 

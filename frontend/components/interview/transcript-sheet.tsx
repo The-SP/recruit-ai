@@ -39,7 +39,6 @@ export function TranscriptSheet({
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <InterviewTranscript
             turns={turns}
-            autoScroll={false}
             variant="review"
             onFetchTurnAudio={onFetchTurnAudio}
             renderQuestionAudio={renderQuestionAudio}

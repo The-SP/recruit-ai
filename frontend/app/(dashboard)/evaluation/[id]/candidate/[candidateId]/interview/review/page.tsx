@@ -286,14 +286,19 @@ export default function InterviewReviewPage({
   // exists, so there is nothing left to review.
   if (inviteUrl) {
     return (
-      <div className="max-w-3xl mx-auto">
-        <ApprovedNotice
-          inviteUrl={inviteUrl}
-          copied={copied}
-          backHref={backHref}
-          onCopy={() => runAction(async () => copyInviteUrl(inviteUrl))}
-        />
-      </div>
+      <ApprovedNotice
+        inviteUrl={inviteUrl}
+        status={interview?.status ?? "created"}
+        expiresAt={interview?.expires_at ?? null}
+        answerMode={interview?.answer_mode ?? null}
+        candidateName={breakdown?.candidate_name ?? breakdown?.filename ?? null}
+        jobTitle={jobTitle}
+        headerLoading={runLoading || breakdownLoading}
+        copied={copied}
+        backHref={backHref}
+        interviewHref={`/evaluation/${runId}/candidate/${candidateId}/interview`}
+        onCopy={() => runAction(async () => copyInviteUrl(inviteUrl))}
+      />
     );
   }
 

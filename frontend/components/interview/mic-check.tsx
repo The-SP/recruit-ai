@@ -3,6 +3,7 @@
 import { Loader2, Mic, MicOff, RotateCcw, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AudioLevelBars } from "@/components/interview/audio-level-bars";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { pickMimeType, type MicStream } from "@/components/interview/use-mic-stream";
@@ -88,13 +89,13 @@ export function MicCheck({ mic, voiceMode }: MicCheckProps) {
     };
   }, [clearTimers, releaseSample]);
 
-  const startSample = () => {
-    const stream = mic.stream;
+  /** One click from "Test now" to recording: asks for the mic first if it
+   * isn't held yet, then starts on the stream the request resolved to. */
+  const startSample = async () => {
     const mimeType = pickMimeType();
-    if (!stream || !mimeType) {
-      mic.request();
-      return;
-    }
+    if (!mimeType) return;
+    const stream = mic.stream ?? (await mic.request());
+    if (!stream) return;
 
     releaseSample();
     const recorder = new MediaRecorder(stream, { mimeType });
@@ -136,63 +137,68 @@ export function MicCheck({ mic, voiceMode }: MicCheckProps) {
     return <MicPermissionDenied onRetry={mic.request} />;
   }
 
+  // The idle action sits under the heading; once a check is under way, the
+  // recording and playback controls take its place below.
+  const idleAction =
+    mic.status !== "ready" ? (
+      <Button
+        onClick={startSample}
+        variant="outline"
+        disabled={mic.status === "requesting"}
+        className="font-semibold rounded-xl shrink-0 cursor-pointer"
+      >
+        {mic.status === "requesting" ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Waiting for permission…
+          </>
+        ) : (
+          <>
+            <Mic className="w-4 h-4 mr-2" />
+            Test now
+          </>
+        )}
+      </Button>
+    ) : checkState === "ready" ? (
+      <Button
+        onClick={startSample}
+        variant="outline"
+        className="font-semibold rounded-xl shrink-0 cursor-pointer"
+      >
+        <Mic className="w-4 h-4 mr-2" />
+        {sample ? "Record again" : "Record a test clip"}
+      </Button>
+    ) : null;
+
   return (
     <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-4">
-      <div className="space-y-1.5">
-        <p className="font-bold text-foreground text-sm">Check your microphone</p>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Record a few seconds and play it back, so you find any problem now rather
-          than mid-interview.
-          {voiceMode
-            ? " It checks your speakers too — the questions are read aloud, so if you can't hear the playback you won't hear the interviewer."
-            : ""}{" "}
-          This is optional, and nothing is uploaded or saved.
-        </p>
+      <div className="flex flex-col items-start gap-4">
+        <div className="space-y-0.5 min-w-0">
+          <p className="font-semibold text-foreground text-sm">
+            {voiceMode ? "Test your mic and speakers" : "Test your microphone"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Optional. Record a few seconds and play it back. Nothing is saved.
+          </p>
+        </div>
+        {idleAction}
       </div>
 
-      {mic.status !== "ready" && (
-        <Button
-          onClick={mic.request}
-          variant="outline"
-          disabled={mic.status === "requesting"}
-          className="h-11 px-5 font-bold rounded-xl cursor-pointer"
-        >
-          {mic.status === "requesting" ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Waiting for permission...
-            </>
-          ) : (
-            <>
-              <Mic className="w-4 h-4 mr-2" />
-              Test your microphone
-            </>
-          )}
-        </Button>
-      )}
-
-      {mic.status === "ready" && checkState === "ready" && (
-        <Button
-          onClick={startSample}
-          variant="outline"
-          className="h-11 px-5 font-bold rounded-xl cursor-pointer"
-        >
-          <Mic className="w-4 h-4 mr-2" />
-          {sample ? "Record again" : "Record a test clip"}
-        </Button>
-      )}
-
       {checkState === "recording" && (
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 shrink-0">
             <span className="w-3 h-3 rounded-full bg-error-foreground animate-pulse shrink-0" />
             <span className="font-mono font-bold text-foreground tabular-nums">
               {formatClock(elapsed)}
             </span>
-            <span className="text-xs text-muted-foreground truncate">
+          </div>
+          {mic.stream ? (
+            <AudioLevelBars stream={mic.stream} className="flex-1 min-w-0" />
+          ) : (
+            <span className="flex-1 text-xs text-muted-foreground truncate">
               Say a few words
             </span>
-          </div>
+          )}
           <Button
             onClick={stopSample}
             variant="outline"

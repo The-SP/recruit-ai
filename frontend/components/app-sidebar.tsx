@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Briefcase,
   History,
   LayoutDashboard,
   Layers,
@@ -27,6 +26,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { BrandMark } from "@/components/brand-mark";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
@@ -89,11 +89,8 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
-        <Link href="/dashboard" className="flex items-center gap-2 group">
-          <div className="bg-primary p-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
-            <Briefcase className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-bold text-primary">Recruit AI</span>
+        <Link href="/dashboard" className="group">
+          <BrandMark />
         </Link>
       </SidebarHeader>
 

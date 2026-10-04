@@ -63,7 +63,7 @@ export const interviewStatusStyles: Record<string, string> = {
 
 export const interviewStatusLabels: Record<string, string> = {
   draft: "Needs review",
-  created: "Invite sent",
+  created: "Link ready",
   in_progress: "In progress",
   completed: "Completed",
   assessed: "Assessed",

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,21 @@ export function Header() {
 
   if (AUTH_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
+  // The candidate is a guest mid-assessment, not a visitor: no sales CTA, no
+  // account controls (they belong to whoever is signed in on this browser),
+  // and no link out, since leaving the page costs them interview time. Not
+  // sticky either: the interview pins its own header with the timer.
+  if (pathname === "/interview") {
+    return (
+      <header className="border-b">
+        <div className="flex items-center justify-between px-6 py-3 mx-auto w-full max-w-3xl">
+          <BrandMark />
+          <ModeToggle />
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b">
       {/* Matches the page below it: the anonymous results page is as wide
@@ -50,11 +66,8 @@ export function Header() {
           pathname === "/evaluation" ? "max-w-7xl" : "max-w-5xl"
         )}
       >
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="bg-primary p-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
-            <Briefcase className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-primary">Recruit AI</span>
+        <Link href="/" className="group">
+          <BrandMark size="lg" />
         </Link>
 
         <div className="flex items-center gap-2">

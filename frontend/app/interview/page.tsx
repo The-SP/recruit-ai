@@ -11,7 +11,6 @@ import {
   Timer,
   Volume2,
   VolumeX,
-  X,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useState } from "react";
@@ -20,9 +19,11 @@ import { InterviewCountdown } from "@/components/interview/countdown";
 import { MicCheck } from "@/components/interview/mic-check";
 import { QuestionSpeaker } from "@/components/interview/question-speaker";
 import { AnswerRecorder } from "@/components/interview/recorder";
+import { isSendShortcut, SendShortcutHint } from "@/components/interview/send-shortcut";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { useInterviewVoice } from "@/components/interview/use-interview-voice";
 import { useMicStream } from "@/components/interview/use-mic-stream";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import type {
   InterviewStateEvent,
   InterviewTurnData,
 } from "@/lib/interview-types";
+import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
 import {
   fetchVoiceClip,
@@ -42,6 +44,34 @@ import {
 } from "@/services/interview";
 
 const MAX_ANSWER_LENGTH = 5000;
+
+/** Statuses for which the server withholds the transcript. */
+const FINISHED_STATUSES = new Set(["completed", "assessed", "expired"]);
+
+/** Centered single-message screen: unavailable, expired, already submitted. */
+function StatusScreen({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="px-6 py-24 min-h-[calc(100vh-80px)]">
+      <div className="max-w-md mx-auto text-center space-y-4">
+        {icon}
+        <h1 className="text-2xl font-extrabold text-foreground tracking-tight">{title}</h1>
+        {children}
+      </div>
+    </main>
+  );
+}
+
+const neutralIconTile =
+  "inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-card shadow-sm border border-border";
+
 
 function InterviewPageInner() {
   const searchParams = useSearchParams();
@@ -75,7 +105,12 @@ function InterviewPageInner() {
     if (!token) return;
     return getInterviewState(token)
       .then((s) => {
-        setState(s);
+        // The server withholds turns once the interview is over. A refetch
+        // in the same session (after a stream error at the very end) keeps
+        // the transcript already on screen rather than blanking the chat.
+        setState((prev) =>
+          prev && FINISHED_STATUSES.has(s.status) ? { ...s, turns: prev.turns } : s
+        );
         setError(null);
       })
       .catch((err) => {
@@ -95,6 +130,16 @@ function InterviewPageInner() {
   useEffect(() => {
     if (token) fetchState();
   }, [token, fetchState]);
+
+  // Follow the conversation to the page end, which is also where the sticky
+  // composer rests, so the newest turn is never hidden behind it. Owned here,
+  // not by the transcript, because the composer is this page's. Zero turns is
+  // every screen that isn't the chat.
+  const turnCount = state?.turns.length ?? 0;
+  useEffect(() => {
+    if (turnCount === 0) return;
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+  }, [turnCount, isSubmitting]);
 
   const handleStart = async () => {
     if (!token) return;
@@ -194,20 +239,19 @@ function InterviewPageInner() {
   // Missing token or fatal error
   if (!token || error) {
     return (
-      <main className="px-6 py-24 min-h-[calc(100vh-80px)] bg-muted/30">
-        <div className="max-w-md mx-auto text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-card shadow-sm border border-border">
+      <StatusScreen
+        title="Interview unavailable"
+        icon={
+          <div className={neutralIconTile}>
             <KeyRound className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-extrabold text-foreground tracking-tight">
-            Interview unavailable
-          </h1>
-          <p className="text-muted-foreground font-medium">
-            {error ??
-              "This page needs an invite link. Please use the exact link you were given."}
-          </p>
-        </div>
-      </main>
+        }
+      >
+        <p className="text-muted-foreground font-medium">
+          {error ??
+            "This page needs an invite link. Please use the exact link you were given."}
+        </p>
+      </StatusScreen>
     );
   }
 
@@ -242,128 +286,150 @@ function InterviewPageInner() {
 
   // Intro screen
   if (state.status === "created") {
-    return (
-      <main className="px-6 py-20 min-h-[calc(100vh-80px)] bg-muted/30">
-        <div className="max-w-xl mx-auto space-y-8">
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-card shadow-sm border border-border mb-2">
-              <MessageSquareText className="w-8 h-8 text-primary" />
+    const questionCount = state.total_questions;
+    // Short facts as tiles rather than sentences, so the whole screen
+    // (facts, consent, mic check, start) fits without scrolling.
+    const facts = [
+      {
+        icon: ListChecks,
+        title: `${questionCount} ${questionCount === 1 ? "question" : "questions"}`,
+        detail: "About your background and experience",
+      },
+      ...(totalMinutes !== null
+        ? [
+            {
+              icon: Timer,
+              // The snapshotted time limit, not an estimate: a short interview
+              // finishes well inside it.
+              title: `Up to ${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"}`,
+              detail: "The timer starts when you begin",
+            },
+          ]
+        : []),
+      {
+        icon: isAudioMode ? Mic : Send,
+        title: isAudioMode ? "Answer out loud" : "Type your answers",
+        detail: "Press Done answering after each one",
+      },
+      ...(isVoiceMode
+        ? [
+            {
+              icon: Volume2,
+              title: "Questions read aloud",
+              detail: "Turn your sound on, or mute and read",
+            },
+          ]
+        : []),
+    ];
+
+    const startButton = (
+      <Button
+        onClick={handleStart}
+        disabled={isStarting}
+        className="w-full h-12 text-base font-bold rounded-xl shadow-lg shadow-primary/10 active:scale-[0.98] transition-all cursor-pointer"
+      >
+        {isStarting ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Starting…
+          </span>
+        ) : (
+          "Start interview"
+        )}
+      </Button>
+    );
+
+    const factTiles = (
+      <ul
+        className={cn(
+          "grid grid-cols-1 gap-3",
+          facts.length === 3 && !isAudioMode ? "sm:grid-cols-3" : "sm:grid-cols-2"
+        )}
+      >
+        {facts.map((f) => (
+          <li key={f.title} className="flex items-start gap-3 rounded-xl bg-muted/40 px-4 py-3">
+            <f.icon className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">{f.title}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{f.detail}</p>
             </div>
-            <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
-              {state.job_title ?? "Screening Interview"}
+          </li>
+        ))}
+      </ul>
+    );
+
+    return (
+      <main className="px-4 sm:px-6 py-8 md:py-10 min-h-[calc(100vh-80px)]">
+        {/* Voice interviews carry consent and a mic check, too tall for one
+            column on a laptop screen, so they split into two equal halves:
+            what you are agreeing to on the left, getting ready and starting on
+            the right. Text interviews are short and stay one narrow column. */}
+        <div className={cn("mx-auto space-y-6", isAudioMode ? "max-w-5xl" : "max-w-xl")}>
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card shadow-sm border border-border mb-1">
+              <MessageSquareText className="w-6 h-6 text-primary" />
+            </div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
+              {state.job_title ?? "Screening interview"}
+              {hasCompany && (
+                <span className="text-muted-foreground font-semibold"> at {state.company_name}</span>
+              )}
             </h1>
-            {hasCompany && (
-              <p className="text-muted-foreground font-medium">{state.company_name}</p>
-            )}
+            <p className="text-muted-foreground">
+              An AI interviewer asks the questions. The hiring team reviews your answers.
+            </p>
           </div>
 
-          <Card className="p-8 shadow-xl border-border/60 rounded-3xl space-y-6">
-            {notice && (
-              <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-                <X className="w-4 h-4 shrink-0 mt-0.5" />
-                <p className="font-medium">{notice}</p>
-              </div>
-            )}
+          {notice && <ErrorBanner>{notice}</ErrorBanner>}
 
-            <div className="space-y-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-3">
-                <ListChecks className="w-5 h-5 text-primary shrink-0" />
-                <span>
-                  <span className="font-semibold text-foreground">
-                    {state.total_questions} questions
-                  </span>{" "}
-                  about your background and experience
-                </span>
-              </div>
-              {totalMinutes !== null && (
-                <div className="flex items-center gap-3">
-                  <Timer className="w-5 h-5 text-primary shrink-0" />
-                  <span>
-                    Around{" "}
-                    <span className="font-semibold text-foreground">
-                      {totalMinutes} minutes
+          {isAudioMode ? (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="p-6 gap-5 border-border/60 rounded-3xl">
+                <h2 className="font-semibold text-foreground">What to expect</h2>
+                {factTiles}
+                {/* Recording notice: shown before any microphone prompt and
+                    before the timer starts, because that is the last moment a
+                    candidate can decline. Full-size text: this is the one block
+                    here the candidate has to read, not skim. */}
+                <div className="space-y-2 text-sm">
+                  <p className="font-semibold text-foreground">This interview is recorded</p>
+                  <ul className="space-y-1 list-disc pl-5 text-muted-foreground">
+                    <li>Your microphone records each answer, and an AI system transcribes it.</li>
+                    <li>
+                      Recordings are kept. The recruiter reviews the transcript and an AI
+                      assessment, and may listen to the recordings.
+                    </li>
+                    <li>
+                      The questions and the assessment are AI-generated; the recruiter
+                      reviews the results.
+                    </li>
+                  </ul>
+                </div>
+              </Card>
+
+              {/* Second in reading order and in the stacked mobile layout: the
+                  mic check is the first thing that touches the microphone, so
+                  declining is still possible before any prompt appears. */}
+              <Card className="p-6 gap-5 border-border/60 rounded-3xl">
+                <h2 className="font-semibold text-foreground">Before you start</h2>
+                <MicCheck mic={mic} voiceMode={isVoiceMode} />
+                <div className="mt-auto space-y-3 pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      By starting, you agree to be recorded and transcribed
                     </span>
-                    , with the timer starting when you begin
-                  </span>
+                    , and to have your recording reviewed as described.
+                  </p>
+                  {startButton}
                 </div>
-              )}
-              <div className="flex items-center gap-3">
-                {isAudioMode ? (
-                  <Mic className="w-5 h-5 text-primary shrink-0" />
-                ) : (
-                  <Send className="w-5 h-5 text-primary shrink-0" />
-                )}
-                <span>
-                  {isAudioMode ? "Speak each answer" : "Type each answer"}, then press{" "}
-                  <span className="font-semibold text-foreground">Done answering</span>{" "}
-                  to continue
-                </span>
-              </div>
-              {isVoiceMode && (
-                <div className="flex items-center gap-3">
-                  <Volume2 className="w-5 h-5 text-primary shrink-0" />
-                  <span>
-                    Questions are{" "}
-                    <span className="font-semibold text-foreground">read aloud</span> —
-                    turn your sound on, or mute them and read instead
-                  </span>
-                </div>
-              )}
+              </Card>
             </div>
-
-            {/* Recording notice: shown before any microphone prompt and before
-                the timer starts, because that is the last moment a candidate
-                can decline. */}
-            {isAudioMode && (
-              <div className="rounded-2xl border border-border bg-muted/40 p-5 space-y-2 text-xs text-muted-foreground leading-relaxed">
-                <p className="font-bold text-foreground text-sm">
-                  Before you start: this interview is recorded
-                </p>
-                <ul className="space-y-1.5 list-disc pl-4">
-                  <li>
-                    You answer out loud, so your microphone will be used to record
-                    each answer.
-                  </li>
-                  <li>
-                    Recordings are transcribed to text by an AI system. The
-                    transcript is what the recruiter and an AI assessment review.
-                  </li>
-                  <li>
-                    Your recordings are kept, and the recruiter may listen to them
-                    alongside the transcript.
-                  </li>
-                  <li>
-                    The questions and the assessment are AI-generated; the recruiter
-                    reviews the results.
-                  </li>
-                </ul>
-                <p className="font-medium text-foreground pt-1">
-                  By starting, you agree to be recorded and transcribed, and to have
-                  your recording reviewed as described.
-                </p>
-              </div>
-            )}
-
-            {/* After the consent block on purpose: the check is the first thing
-                that touches the microphone, so declining is still possible
-                before any prompt appears. */}
-            {isAudioMode && <MicCheck mic={mic} voiceMode={isVoiceMode} />}
-
-            <Button
-              onClick={handleStart}
-              disabled={isStarting}
-              className="w-full h-14 text-base font-bold rounded-xl shadow-lg shadow-primary/10 active:scale-[0.98] transition-all cursor-pointer"
-            >
-              {isStarting ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Starting...
-                </span>
-              ) : (
-                "Start Interview"
-              )}
-            </Button>
-          </Card>
+          ) : (
+            <Card className="p-6 sm:p-7 gap-6 border-border/60 rounded-3xl">
+              {factTiles}
+              {startButton}
+            </Card>
+          )}
         </div>
       </main>
     );
@@ -372,81 +438,148 @@ function InterviewPageInner() {
   // Expired screen
   if (state.status === "expired") {
     return (
-      <main className="px-6 py-20 min-h-[calc(100vh-80px)] bg-muted/30">
-        <div className="max-w-xl mx-auto space-y-6">
-          <div className="text-center space-y-2">
-            <h1 className="text-2xl font-extrabold text-foreground tracking-tight">
-              This interview invite has expired
-            </h1>
-            <p className="text-muted-foreground font-medium">
-              Please contact the recruiter for a new link.
-            </p>
+      <StatusScreen
+        title="This interview invite has expired"
+        icon={
+          <div className={neutralIconTile}>
+            <Timer className="w-8 h-8 text-muted-foreground" />
           </div>
-          {state.turns.length > 0 && (
-            <Card className="p-6 rounded-3xl border-border/60">
-              <InterviewTranscript turns={state.turns} autoScroll={false} />
-            </Card>
-          )}
-        </div>
-      </main>
+        }
+      >
+        <p className="text-muted-foreground font-medium">
+          Please contact the recruiter for a new link.
+        </p>
+      </StatusScreen>
     );
   }
 
+  // Revisit of a finished interview. No transcript: the link is the only
+  // credential and outlives the interview, so a forwarded or leaked invite
+  // should not read back the candidate's answers. `assessed` renders exactly
+  // like `completed` so the candidate can't tell they have been scored.
+  // No turns means none were seen this session: the server sent none, and an
+  // interview that finished live keeps the ones already on screen.
+  if (isDone && state.turns.length === 0) {
+    return (
+      <StatusScreen
+        title="Your interview has been submitted"
+        icon={
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-success border border-success-edge">
+            <CheckCircle2 className="w-8 h-8 text-success-foreground" />
+          </div>
+        }
+      >
+        <p className="text-muted-foreground font-medium">
+          Thanks for interviewing for {state.job_title ?? "this role"}
+          {hasCompany && <> at {state.company_name}</>}. The hiring team will review it
+          and follow up with you.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Nothing else is needed from you. You can close this page.
+        </p>
+      </StatusScreen>
+    );
+  }
+
+  // The question awaiting an answer, drawn stronger in the transcript. Only
+  // while the interviewer has the floor: once an answer is in flight, or the
+  // interview is over, nothing is being asked.
+  const lastTurn = state.turns[state.turns.length - 1];
+  const activeSeq =
+    !isDone &&
+    !isSubmitting &&
+    lastTurn?.role === "interviewer" &&
+    (lastTurn.kind === "question" || lastTurn.kind === "followup")
+      ? lastTurn.seq
+      : null;
+
+  // One segment per main question. Follow-ups don't advance it, which is the
+  // honest signal: they are still on the same question.
+  const questionNumber = Math.max(state.question_number, 1);
+  const segmentClasses = Array.from({ length: Math.max(state.total_questions, 1) }, (_, i) =>
+    isDone
+      ? "bg-success-bar"
+      : i < questionNumber - 1
+        ? "bg-foreground/70"
+        : i === questionNumber - 1
+          ? "bg-foreground/30"
+          : "bg-muted"
+  );
+
   // Chat (in_progress) and done screens share the transcript layout
   return (
-    <main className="px-6 py-10 max-w-3xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 pb-6 border-b border-border">
-        <div className="min-w-0">
-          <h1 className="text-lg font-extrabold text-foreground tracking-tight truncate">
-            {state.job_title ?? "Screening Interview"}
+    <main className="px-6 pb-2 max-w-3xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
+      {/* Header: pinned, so the timer and progress stay in view however long
+          the transcript gets. */}
+      <div className="sticky top-0 z-30 pt-6 bg-background border-b border-border">
+        <div className="flex items-center justify-between gap-4 pb-4">
+          <h1 className="min-w-0 truncate text-lg font-extrabold text-foreground tracking-tight">
+            {state.job_title ?? "Screening interview"}
+            {hasCompany && (
+              <span className="font-semibold text-muted-foreground"> · {state.company_name}</span>
+            )}
           </h1>
-          {hasCompany && (
-            <p className="text-xs text-muted-foreground">{state.company_name}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {isVoiceMode && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={voice.toggleMute}
-              aria-label={voice.muted ? "Unmute questions" : "Mute questions"}
-              title={voice.muted ? "Questions are muted" : "Mute spoken questions"}
-              className="h-9 w-9 rounded-full cursor-pointer"
-            >
-              {voice.muted ? (
-                <VolumeX className="w-4 h-4 text-muted-foreground" />
-              ) : (
-                <Volume2 className="w-4 h-4 text-primary" />
-              )}
-            </Button>
-          )}
-          {!isDone && (
-            <>
-              <Badge variant="outline" className="font-semibold">
-                Question {Math.max(state.question_number, 1)} of {state.total_questions}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Nothing autoplays once the interview is over, so there is
+                nothing left to mute; replay still works per turn. */}
+            {isVoiceMode && !isDone && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={voice.toggleMute}
+                aria-label={voice.muted ? "Unmute questions" : "Mute questions"}
+                aria-pressed={voice.muted}
+                className="h-8 rounded-full px-2.5 text-xs font-semibold cursor-pointer"
+              >
+                {voice.muted ? (
+                  <VolumeX className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <Volume2 className="w-4 h-4 text-primary" />
+                )}
+                <span className={cn("hidden sm:inline", voice.muted && "text-muted-foreground")}>
+                  {voice.muted ? "Muted" : "Sound on"}
+                </span>
+              </Button>
+            )}
+            {!isDone && (
+              <>
+                <Badge variant="outline" className="font-semibold">
+                  Question {questionNumber} of {state.total_questions}
+                </Badge>
+                <InterviewCountdown seconds={state.time_remaining_seconds} />
+              </>
+            )}
+            {isDone && (
+              <Badge
+                variant="outline"
+                className="bg-success text-success-foreground border-success-edge font-semibold"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                Completed
               </Badge>
-              <InterviewCountdown seconds={state.time_remaining_seconds} />
-            </>
-          )}
-          {isDone && (
-            <Badge
-              variant="outline"
-              className="bg-success text-success-foreground border-success-edge font-semibold"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-              Completed
-            </Badge>
-          )}
+            )}
+          </div>
+        </div>
+        <div
+          className="flex gap-1 pb-3"
+          role="progressbar"
+          aria-label="Interview progress"
+          aria-valuemin={0}
+          aria-valuemax={state.total_questions}
+          aria-valuenow={isDone ? state.total_questions : questionNumber - 1}
+        >
+          {segmentClasses.map((tone, i) => (
+            <span key={i} className={cn("h-1 flex-1 rounded-full transition-colors", tone)} />
+          ))}
         </div>
       </div>
 
       {/* Transcript */}
-      <div className="flex-1 py-6">
+      <div className="flex-1 py-5">
         <InterviewTranscript
           turns={state.turns}
           showTyping={isSubmitting}
+          activeSeq={activeSeq}
           renderQuestionAudio={
             isVoiceMode
               ? (turn) => (
@@ -464,58 +597,72 @@ function InterviewPageInner() {
 
       {/* Composer or done note */}
       {isDone ? (
-        <Card className="p-6 rounded-2xl border-success-edge bg-success/40 text-center space-y-1">
+        <Card className="mb-6 p-6 gap-1 items-center rounded-2xl border-success-edge bg-success/40 text-center">
+          <CheckCircle2 className="w-6 h-6 text-success-foreground mb-1" />
           <p className="font-bold text-foreground">Thanks for your time!</p>
           <p className="text-sm text-muted-foreground">
             Your interview has been submitted. The team will review it and follow up.
           </p>
         </Card>
-      ) : isAudioMode ? (
-        <AnswerRecorder
-          mic={mic}
-          onSubmit={handleSubmitAudio}
-          onRecordingStart={voice.stop}
-        />
       ) : (
-        <div className="space-y-3 pb-2">
-          {notice && (
-            <div className="bg-error border border-error-edge text-error-foreground text-sm px-4 py-3 rounded-xl flex items-start gap-2">
-              <X className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="font-medium">{notice}</p>
+        // Pinned to the bottom so the answer controls never scroll away.
+        <div className="sticky bottom-0 z-20 pt-3 pb-4 bg-background">
+          {isAudioMode ? (
+            <AnswerRecorder
+              mic={mic}
+              onSubmit={handleSubmitAudio}
+              onRecordingStart={voice.stop}
+            />
+          ) : (
+            <div className="space-y-3">
+              {notice && <ErrorBanner>{notice}</ErrorBanner>}
+              <Textarea
+                placeholder="Type your answer here..."
+                value={draft}
+                maxLength={MAX_ANSWER_LENGTH}
+                disabled={isSubmitting}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (isSendShortcut(e)) {
+                    e.preventDefault();
+                    void handleSubmit();
+                  }
+                }}
+                className="min-h-28 max-h-64 resize-none text-sm rounded-xl"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {draft.length > MAX_ANSWER_LENGTH - 500
+                    ? `${MAX_ANSWER_LENGTH - draft.length} characters left`
+                    : (
+                      <>
+                        A few sentences is plenty.
+                        <span className="hidden sm:inline">
+                          {" "}<SendShortcutHint /> to send.
+                        </span>
+                      </>
+                    )}
+                </span>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || draft.trim() === ""}
+                  className="h-11 px-6 font-bold rounded-xl cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      Done answering
+                      <Send className="w-4 h-4" />
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
-          <Textarea
-            placeholder="Type your answer here..."
-            value={draft}
-            maxLength={MAX_ANSWER_LENGTH}
-            disabled={isSubmitting}
-            onChange={(e) => setDraft(e.target.value)}
-            className="min-h-28 max-h-64 resize-none text-sm rounded-xl"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] text-muted-foreground">
-              {draft.length > MAX_ANSWER_LENGTH - 500
-                ? `${MAX_ANSWER_LENGTH - draft.length} characters left`
-                : "Answer in your own words; a few sentences is plenty."}
-            </span>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || draft.trim() === ""}
-              className="h-11 px-6 font-bold rounded-xl cursor-pointer"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  Done answering
-                  <Send className="w-4 h-4" />
-                </span>
-              )}
-            </Button>
-          </div>
         </div>
       )}
     </main>

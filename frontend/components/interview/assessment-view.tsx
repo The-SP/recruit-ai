@@ -279,7 +279,6 @@ function QuestionFinding({
           <CollapsibleContent className="pt-2">
             <InterviewTranscript
               turns={exchange}
-              autoScroll={false}
               variant="review"
               onFetchTurnAudio={onFetchTurnAudio}
               renderQuestionAudio={renderQuestionAudio}
