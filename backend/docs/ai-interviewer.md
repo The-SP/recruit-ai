@@ -272,6 +272,12 @@ The assessment itself is structured, not a single blob of text:
 - An `overall_summary` and an `advance` / `borderline` / `do_not_advance`
   recommendation.
 
+Coverage is checked in code after the model returns, because the transcript
+already settles it: the assessor is told which questions were answered, asked
+but unanswered, or never asked, and why the interview ended (completed, time
+limit, expired). A question with no candidate answer is forced to
+`not_answered` / `not_applicable` whatever the model said.
+
 If assessment generation fails, the interview stores an `assessment_error`
 and the recruiter UI shows a retry button rather than leaving the run stuck.
 

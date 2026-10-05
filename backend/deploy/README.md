@@ -110,3 +110,18 @@ The live file has two server blocks after certbot; per-location settings
   prune) and is done from a separate machine via `scripts/seed_ssm_params.py`.
 - Uploaded resumes live in the `uploads_data` Docker volume, shared by `api`
   and `worker`; it survives container replacement.
+- **The host needs swap.** It is a t3.micro (1 GB RAM), and images build on the
+  host alongside the running stack. A change to `uv.lock` rebuilds the
+  dependency layer, which without swap thrashes the box until neither the
+  deploy nor an SSM session can make progress. The 2 GB swap file is one-time
+  host setup, not something `deploy.sh` creates:
+
+  ```bash
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+  sudo mkswap /swapfile && sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  ```
+
+- `deploy.sh` prunes dangling images before each build. Every build moves the
+  `api`/`worker`/`migrate` tags to new images and Docker never removes the
+  old ones, so without it they fill the root disk.
