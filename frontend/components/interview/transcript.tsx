@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot } from "lucide-react";
+import { Bot, Mic } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
@@ -92,7 +92,14 @@ export function InterviewTranscript({
                 turn.seq === activeSeq && "border-foreground/30 shadow-md text-[15px]"
               )}
             >
-              {turn.content}
+              {turn.content ?? (
+                // A spoken answer on the candidate surface, whose text the
+                // server withholds: they never see their own transcript.
+                <span className="flex items-center gap-2 font-medium">
+                  <Mic className="w-3.5 h-3.5" />
+                  Answer recorded
+                </span>
+              )}
               {isCandidate && turn.has_audio && onFetchTurnAudio && (
                 <div
                   className={cn(

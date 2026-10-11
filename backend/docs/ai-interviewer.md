@@ -162,9 +162,13 @@ lives on the template.
 The candidate page talks to `api/routes/interview.py` over an SSE stream with
 four frame types:
 
-- `ack` — the just-committed turn, echoed back. Needed so a spoken answer's
-  transcript can be rendered, since the client never authored the text
-  itself.
+- `ack` — the just-committed answer's seq, plus its text for a typed answer
+  (so the client renders what was stored, not its own draft). For a spoken
+  answer `content` is null: the candidate never sees their own transcript,
+  and `GET /interviews/{token}` nulls it the same way. Verbatim transcription
+  mis-hears rare technical terms, and showing a candidate a mangled word they
+  can't correct only adds stress; the recruiter, who can replay the recording,
+  is the one who needs the text.
 - `turn` — the interviewer's next turn.
 - `state` — lifecycle transitions like completion.
 - `error`
@@ -196,9 +200,15 @@ question generation, the turn engine, and assessment (default
   text instead of transcribing; verbatim mode catches that failure mode at
   the cost of occasionally mishearing rare technical terms (see
   Limitations).
-- The recorder (`recorder.tsx`) auto-stops at 180 seconds with a 30-second
+- **One take per question.** Stopping the recorder (`recorder.tsx`) sends
+  the answer; there is no listen-back and no re-record, because a rehearsed
+  second take tells a recruiter less than the first, and the pre-start mic
+  check already covers "is my mic working?". Stop is disabled for the first
+  2 seconds so a double-pressed Space can't submit an empty answer.
+- The recorder auto-stops (and so sends) at 180 seconds with a 30-second
   warning countdown, and handles mic-permission-denied and
-  unsupported-browser states.
+  unsupported-browser states. Unmounting mid-recording discards the take
+  rather than sending it.
 - A failed upload retries by resending the exact same blob rather than
   re-recording.
 

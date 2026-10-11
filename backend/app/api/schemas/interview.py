@@ -13,7 +13,7 @@ from app.interview.constants import (
     MIN_QUESTIONS_PER_INTERVIEW,
 )
 from app.interview.speaker import voice_key_for_turn
-from app.models.interview import Interview, InterviewTurn
+from app.models.interview import Interview, InterviewMode, InterviewTurn, TurnRole
 from app.models.interview_template import InterviewTemplate
 from app.schemas.interview import (
     InterviewQuestion,
@@ -42,7 +42,10 @@ class TurnOut(BaseModel):
     role: str
     kind: str
     question_index: int | None = None
-    content: str
+    # None only on the candidate surface, for a spoken answer: the candidate
+    # never sees their own transcript (see build_state_response). Recruiters
+    # always get the text.
+    content: str | None
     created_at: datetime
     # Whether a recording is attached. A flag, never the storage key: the path
     # must not cross the API, and this model also feeds the candidate's SSE
@@ -362,11 +365,29 @@ def build_turn_out(turn: InterviewTurn, voice: bool) -> TurnOut:
     )
 
 
+def _build_candidate_turn_out(
+    turn: InterviewTurn, voice: bool, spoken: bool
+) -> TurnOut:
+    """A turn for the candidate surface: build_turn_out, minus the text of a
+    spoken answer.
+
+    The candidate never reads back their own transcript. Verbatim transcription
+    mis-hears rare technical terms, and showing a candidate a mangled `nginx` they
+    have no way to correct only adds stress mid-interview; the recruiter, who
+    can replay the recording, is the one who needs the text.
+    """
+    out = build_turn_out(turn, voice)
+    if spoken and turn.role == TurnRole.CANDIDATE.value:
+        out.content = None
+    return out
+
+
 def build_state_response(
     interview: Interview, turns: list[InterviewTurn]
 ) -> InterviewStateResponse:
     grounding = interview.grounding or {}
     voice = interview.voice_on
+    spoken = interview.answer_mode == InterviewMode.AUDIO.value
     return InterviewStateResponse(
         status=interview.status,
         answer_mode=interview.answer_mode,
@@ -376,7 +397,7 @@ def build_state_response(
         question_number=state.question_number(interview),
         total_questions=state.total_questions(interview),
         time_remaining_seconds=state.time_remaining_seconds(interview),
-        turns=[build_turn_out(t, voice) for t in turns],
+        turns=[_build_candidate_turn_out(t, voice, spoken) for t in turns],
     )
 
 

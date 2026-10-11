@@ -10,7 +10,9 @@ export interface InterviewTurnData {
   role: "interviewer" | "candidate";
   kind: "opening" | "question" | "followup" | "answer" | "closing";
   question_index: number | null;
-  content: string;
+  /** Null only on the candidate surface, for a spoken answer: the candidate
+   * never sees their own transcript. Recruiters always get the text. */
+  content: string | null;
   created_at: string;
   /** A recording is attached to this answer. The path never crosses the API;
    * recruiters fetch bytes from the JWT-gated endpoint. */

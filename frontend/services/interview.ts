@@ -36,9 +36,10 @@ export async function fetchVoiceClip(token: string, key: string): Promise<Blob> 
 }
 
 export interface AnswerStreamHandlers {
-  /** content is the answer text the server committed. The audio path has no
-   * other way to learn it; the typed path can use it instead of its own draft. */
-  onAck: (answerSeq: number, content: string) => void;
+  /** content is the typed answer text the server committed, so the client
+   * renders what was stored rather than its own draft. Null for a spoken
+   * answer: the candidate never sees their own transcript. */
+  onAck: (answerSeq: number, content: string | null) => void;
   onTurn: (turn: InterviewTurnData) => void;
   onState: (state: InterviewStateEvent) => void;
   onDone: () => void;
@@ -97,7 +98,7 @@ async function readAnswerStream(
     }
     switch (event) {
       case "ack": {
-        const ack = parsed as { answer_seq: number; content: string };
+        const ack = parsed as { answer_seq: number; content: string | null };
         handlers.onAck(ack.answer_seq, ack.content);
         break;
       }

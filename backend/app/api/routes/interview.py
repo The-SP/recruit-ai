@@ -65,20 +65,21 @@ def _sse_frame(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _event_frame(event: engine.EngineEvent, content: str, voice: bool) -> str | None:
+def _event_frame(
+    event: engine.EngineEvent, echo: str | None, voice: bool
+) -> str | None:
     """Map one EngineEvent to its SSE frame (the thin side of the seam).
 
     Returns None for events with no candidate-facing frame; the protocol is
     append-only, so nothing is emitted for them.
 
-    The ack echoes the committed answer text. A spoken answer's client has no
-    other way to learn it — the server minted it from audio — and echoing it for
-    typed answers too means every client renders what was actually stored rather
-    than its own copy. That echo is a transport concern, resolved here rather
-    than by teaching AnswerAccepted about transcription.
+    The ack echoes `echo`: the committed text of a typed answer, so the client
+    renders what was actually stored rather than its own copy, and None for a
+    spoken one, whose transcript the candidate never sees (same rule as GET
+    state, see build_state_response).
     """
     if isinstance(event, engine.AnswerAccepted):
-        return _sse_frame("ack", {"answer_seq": event.answer_seq, "content": content})
+        return _sse_frame("ack", {"answer_seq": event.answer_seq, "content": echo})
     if isinstance(event, engine.InterviewerTurn):
         # `voice` must be threaded through here, not defaulted: a live turn that
         # arrived over SSE and the same turn refetched from GET have to agree
@@ -258,13 +259,14 @@ def _answer_stream(
             return
         interview_id = interview.id
         voice = interview.voice_on
+        echo = None if answer_audio is not None else content
         for event in engine.submit_answer(db, interview, content, after_seq):
             if isinstance(event, engine.InterviewClosed):
                 # Routes dispatch, workers execute -- the same split as
                 # batch.py. Keeps app.worker out of the engine.
                 assess_interview.delay(str(event.interview_id))
                 continue
-            frame = _event_frame(event, content, voice)
+            frame = _event_frame(event, echo, voice)
             if frame is not None:
                 yield frame
 

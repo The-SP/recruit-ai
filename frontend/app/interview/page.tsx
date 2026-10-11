@@ -164,12 +164,12 @@ function InterviewPageInner() {
     }
   };
 
-  // Shared by both composers. The answer bubble is rendered from the ack's
-  // content, which is the text the server actually committed — for a spoken
-  // answer that is the only place it exists, and for a typed one it beats
-  // trusting the local draft.
+  // Shared by both composers. A typed answer's bubble is rendered from the
+  // ack's content, the text the server actually committed, rather than the
+  // local draft. A spoken answer's ack carries no text (the candidate never
+  // sees their transcript), and the transcript draws a placeholder bubble.
   const streamHandlers = () => ({
-    onAck: (answerSeq: number, content: string) => {
+    onAck: (answerSeq: number, content: string | null) => {
       const answerTurn: InterviewTurnData = {
         seq: answerSeq,
         role: "candidate" as const,
