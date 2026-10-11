@@ -101,6 +101,9 @@ closing copy, and fixed questions asked verbatim of every candidate.
   hand-written interview is a legitimate, free mode.
 - `opening`/`closing` are nullable; NULL means "let the model write it", which
   keeps the template skippable.
+- `level_descriptions` is nullable too; NULL means the generic defaults in
+  `interview/rubric.py`. Descriptions saved identical to the defaults are
+  stored as NULL, so the run keeps tracking the defaults if they change.
 
 ## The engine and the voice seam
 
@@ -273,20 +276,62 @@ itself). From there a recruiter can:
 Once an assessment exists, the raw transcript is demoted into a collapsible
 section — the assessment is the primary view, not the transcript.
 
-The assessment itself is structured, not a single blob of text:
+The assessment is one structured model call; the model reads and rates, and
+code decides. Its shape (`InterviewAssessment` in `schemas/interview.py`):
 
-- Per-question `answer_quality`, `resume_consistency`, `evidence`, and
-  `notes`.
-- An overall `competency_summary`, `strengths`, `concerns`, and optional
-  `gap_findings`.
-- An `overall_summary` and an `advance` / `borderline` / `do_not_advance`
-  recommendation.
+- **Two competencies**, `technical_depth` and `ownership_impact`, each rated
+  1-5 across the whole interview against level descriptions (levels 1, 3 and
+  5 described, 2 and 4 between). Each rating carries a `rationale` and
+  `seen_in`: every answer that moved it, up or down. `level` is null ("not
+  enough evidence") when no answer can be cited. The set is fixed so every
+  candidate in a run is rated on the same axes; role-specific expectations go
+  in the level descriptions, not in more competencies. There is deliberately
+  no communication rating: it is the dimension most affected by accent,
+  filler words and mis-transcription.
+- **Per-question findings**, with no quality label: `notes` and
+  `resume_consistency` (`supported` / `contradicted` / `not_tested`). There is
+  no answer quote: the review page shows the real exchange under each
+  question, so a model-written quote could only add a chance to misquote. A contradiction means the answer conflicts with the resume
+  claim the question probes (role, scope, numbers), never that the candidate
+  knows more than the resume says, and it carries the contradicted
+  `resume_quote`.
+- `strengths`, `concerns` (where manipulation attempts are recorded) and an
+  `overall_summary`.
+- `recommendation` (`advance` / `borderline` / `do_not_advance`), **derived in
+  code** by `interview/rubric.py`, never by the model:
+  1. do_not_advance if technical depth is 1-2, or any level is 1
+  2. advance if technical depth is 4-5, ownership is 3+, and nothing is
+     contradicted
+  3. borderline otherwise, including any null level
 
-Coverage is checked in code after the model returns, because the transcript
-already settles it: the assessor is told which questions were answered, asked
-but unanswered, or never asked, and why the interview ended (completed, time
-limit, expired). A question with no candidate answer is forced to
-`not_answered` / `not_applicable` whatever the model said.
+  The key name is kept because the run table reads it straight out of the
+  JSONB (`EvaluationRunRepository`). The recruiter detail response also carries
+  `recommendation_reasons`, one line per reason ("Technical depth is 3/5. It
+  needs 4 to advance."), from `explain_recommendation`, which walks the same
+  rules. It is computed per request rather than stored, so older assessments
+  get it too, and it is empty when the stored recommendation no longer matches
+  the current rule.
+
+The default level descriptions live in `rubric.py`; a run's template may
+override them, and each interview snapshots the set at draft time like its
+other settings (`interviews.level_descriptions`, NULL = defaults).
+
+After the model returns, code repairs what the transcript settles, narrowing
+what the report claims rather than failing the assessment:
+
+- Coverage: the assessor is told which questions were answered, asked but
+  unanswered, or never asked, and why the interview ended. An unanswered
+  question gets an empty entry whatever the model said.
+- `resume_consistency` is forced to `not_tested` for anything but an
+  `experience_depth` question, since only those probe a resume claim.
+- A contradiction stands only when its `resume_quote` is found in the
+  resume (matching ignores case, punctuation and whitespace).
+- `seen_in` keeps only answered questions; a competency left with no
+  citation becomes null.
+
+`scripts/assessment_consistency.py` measures how stable the levels are by
+assessing fixed transcripts repeatedly; run it after changing the prompt, the
+level descriptions or the model.
 
 If assessment generation fails, the interview stores an `assessment_error`
 and the recruiter UI shows a retry button rather than leaving the run stuck.

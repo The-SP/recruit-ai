@@ -644,6 +644,7 @@ def save_owned_run_interview_template(
             FixedQuestion.model_validate(q.model_dump())
             for q in payload.fixed_questions
         ],
+        level_descriptions=payload.level_descriptions,
     )
     return build_template_response(template)
 

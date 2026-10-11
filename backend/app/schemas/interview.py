@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.interview.constants import INTERVIEW_TIME_LIMIT_SECONDS
 
@@ -51,6 +51,43 @@ class FixedQuestion(BaseModel):
     subject: str
 
 
+# ---------------------------------------------------------------------------
+# Rubric (read by the assessor; carried on templates and interviews)
+# ---------------------------------------------------------------------------
+
+
+class Competency(str, Enum):
+    """The fixed axes every candidate is rated on. Fixed rather than derived
+    from the JD so every candidate in a run is rated the same way; what a role
+    expects of each lives in the level descriptions, not in more axes."""
+
+    TECHNICAL_DEPTH = "technical_depth"
+    OWNERSHIP_IMPACT = "ownership_impact"
+
+
+class CompetencyLevels(BaseModel):
+    """What levels 1, 3 and 5 look like for one competency. Levels 2 and 4 sit
+    between them; the model places answers there."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    level_1: str = Field(min_length=1, max_length=500)
+    level_3: str = Field(min_length=1, max_length=500)
+    level_5: str = Field(min_length=1, max_length=500)
+
+
+class LevelDescriptions(BaseModel):
+    """Level descriptions for every competency. One field per Competency
+    member, so a description can't exist for an axis that isn't rated."""
+
+    technical_depth: CompetencyLevels
+    ownership_impact: CompetencyLevels
+
+    def for_competency(self, competency: Competency) -> CompetencyLevels:
+        levels: CompetencyLevels = getattr(self, competency.value)
+        return levels
+
+
 class TemplateSettings(BaseModel):
     """Resolved template settings for one generation.
 
@@ -69,6 +106,9 @@ class TemplateSettings(BaseModel):
     opening: str | None = None
     closing: str | None = None
     fixed_questions: list[FixedQuestion] = Field(default_factory=list)
+    # Not used by generation either; snapshotted onto the interview for the
+    # assessor. None means the code defaults.
+    level_descriptions: LevelDescriptions | None = None
 
     @property
     def generated_count(self) -> int:
@@ -93,44 +133,76 @@ class FollowupDecision(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Assessment (populated at M5; full target shape defined now so it is settled)
+# Assessment
 # ---------------------------------------------------------------------------
 
 
-class AnswerQuality(str, Enum):
-    STRONG = "strong"
-    ADEQUATE = "adequate"
-    WEAK = "weak"
-    NOT_ANSWERED = "not_answered"  # evaded, refused, or ran out of time
-
-
 class ResumeConsistency(str, Enum):
-    CONSISTENT = "consistent"  # answer supports the resume's claims
-    INCONSISTENT = "inconsistent"  # answer conflicts with a resume claim
-    NOT_APPLICABLE = "not_applicable"
+    SUPPORTED = "supported"  # the answer backs the resume claim it probes
+    # The answer conflicts with the claim itself: a different role, smaller
+    # scope, or different numbers. Never extra knowledge or a vague answer.
+    CONTRADICTED = "contradicted"
+    NOT_TESTED = "not_tested"  # not a resume-claim question, or not answered
 
 
 class QuestionAssessment(BaseModel):
+    """Findings for one core question. Deliberately carries no quality label:
+    judgement lives on the competencies, which cite these entries. No answer
+    quote either: the review page shows the real exchange beside each entry."""
+
     question_id: int
     focus: QuestionFocus
     subject: str
-    answer_quality: AnswerQuality
+    # Notes before the consistency verdict: the model generates fields in order.
+    notes: str = Field(description="One or two sentences a recruiter can act on")
     resume_consistency: ResumeConsistency
-    evidence: str = Field(description="Quote from the transcript")
-    notes: str
+    resume_quote: str = Field(
+        default="",
+        description="Verbatim resume line the answer contradicts; empty unless contradicted",
+    )
 
 
-class InterviewAssessment(BaseModel):
-    """Verdict over the full transcript. Stored as JSONB on interviews."""
+class CompetencyRating(BaseModel):
+    """One competency rated across the whole interview."""
+
+    name: Competency
+    # Cited before the level so the model commits to evidence before it rates.
+    seen_in: list[int] = Field(
+        description="question_ids of every answer that moved this rating, up or down"
+    )
+    rationale: str = Field(
+        description="Which answers raised the rating and which lowered it"
+    )
+    level: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="1-5 against the level descriptions; null when no answer is evidence",
+    )
+
+
+class AssessorOutput(BaseModel):
+    """What the assessor model fills in. per_question comes before
+    competencies so the per-answer notes are written before any rating."""
 
     per_question: list[QuestionAssessment]
-    competency_summary: str = Field(
-        description="How the candidate measures against the JD's core requirements"
-    )
+    competencies: list[CompetencyRating]
     strengths: list[str]
     concerns: list[str]
-    gap_findings: str | None = Field(
-        default=None, description="What gap probes showed, when any were asked"
+    overall_summary: str = Field(
+        description="Two or three sentences a recruiter reads first"
     )
-    overall_summary: str
-    recommendation: Literal["advance", "borderline", "do_not_advance"]
+
+
+Recommendation = Literal["advance", "borderline", "do_not_advance"]
+
+
+class InterviewAssessment(AssessorOutput):
+    """The stored verdict (JSONB on interviews): the model's output after the
+    code-side repairs, plus the recommendation code derives from the levels.
+
+    The key stays `recommendation` because the run table reads it straight out
+    of the JSONB (EvaluationRunRepository).
+    """
+
+    recommendation: Recommendation

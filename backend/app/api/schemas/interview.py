@@ -12,13 +12,21 @@ from app.interview.constants import (
     MAX_QUESTIONS_PER_INTERVIEW,
     MIN_QUESTIONS_PER_INTERVIEW,
 )
+from app.interview.rubric import (
+    DEFAULT_LEVEL_DESCRIPTIONS,
+    derive_recommendation,
+    explain_recommendation,
+)
 from app.interview.speaker import voice_key_for_turn
 from app.models.interview import Interview, InterviewMode, InterviewTurn, TurnRole
 from app.models.interview_template import InterviewTemplate
 from app.schemas.interview import (
+    InterviewAssessment,
     InterviewQuestion,
     InterviewScript,
+    LevelDescriptions,
     QuestionFocus,
+    ResumeConsistency,
     TemplateSettings,
 )
 
@@ -128,6 +136,8 @@ class InterviewTemplateRequest(BaseModel):
     opening: str | None = Field(default=None, max_length=2000)
     closing: str | None = Field(default=None, max_length=2000)
     fixed_questions: list[FixedQuestionIO] = Field(default_factory=list)
+    # Null means the generic code defaults.
+    level_descriptions: LevelDescriptions | None = None
 
 
 class InterviewTemplateResponse(BaseModel):
@@ -152,6 +162,11 @@ class InterviewTemplateResponse(BaseModel):
     opening: str | None = None
     closing: str | None = None
     fixed_questions: list[FixedQuestionIO] = Field(default_factory=list)
+    # Always filled: the template's own descriptions, or the defaults the
+    # assessor would use. The defaults ride along too so "Reset to default"
+    # never needs the client to keep its own copy.
+    level_descriptions: LevelDescriptions = DEFAULT_LEVEL_DESCRIPTIONS
+    default_level_descriptions: LevelDescriptions = DEFAULT_LEVEL_DESCRIPTIONS
     # Null until the recruiter saves one.
     updated_at: datetime | None = None
 
@@ -214,6 +229,11 @@ def build_template_response(
         fixed_questions=[
             FixedQuestionIO.model_validate(q) for q in template.fixed_questions
         ],
+        level_descriptions=(
+            LevelDescriptions.model_validate(template.level_descriptions)
+            if template.level_descriptions
+            else DEFAULT_LEVEL_DESCRIPTIONS
+        ),
         updated_at=template.updated_at,
     )
 
@@ -239,6 +259,7 @@ def build_default_template_response(
             FixedQuestionIO.model_validate(q.model_dump())
             for q in settings.fixed_questions
         ],
+        level_descriptions=settings.level_descriptions or DEFAULT_LEVEL_DESCRIPTIONS,
         updated_at=None,
     )
 
@@ -286,6 +307,9 @@ class InterviewDetailResponse(BaseModel):
     questions: list[QuestionOut] = Field(default_factory=list)
     turns: list[TurnOut] = Field(default_factory=list)
     assessment: dict[str, Any] | None = None
+    # Why the stored recommendation is what it is, one line per reason.
+    # Computed per request from the stored levels, never stored itself.
+    recommendation_reasons: list[str] = Field(default_factory=list)
     assessment_error: str | None = None
     expires_at: datetime | None = None
     approved_at: datetime | None = None
@@ -415,6 +439,26 @@ def build_summary_response(interview: Interview) -> InterviewSummaryResponse:
     )
 
 
+def _recommendation_reasons(assessment: dict[str, Any] | None) -> list[str]:
+    """Explain a stored assessment's recommendation against the current rule.
+
+    Empty when there is nothing to explain, or when the stored recommendation
+    was derived under thresholds that have since changed: an explanation of
+    the current rule would then contradict the verdict shown beside it.
+    """
+    if not assessment:
+        return []
+    parsed = InterviewAssessment.model_validate(assessment)
+    levels = {rating.name: rating.level for rating in parsed.competencies}
+    has_contradiction = any(
+        entry.resume_consistency == ResumeConsistency.CONTRADICTED
+        for entry in parsed.per_question
+    )
+    if derive_recommendation(levels, has_contradiction) != parsed.recommendation:
+        return []
+    return explain_recommendation(levels, has_contradiction)
+
+
 def build_detail_response(
     interview: Interview, turns: list[InterviewTurn]
 ) -> InterviewDetailResponse:
@@ -445,6 +489,7 @@ def build_detail_response(
         # withheld here until that endpoint existed.)
         turns=[build_turn_out(t, voice) for t in turns],
         assessment=interview.assessment,
+        recommendation_reasons=_recommendation_reasons(interview.assessment),
         assessment_error=interview.assessment_error,
         expires_at=interview.expires_at,
         approved_at=interview.approved_at,

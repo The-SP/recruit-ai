@@ -24,6 +24,7 @@ from app.interview.question_generator import (
     generate_one_question,
     generate_script,
 )
+from app.interview.rubric import DEFAULT_LEVEL_DESCRIPTIONS
 from app.interview.speaker import (
     is_safe_voice_key,
     resolve_voice_text,
@@ -52,6 +53,7 @@ from app.schemas.interview import (
     FixedQuestion,
     InterviewQuestion,
     InterviewScript,
+    LevelDescriptions,
     TemplateSettings,
 )
 from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
@@ -184,6 +186,11 @@ def template_settings_from(template: InterviewTemplate) -> TemplateSettings:
         fixed_questions=[
             FixedQuestion.model_validate(q) for q in template.fixed_questions
         ],
+        level_descriptions=(
+            LevelDescriptions.model_validate(template.level_descriptions)
+            if template.level_descriptions
+            else None
+        ),
     )
 
 
@@ -222,6 +229,7 @@ def upsert_template(
     opening: str | None,
     closing: str | None,
     fixed_questions: list[FixedQuestion],
+    level_descriptions: LevelDescriptions | None,
 ) -> InterviewTemplate:
     """Create or replace the run's template.
 
@@ -262,6 +270,13 @@ def upsert_template(
         opening=(opening or "").strip() or None,
         closing=(closing or "").strip() or None,
         fixed_questions=[q.model_dump(mode="json") for q in fixed_questions],
+        # Descriptions identical to the defaults are stored as NULL, so the
+        # template keeps tracking the defaults if they are ever improved.
+        level_descriptions=(
+            level_descriptions.model_dump(mode="json")
+            if level_descriptions and level_descriptions != DEFAULT_LEVEL_DESCRIPTIONS
+            else None
+        ),
     )
 
 
@@ -319,6 +334,11 @@ def create_interview_draft(
             voice_mode=voice.value,
             followups_enabled=template.followups_enabled,
             time_limit_seconds=template.time_limit_seconds,
+            level_descriptions=(
+                template.level_descriptions.model_dump(mode="json")
+                if template.level_descriptions
+                else None
+            ),
         )
     except IntegrityError:
         # Two clicks raced: both passed the check above while generation ran

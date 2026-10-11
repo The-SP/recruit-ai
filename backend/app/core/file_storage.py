@@ -13,6 +13,8 @@ from app.core.storage.s3 import S3Storage
 
 UPLOAD_BASE = Path("resumes")
 INTERVIEW_AUDIO_BASE = Path("interviews")
+# Local backend root, relative to the working directory: backend/data/uploads
+LOCAL_STORAGE_ROOT = Path("data/uploads")
 
 
 def get_storage() -> BaseStorage:
@@ -24,7 +26,7 @@ def get_storage() -> BaseStorage:
             aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
         )
-    return LocalStorage(base_path=".")
+    return LocalStorage(base_path=str(LOCAL_STORAGE_ROOT))
 
 
 def save_uploaded_file(folder_path: str, filename: str, content: bytes) -> str:
@@ -61,7 +63,7 @@ def ensure_folder(folder_path: str) -> None:
     if Config.USE_S3:
         return
 
-    Path(folder_path).mkdir(parents=True, exist_ok=True)
+    (LOCAL_STORAGE_ROOT / folder_path).mkdir(parents=True, exist_ok=True)
 
 
 def _delete_folder(folder_path: str) -> bool:

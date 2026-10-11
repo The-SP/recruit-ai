@@ -73,6 +73,20 @@ export interface FixedQuestionData {
   subject: string;
 }
 
+/** The fixed axes every candidate is rated on; mirrors the backend
+ * Competency enum. */
+export type Competency = "technical_depth" | "ownership_impact";
+
+/** What levels 1, 3 and 5 look like for one competency. */
+export interface CompetencyLevelsData {
+  level_1: string;
+  level_3: string;
+  level_5: string;
+}
+
+/** Level descriptions for every competency; mirrors LevelDescriptions. */
+export type LevelDescriptionsData = Record<Competency, CompetencyLevelsData>;
+
 /** Per-run interview template; mirrors InterviewTemplateResponse.
  *
  * Editable at any time: every interview snapshots its script and settings at
@@ -94,6 +108,11 @@ export interface InterviewTemplateData {
   opening: string | null;
   closing: string | null;
   fixed_questions: FixedQuestionData[];
+  /** What the assessor rates against: the template's own wording, or the
+   * defaults when it set none. Always filled. */
+  level_descriptions: LevelDescriptionsData;
+  /** The code defaults, served so "Reset to default" needs no local copy. */
+  default_level_descriptions: LevelDescriptionsData;
   /** Null until the recruiter saves one. */
   updated_at: string | null;
 }
@@ -113,24 +132,35 @@ export interface InterviewSummary {
   approved_at: string | null;
 }
 
-/** Per-question verdict; mirrors the backend QuestionAssessment schema. */
+/** Findings for one core question; mirrors the backend QuestionAssessment.
+ * Carries no quality label: judgement lives on the competencies. */
 export interface QuestionAssessmentData {
   question_id: number;
   focus: string;
   subject: string;
-  answer_quality: "strong" | "adequate" | "weak" | "not_answered";
-  resume_consistency: "consistent" | "inconsistent" | "not_applicable";
-  evidence: string;
   notes: string;
+  resume_consistency: "supported" | "contradicted" | "not_tested";
+  /** The resume line the answer contradicts; empty unless contradicted. */
+  resume_quote: string;
 }
 
-/** Whole-transcript verdict; mirrors InterviewAssessment (stored as JSONB). */
+/** One competency rated across the whole interview; mirrors CompetencyRating. */
+export interface CompetencyRatingData {
+  name: Competency;
+  /** question_ids of the answers that moved this rating, up or down. */
+  seen_in: number[];
+  rationale: string;
+  /** 1-5, or null when no answer gave evidence for it. */
+  level: number | null;
+}
+
+/** Whole-transcript verdict; mirrors InterviewAssessment (stored as JSONB).
+ * The recommendation is derived in code from the competency levels. */
 export interface InterviewAssessmentData {
   per_question: QuestionAssessmentData[];
-  competency_summary: string;
+  competencies: CompetencyRatingData[];
   strengths: string[];
   concerns: string[];
-  gap_findings: string | null;
   overall_summary: string;
   recommendation: "advance" | "borderline" | "do_not_advance";
 }
@@ -159,6 +189,9 @@ export interface InterviewDetail {
   questions: InterviewQuestionData[];
   turns: InterviewTurnData[];
   assessment: InterviewAssessmentData | null;
+  /** Why the recommendation is what it is; computed per request from the
+   * stored levels by the same rule that derived it. */
+  recommendation_reasons: string[];
   assessment_error: string | null;
   expires_at: string | null;
   approved_at: string | null;

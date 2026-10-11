@@ -61,6 +61,13 @@ class InterviewTemplate(Base):
     # costs the same TTS, transcription and assessment as a generated one.
     fixed_questions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 
+    # LevelDescriptions: role-specific wording for what levels 1, 3 and 5 of
+    # each competency look like. NULL means the generic code defaults
+    # (rubric.DEFAULT_LEVEL_DESCRIPTIONS), which keeps the template skippable.
+    level_descriptions: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, default=None
+    )
+
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()

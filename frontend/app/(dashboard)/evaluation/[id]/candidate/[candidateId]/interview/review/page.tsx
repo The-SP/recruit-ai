@@ -10,6 +10,7 @@ import {
 import {
   MAX_QUESTIONS,
   toDraft,
+  toTemplatePayload,
   type TemplateDraft,
 } from "@/components/interview/template-editor";
 import type {
@@ -145,14 +146,7 @@ export default function InterviewReviewPage({
    * sent or what happens after. */
   const persistTemplate = async (draft: TemplateDraft): Promise<boolean> => {
     try {
-      const saved = await saveInterviewTemplate(runId, {
-        question_count: Number(draft.questionCount),
-        followups_enabled: draft.followupsEnabled,
-        time_limit_seconds: draft.timeLimitSeconds,
-        opening: draft.opening.trim() || null,
-        closing: draft.closing.trim() || null,
-        fixed_questions: draft.fixedQuestions,
-      });
+      const saved = await saveInterviewTemplate(runId, toTemplatePayload(draft));
       setTemplate(toDraft(saved));
       setHasSavedTemplate(true);
       return true;

@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 
 import {
   toDraft,
+  toTemplatePayload,
   TemplateEditor,
   TemplateEditorSkeleton,
   type TemplateDraft,
@@ -30,6 +31,7 @@ function savedShape(draft: TemplateDraft): string {
     opening: draft.opening.trim(),
     closing: draft.closing.trim(),
     fixedQuestions: draft.fixedQuestions,
+    levelDescriptions: draft.levelDescriptions,
   });
 }
 
@@ -96,14 +98,7 @@ export default function InterviewTemplatePage({
     setIsSaving(true);
     setError(null);
     try {
-      const saved = await saveInterviewTemplate(runId, {
-        question_count: Number(template.questionCount),
-        followups_enabled: template.followupsEnabled,
-        time_limit_seconds: template.timeLimitSeconds,
-        opening: template.opening.trim() || null,
-        closing: template.closing.trim() || null,
-        fixed_questions: template.fixedQuestions,
-      });
+      const saved = await saveInterviewTemplate(runId, toTemplatePayload(template));
       const draft = toDraft(saved);
       setTemplate(draft);
       setSavedTemplate(draft);

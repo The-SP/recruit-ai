@@ -96,19 +96,17 @@ export const recommendationLabels: Record<string, string> = {
   do_not_advance: "Do not advance",
 };
 
-export const answerQualityStyles: Record<string, string> = {
-  strong: "bg-success text-success-foreground border-success-edge",
-  adequate: "bg-info text-info-foreground border-info-edge",
-  weak: "bg-warning text-warning-foreground border-warning-edge",
-  not_answered: "bg-muted text-muted-foreground border-border",
+export const competencyLabels: Record<string, string> = {
+  technical_depth: "Technical depth",
+  ownership_impact: "Ownership & impact",
 };
 
-export const answerQualityLabels: Record<string, string> = {
-  strong: "Strong",
-  adequate: "Adequate",
-  weak: "Weak",
-  not_answered: "Not answered",
-};
+/** One word per competency level. Null is "not enough evidence": the assessor
+ * found no answer to rate it on, which is not the same as a low rating. */
+export function levelLabel(level: number | null): string {
+  if (level === null) return "Not enough evidence";
+  return ["Weak", "Limited", "Moderate", "Good", "Strong"][level - 1] ?? String(level);
+}
 
 export function scoreBarColor(value: number): string {
   if (value >= 0.7) return "[&>div]:bg-success-bar";

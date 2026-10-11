@@ -1,6 +1,14 @@
 "use client";
 
-import { Info, Loader2, Minus, Plus, Settings2, Trash2 } from "lucide-react";
+import {
+  Info,
+  Loader2,
+  Minus,
+  Plus,
+  RotateCcw,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,10 +24,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { questionFocusLabels } from "@/lib/evaluation-styles";
+import { competencyLabels, questionFocusLabels } from "@/lib/evaluation-styles";
 import type {
+  Competency,
+  CompetencyLevelsData,
   FixedQuestionData,
   InterviewTemplateData,
+  LevelDescriptionsData,
   QuestionFocus,
 } from "@/lib/interview-types";
 import { cn } from "@/lib/utils";
@@ -36,6 +47,12 @@ const FOCUS_OPTIONS: QuestionFocus[] = [
   "gap_probe",
 ];
 
+const COMPETENCIES: Competency[] = ["technical_depth", "ownership_impact"];
+const DESCRIBED_LEVELS = ["level_1", "level_3", "level_5"] as const;
+
+/** Mirrors CompetencyLevels' max_length in backend/app/schemas/interview.py. */
+const MAX_LEVEL_DESCRIPTION = 500;
+
 /** Form state, distinct from InterviewTemplateData: question_count is a string
  * so the input can be emptied while typing without snapping to a number. */
 export interface TemplateDraft {
@@ -49,6 +66,9 @@ export interface TemplateDraft {
   opening: string;
   closing: string;
   fixedQuestions: FixedQuestionData[];
+  levelDescriptions: LevelDescriptionsData;
+  /** Served with the template, so "Reset to default" needs no local copy. */
+  defaultLevelDescriptions: LevelDescriptionsData;
 }
 
 /** Seconds to whole minutes. One rounding rule, so a summary line and a picker
@@ -95,6 +115,29 @@ export function toDraft(template: InterviewTemplateData): TemplateDraft {
     opening: template.opening ?? "",
     closing: template.closing ?? "",
     fixedQuestions: template.fixed_questions,
+    levelDescriptions: template.level_descriptions,
+    defaultLevelDescriptions: template.default_level_descriptions,
+  };
+}
+
+const sameLevels = (a: CompetencyLevelsData, b: CompetencyLevelsData) =>
+  DESCRIBED_LEVELS.every((key) => a[key].trim() === b[key].trim());
+
+/** Form state into the save request. Shared by every page that writes the
+ * template, so they can't drift on what gets sent. Descriptions identical to
+ * the defaults go as null, so the run keeps tracking the defaults. */
+export function toTemplatePayload(draft: TemplateDraft) {
+  const customized = COMPETENCIES.some(
+    (c) => !sameLevels(draft.levelDescriptions[c], draft.defaultLevelDescriptions[c])
+  );
+  return {
+    question_count: Number(draft.questionCount),
+    followups_enabled: draft.followupsEnabled,
+    time_limit_seconds: draft.timeLimitSeconds,
+    opening: draft.opening.trim() || null,
+    closing: draft.closing.trim() || null,
+    fixed_questions: draft.fixedQuestions,
+    level_descriptions: customized ? draft.levelDescriptions : null,
   };
 }
 
@@ -125,6 +168,13 @@ export function templateBlockedReason(draft: TemplateDraft): string | null {
   }
   if (draft.fixedQuestions.some(isFixedQuestionIncomplete)) {
     return "Finish every fixed question first";
+  }
+  if (
+    COMPETENCIES.some((c) =>
+      DESCRIBED_LEVELS.some((key) => !draft.levelDescriptions[c][key].trim())
+    )
+  ) {
+    return "Every level description needs text";
   }
   return null;
 }
@@ -262,6 +312,12 @@ export function TemplateEditorSkeleton({
             <Skeleton className="h-20 w-full rounded-xl" />
           </div>
         </Section>
+
+        <div className="border-t border-border" />
+
+        <Section title="Scoring" description={SCORING_DESCRIPTION}>
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </Section>
       </div>
     </div>
   );
@@ -270,6 +326,8 @@ export function TemplateEditorSkeleton({
 const FORMAT_DESCRIPTION = "How much the interview asks and how long it runs.";
 const SCRIPT_DESCRIPTION =
   "Wording you want kept the same for every candidate. Anything left empty is written per resume.";
+const SCORING_DESCRIPTION =
+  "What each rating means. Every candidate in this run is rated 1-5 against these; 2 and 4 fall between the levels described.";
 
 export function TemplateEditor({
   draft,
@@ -307,6 +365,9 @@ export function TemplateEditor({
 
   const set = <K extends keyof TemplateDraft>(key: K, value: TemplateDraft[K]) =>
     onChange({ ...draft, [key]: value });
+
+  const setLevels = (competency: Competency, levels: CompetencyLevelsData) =>
+    set("levelDescriptions", { ...draft.levelDescriptions, [competency]: levels });
 
   const setFixed = (index: number, patch: Partial<FixedQuestionData>) =>
     set(
@@ -697,6 +758,62 @@ export function TemplateEditor({
               </div>
             ))}
           </div>
+        </Section>
+
+        <div className="border-t border-border" />
+
+        <Section title="Scoring" description={SCORING_DESCRIPTION}>
+          {COMPETENCIES.map((competency) => {
+            const levels = draft.levelDescriptions[competency];
+            const defaults = draft.defaultLevelDescriptions[competency];
+            return (
+              <div key={competency} className="rounded-xl border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold">
+                    {competencyLabels[competency]}
+                  </h4>
+                  {/* Only once edited: with the defaults in place there is
+                      nothing to reset to. */}
+                  {!sameLevels(levels, defaults) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={disabled}
+                      className="cursor-pointer gap-1.5 text-muted-foreground h-7 px-2"
+                      onClick={() => setLevels(competency, defaults)}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset to default
+                    </Button>
+                  )}
+                </div>
+                {DESCRIBED_LEVELS.map((key) => (
+                  <div key={key} className="grid sm:grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1.5 items-start">
+                    <Label
+                      htmlFor={`${competency}-${key}`}
+                      className="text-xs font-semibold text-muted-foreground sm:pt-2.5"
+                    >
+                      Level {key.slice(-1)}
+                    </Label>
+                    <Textarea
+                      id={`${competency}-${key}`}
+                      rows={2}
+                      required
+                      maxLength={MAX_LEVEL_DESCRIPTION}
+                      aria-invalid={!levels[key].trim()}
+                      value={levels[key]}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        setLevels(competency, { ...levels, [key]: e.target.value })
+                      }
+                      className="min-h-0 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </Section>
 
         {showSaveButton && (

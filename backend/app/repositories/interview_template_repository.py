@@ -30,6 +30,7 @@ class InterviewTemplateRepository:
         opening: str | None,
         closing: str | None,
         fixed_questions: list[dict[str, Any]],
+        level_descriptions: dict[str, Any] | None,
     ) -> InterviewTemplate:
         """Create or replace the run's template.
 
@@ -50,6 +51,7 @@ class InterviewTemplateRepository:
         template.opening = opening
         template.closing = closing
         template.fixed_questions = fixed_questions
+        template.level_descriptions = level_descriptions
 
         self.db.commit()
         self.db.refresh(template)

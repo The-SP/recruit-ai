@@ -67,6 +67,7 @@ class InterviewRepository:
         voice_mode: str,
         followups_enabled: bool,
         time_limit_seconds: int,
+        level_descriptions: dict[str, Any] | None,
     ) -> Interview:
         """Create an unapproved interview: no token, no expiry.
 
@@ -85,6 +86,7 @@ class InterviewRepository:
             voice_mode=voice_mode,
             followups_enabled=followups_enabled,
             time_limit_seconds=time_limit_seconds,
+            level_descriptions=level_descriptions,
             expires_at=None,
         )
         self.db.add(interview)

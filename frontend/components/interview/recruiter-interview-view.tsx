@@ -131,7 +131,6 @@ export function RecruiterInterviewView({
     interview.status === "assessed" ? interview.assessment : null;
   const meta = [
     interviewModeLabels[interview.answer_mode] ?? interview.answer_mode,
-    interview.voice_mode === "on" ? "questions read aloud" : null,
     `${interview.questions_count} question${interview.questions_count === 1 ? "" : "s"}`,
     interview.completed_at
       ? `completed ${formatDate(interview.completed_at)}`
@@ -359,6 +358,7 @@ export function RecruiterInterviewView({
         <div className="py-6">
           <InterviewAssessmentView
             assessment={verdict}
+            recommendationReasons={interview.recommendation_reasons}
             questions={interview.questions}
             turns={interview.turns}
             onFetchTurnAudio={onFetchTurnAudio}

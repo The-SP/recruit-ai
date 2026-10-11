@@ -4,6 +4,7 @@ import type {
   InterviewQuestionData,
   InterviewSummary,
   InterviewTemplateData,
+  LevelDescriptionsData,
 } from "@/lib/interview-types";
 
 import { ApiError, apiFetch, apiRequest, authHeaders } from "./api";
@@ -303,6 +304,8 @@ export async function saveInterviewTemplate(
     opening: string | null;
     closing: string | null;
     fixed_questions: FixedQuestionData[];
+    /** Null means the code defaults. */
+    level_descriptions: LevelDescriptionsData | null;
   }
 ): Promise<InterviewTemplateData> {
   return apiRequest<InterviewTemplateData>(

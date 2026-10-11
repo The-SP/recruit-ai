@@ -124,6 +124,14 @@ class Interview(Base):
         server_default=str(INTERVIEW_TIME_LIMIT_SECONDS)
     )
 
+    # LevelDescriptions the assessor rates against, snapshotted from the
+    # template with the other settings so a template edit never changes how an
+    # interview already drafted is judged. NULL means the code defaults
+    # (rubric.DEFAULT_LEVEL_DESCRIPTIONS).
+    level_descriptions: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, default=None
+    )
+
     # Progress state. Invariant: only ever updated in the same commit that
     # inserts the corresponding turn row (see InterviewRepository).
     current_question_index: Mapped[int] = mapped_column(default=0)
