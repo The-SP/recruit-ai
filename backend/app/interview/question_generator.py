@@ -8,12 +8,9 @@ read of a strong candidate and inherit any scorer mistake wholesale.
 
 from typing import Any
 
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
-
 from app.config import Config
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.interview.constants import MAX_GAP_PROBES
 from app.interview.prompting import json_block
 from app.models.candidate import Candidate
@@ -289,19 +286,16 @@ def _invoke(prompt: str) -> InterviewScript:
 
     Deliberately does NOT consult the circuit breaker: that exists to stop a
     runaway batch from burning the shared scoring quota, while interview calls
-    are singular, interactive, and use their own key.
+    are singular and interactive.
     """
-    agent = create_agent(
-        model=build_model(
-            Config.INTERVIEW_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-        ),
-        system_prompt=SYSTEM_PROMPT,
-        response_format=ToolStrategy(InterviewScript),
-    )
     messages: list[Any] = [{"role": "user", "content": prompt}]
-    result = agent.invoke({"messages": messages})
-    script: InterviewScript = result["structured_response"]
-    return script
+    return invoke_structured(
+        InterviewScript,
+        SYSTEM_PROMPT,
+        messages,
+        model_name=Config.INTERVIEW_MODEL_NAME,
+        reasoning_effort="minimal",
+    )
 
 
 def _fixed_questions_block(template: TemplateSettings) -> str:

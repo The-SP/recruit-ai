@@ -38,8 +38,7 @@ def assess_interview(interview_id: str) -> dict[str, Any]:
 
     Deliberately does NOT consult the circuit breaker, unlike the batch tasks
     in tasks.py: the breaker exists to stop a runaway batch from burning the
-    shared scoring quota, while this is one interactive-feature call on the
-    interview's own key (Config.INTERVIEW_GOOGLE_API_KEY).
+    shared scoring quota, while this is one interactive-feature call.
     """
     with closing(create_session()) as db:
         repo = InterviewRepository(db)
@@ -91,7 +90,7 @@ def synthesize_interview_voice(interview_id: str) -> dict[str, Any]:
 
     Like assess_interview, deliberately does NOT consult the circuit breaker:
     the breaker guards the shared scoring quota from a runaway batch, while
-    this is interview work on the interview's own key.
+    this is a single piece of interview work.
     """
     with closing(create_session()) as db:
         interview = InterviewRepository(db).get_by_id(UUID(interview_id))

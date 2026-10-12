@@ -177,13 +177,13 @@ class _Captured(Exception):
 def _print_prompt(fixture: str) -> None:
     prompts: list[str] = []
 
-    class _Agent:
-        def invoke(self, payload: dict[str, Any]) -> Any:
-            prompts.append(payload["messages"][0]["content"])
-            raise _Captured()
+    def _invoke_structured(
+        schema: Any, system_prompt: str, messages: list[Any], **_: Any
+    ) -> Any:
+        prompts.append(messages[0]["content"])
+        raise _Captured()
 
-    assessor.build_model = lambda *a, **k: None  # type: ignore[assignment]
-    assessor.create_agent = lambda *a, **k: _Agent()  # type: ignore[assignment]
+    assessor.invoke_structured = _invoke_structured  # type: ignore[attr-defined]
     try:
         assessor.assess_transcript(_interview(fixture), _turns(fixture))
     except _Captured:

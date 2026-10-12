@@ -9,14 +9,12 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
 from sqlalchemy.orm import Session
 
 from app.api.exceptions import ConflictError, ValidationError
 from app.config import Config
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.interview.prompting import untrusted_block
 from app.interview.state import question_number, time_remaining_seconds
 from app.models.interview import (
@@ -122,16 +120,16 @@ def _decide_followup(question: InterviewQuestion, answer: str) -> str | None:
         answer=untrusted_block("candidate_answer", answer),
     )
     try:
-        agent = create_agent(
-            model=build_model(
-                Config.INTERVIEW_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-            ),
-            system_prompt=FOLLOWUP_SYSTEM_PROMPT,
-            response_format=ToolStrategy(FollowupDecision),
-        )
         messages: list[Any] = [{"role": "user", "content": prompt}]
-        result = agent.invoke({"messages": messages})
-        decision: FollowupDecision = result["structured_response"]
+        decision = invoke_structured(
+            FollowupDecision,
+            FOLLOWUP_SYSTEM_PROMPT,
+            messages,
+            model_name=Config.INTERVIEW_MODEL_NAME,
+            # Minimal effort: the candidate waits on this call between turns
+            # (measured ~4-6s on Muse Spark vs ~7-8s at "low").
+            reasoning_effort="minimal",
+        )
     except Exception as e:
         logger.warning(f"Follow-up decision failed, advancing instead: {e}")
         return None

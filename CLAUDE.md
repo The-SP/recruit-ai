@@ -10,7 +10,7 @@ The anonymous flow is a **trial surface**, not a workspace: it is capped at 5 re
 
 ## Tech Stack
 
-- **Backend:** Python 3.13+, FastAPI, SQLAlchemy, Celery (Redis broker), Alembic, LangChain + Gemini
+- **Backend:** Python 3.13+, FastAPI, SQLAlchemy, Celery (Redis broker), Alembic, LangChain + Gemini (Meta Muse Spark optional for text calls)
 - **Auth:** Google OAuth (authlib) + JWT (`joserfc`, not python-jose/pyjwt)
 - **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Radix UI, Shadcn UI
 - **Infrastructure:** PostgreSQL 16, Redis 7, Docker Compose; AWS in production (EC2, RDS, S3, SSM Parameter Store)
@@ -102,7 +102,7 @@ The backend follows a layered architecture: **routes → services/scorers → re
 - **`core/`** — `resume_parser.py` (PDF → markdown + structured data via Gemini), `job_description_parser.py` (text → structured requirements, validates input is a real JD), `file_upload.py` (PDF validation), `file_storage.py`, `model_factory.py`, `rate_limit.py`, `redis_client.py`, `logger.py`.
 
   - `file_storage.py` is a façade over `core/storage/` (`base.py` ABC, `local.py`, `s3.py`), selected by the `USE_S3` env var. Prefer the façade functions over instantiating a backend directly.
-  - `model_factory.py` — **all LLM call sites go through `build_model()`**, never `init_chat_model` directly. It round-robins across `GOOGLE_API_KEYS` using a Redis `INCR` cursor, so rotation stays consistent across separate Celery worker processes.
+  - `model_factory.py` — **all LLM call sites go through `build_model()`**, never `init_chat_model` directly, and **every structured call goes through `invoke_structured(Schema, system_prompt, messages, model_name=..., reasoning_effort=...)`**, never `create_agent` directly. It round-robins across `GOOGLE_API_KEYS` (one pool shared by scoring and interviews; there is deliberately no interview-specific key) using a Redis `INCR` cursor, so rotation stays consistent across separate Celery worker processes. The provider comes from the model name: a `meta:` prefix (e.g. `meta:muse-spark-1.3-contributor`) routes to Meta's OpenAI-compatible API via langchain-openai with `META_API_KEY`. `invoke_structured` derives both the model and its output strategy from the one `model_name`, so they can't disagree: Muse Spark rejects forced `tool_choice` (so `ToolStrategy` 400s) and, without `strict=True`, emits corrupted JSON keys that Pydantic silently drops. Muse is text-only, so transcription (`INTERVIEW_TRANSCRIBE_MODEL_NAME`) and TTS stay on Gemini. Its reasoning can't be disabled; `low` is the default, question generation and the live follow-up call use `minimal` (someone waits on them), and `medium` measured *less* stable on the assessor.
   - `redis_client.py` provides `get_redis()`, the single Redis client for the process. Use it instead of `Redis.from_url`; four modules used to build their own, and the health check rebuilt one on every request.
 
 - **`rate_limit.py`** (in `core/`) bounds Gemini spend. It counts **units of LLM work, not requests** (a batch submit with 5 resumes is ~21 provider calls, a status poll is 0), priced in one cost table. There is exactly **one bucket**: a global daily ceiling shared by every caller, with no per-user, per-IP, or per-token buckets and no IP addresses read anywhere. `enforce_budget(cost)` is an explicit call at the top of each handler, after cheap validation and before any model call or Celery dispatch, so a rejected request costs zero quota.
@@ -123,7 +123,7 @@ The backend follows a layered architecture: **routes → services/scorers → re
 
 - **`schemas/`** — Domain/LLM Pydantic schemas (scoring output, parsed resumes and JDs). Distinct from `api/schemas/`, which holds HTTP-facing models. Don't conflate the two.
 
-- **`worker/`** — Celery tasks using chord pattern: `process_evaluation_run` (orchestrator) → `evaluate_resume` (parallel per-resume) → `finalize_evaluation_run` (callback, sends email), with `on_chord_error` wired via `link_error`. Includes `circuit_breaker.py` for Gemini rate limit protection — detects quota errors, sets a Redis flag to block new tasks, requires manual reset via `make circuit-reset`.
+- **`worker/`** — Celery tasks using chord pattern: `process_evaluation_run` (orchestrator) → `evaluate_resume` (parallel per-resume) → `finalize_evaluation_run` (callback, sends email), with `on_chord_error` wired via `link_error`. Includes `circuit_breaker.py` for Gemini rate limit protection — detects quota errors (Gemini `ResourceExhausted`, or a 429 from a Meta model), sets a Redis flag to block new tasks, requires manual reset via `make circuit-reset`.
 
 - **`services/`** — `email_service.py` with pluggable providers: `ConsoleProvider` (local dev, logs to stdout), `GmailProvider` (SMTP), `ResendProvider` (API). Set via `EMAIL_PROVIDER`. Templates in `app/templates/emails/`.
 
@@ -173,7 +173,7 @@ The shared components are flow-agnostic on purpose: they never call `useAuth()` 
 
 ## Configuration
 
-Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `EMAIL_PROVIDER` (console|gmail|resend), `INTERVIEW_MODEL_NAME` / `INTERVIEW_GOOGLE_API_KEY` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` / `INTERVIEW_MODE` (text|audio), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`, `RATE_LIMIT_ENABLED` (on|log|off) / `RATE_LIMIT_DAILY_GLOBAL_UNITS`.
+Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `EMAIL_PROVIDER` (console|gmail|resend), `META_API_KEY` (for `meta:` model names), `INTERVIEW_MODEL_NAME` / `INTERVIEW_TRANSCRIBE_MODEL_NAME` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` / `INTERVIEW_MODE` (text|audio), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`, `RATE_LIMIT_ENABLED` (on|log|off) / `RATE_LIMIT_DAILY_GLOBAL_UNITS`.
 
 **Rate limiting is only two env vars**, and both **default to their production values in code** (unlike `INTERVIEW_MODE` and `INTERVIEW_QUESTION_COUNT`, which default to the dev-friendly value): those are cost *reducers* where an unseeded deploy is merely expensive, these are cost *guards* where it would be silently unprotected. Set `RATE_LIMIT_ENABLED=off` in a local `.env` if the limits get in the way. `RATE_LIMIT_DAILY_GLOBAL_UNITS` defaults to **100**, roughly 16 anonymous trial runs a day: **raise it before demoing to an audience**. See [backend/docs/rate-limiting.md](backend/docs/rate-limiting.md#7-configuration).
 

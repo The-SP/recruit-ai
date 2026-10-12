@@ -1,10 +1,7 @@
-from typing import Any, cast
-
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
+from typing import Any
 
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.schemas.job_description import JobDescriptionResponse
 
 logger = init_logger(__name__)
@@ -160,21 +157,14 @@ FINAL SOURCE-GROUNDING AUDIT (complete this silently before responding):
 def parse_job_description(text: str) -> JobDescriptionResponse:
     """Parse a job description from plain text and return structured data"""
     logger.info(f"Parsing job description ({len(text)} chars)")
-    agent = create_agent(
-        model=build_model(),
-        system_prompt=PROMPT,
-        response_format=ToolStrategy(JobDescriptionResponse),
-    )
-
-    messages: Any = [
+    messages: list[Any] = [
         {
             "role": "user",
             "content": f"JOB DESCRIPTION:\n{text}",
         }
     ]
 
-    result = agent.invoke({"messages": messages})
-    response = result["structured_response"]
+    response = invoke_structured(JobDescriptionResponse, PROMPT, messages)
 
     if response.is_job_description:
         logger.info(f"Parsed job description - Title: {response.job_title}")
@@ -183,4 +173,4 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
             f"Document is not a job description - Type: {response.document_type}"
         )
 
-    return cast(JobDescriptionResponse, response)
+    return response

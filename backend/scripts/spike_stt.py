@@ -26,10 +26,10 @@ output does not reproduce what a browser's MediaRecorder actually emits, so
 a pass on it proves nothing about real candidate audio. Record clips with
 docs/spike-recorder.html (see that file for how to serve it).
 
-Usage (REDIS_URL is not optional outside Docker: without
-INTERVIEW_GOOGLE_API_KEY set, build_model() falls through to the Redis
-rotation cursor, and the default port 6379 vs docker's 6380 fails in a way
-that reads like an LLM error):
+Usage (REDIS_URL is not optional outside Docker with more than one key in
+GOOGLE_API_KEYS: build_model() then uses the Redis rotation cursor, and the
+default port 6379 vs docker's 6380 fails in a way that reads like an LLM
+error):
 
     REDIS_URL=redis://localhost:6380/0 uv run -m scripts.spike_stt \
         ~/Downloads/clip.webm --mime 'audio/webm;codecs=opus'
@@ -232,9 +232,7 @@ def transcribe(audio: bytes, mime_type: str) -> str:
     site -- no create_agent, no ToolStrategy -- so CLAUDE.md's "all LLM call
     sites go through build_model()" rule holds untouched.
     """
-    model = build_model(
-        Config.INTERVIEW_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-    )
+    model = build_model(Config.INTERVIEW_MODEL_NAME)
     content: list[Any] = [
         {"type": "text", "text": _ACTIVE_PROMPT},
         {
@@ -456,8 +454,8 @@ def main() -> None:
     if args.model:
         Config.INTERVIEW_MODEL_NAME = args.model
         print(f"NOTE: overriding model to {args.model}.\n")
-    if not Config.INTERVIEW_GOOGLE_API_KEY and not Config.GOOGLE_API_KEYS:
-        print("WARNING: no interview or pooled Google API key configured.\n")
+    if not Config.GOOGLE_API_KEYS:
+        print("WARNING: no Google API key configured.\n")
     if args.vocab_hint:
         _ACTIVE_PROMPT = VERBATIM_PROMPT + VOCAB_HINT
         print(

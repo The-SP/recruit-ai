@@ -195,9 +195,9 @@ file rather than accumulating orphaned recordings.
 ## Speech
 
 **Answers (speech-to-text).** `transcriber.py` transcribes with a mandatory
-verbatim-transcription prompt, using the same `INTERVIEW_MODEL_NAME` model as
-question generation, the turn engine, and assessment (default
-`gemini-3.5-flash-lite`) — there's no separate STT-specific model setting.
+verbatim-transcription prompt, using `INTERVIEW_TRANSCRIBE_MODEL_NAME` (default
+`gemini-3.5-flash-lite`). It is separate from `INTERVIEW_MODEL_NAME` because the
+rest of the interview may run on a text-only model such as Muse Spark.
 
 - Without the verbatim prompt, the model paraphrases into fluent but false
   text instead of transcribing; verbatim mode catches that failure mode at
@@ -343,9 +343,9 @@ and the recruiter UI shows a retry button rather than leaving the run stuck.
 | `INTERVIEW_MODE` | `text` or `audio` answers | `text` locally (no mic needed), `audio` in production |
 | `INTERVIEW_VOICE` | `on`/`off` — whether questions are spoken. Defaults to `off` even when `INTERVIEW_MODE=audio`; an unrecognized value for either setting degrades silently to the safe default rather than failing invite creation | `off` locally, `on` in production |
 | `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` | The **default** question count for a run with no saved template, and the tolerance its generated output is validated against. A template overrides the count, bounded by `MIN`/`MAX_QUESTIONS_PER_INTERVIEW` | Code default `1`/`0` for fast local test interviews, full 5-6 in production |
-| `INTERVIEW_MODEL_NAME` | Model used for question generation, the turn engine, transcription, and assessment (there's no separate STT model setting) | — |
+| `INTERVIEW_MODEL_NAME` | Model used for question generation, the turn engine, and assessment. Can be a `meta:` Muse Spark model (needs `META_API_KEY`) | — |
+| `INTERVIEW_TRANSCRIBE_MODEL_NAME` | Model that transcribes spoken answers. Must accept audio input, so it stays Gemini even when the interview model is Muse Spark | — |
 | `INTERVIEW_TTS_MODEL_NAME` | Model used for speech synthesis | — |
-| `INTERVIEW_GOOGLE_API_KEY` | API key(s) for interview LLM calls | — |
 
 **Interview length is not an env var.** It is a per-run template setting
 chosen from `ALLOWED_TIME_LIMIT_SECONDS` (10/15/20/30 minutes), defaulting to

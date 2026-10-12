@@ -8,11 +8,10 @@ because deciding what gets spoken is interview business logic, and it imports
 nothing from FastAPI -- text in, bytes out.
 
 TTS rides Config.INTERVIEW_TTS_MODEL_NAME (a dedicated var, because it must be
-a "-tts" model) with Config.INTERVIEW_GOOGLE_API_KEY, the same key the engine,
-transcriber, and assessor use. Like every interview LLM call it is exempt from
-the circuit breaker: those calls are singular and interactive, use their own
-key, and a quota trip should surface to the candidate as a retryable 503 rather
-than poison the batch breaker.
+a "-tts" model). Like every interview LLM call it is exempt from the circuit
+breaker: those calls are singular and interactive, and a quota trip should
+surface to the candidate as a retryable 503 rather than poison the batch
+breaker.
 
 No voice/timbre selection exists. langchain-google-genai 4.2.1 has no support
 for speech_config anywhere in the package -- passing one is silently discarded
@@ -124,9 +123,7 @@ def synthesize_speech(text: str) -> bytes:
     build_model()" rule holds untouched. The response carries a standard
     AudioContentBlock -- the exact mirror of the block transcriber.py sends.
     """
-    model = build_model(
-        Config.INTERVIEW_TTS_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-    )
+    model = build_model(Config.INTERVIEW_TTS_MODEL_NAME)
 
     try:
         response = model.invoke(STYLE_DIRECTION + text)

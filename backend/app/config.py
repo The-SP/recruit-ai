@@ -19,13 +19,18 @@ class Config:
         )
         if k.strip()
     ]
+    # Meta Model API (Muse Spark), used by any *_MODEL_NAME set to "meta:<model>".
+    META_API_KEY: str = os.getenv("META_API_KEY", "")
+    META_BASE_URL: str = os.getenv("META_BASE_URL", "https://api.meta.ai/v1")
     # AI Interviewer
     INTERVIEW_MODEL_NAME: str = os.getenv(
         "INTERVIEW_MODEL_NAME", "google_genai:gemini-3.5-flash-lite"
     )
-    # Dedicated key so interviews don't share the scorers' quota or circuit
-    # breaker. Falls back to the rotated GOOGLE_API_KEYS pool when unset.
-    INTERVIEW_GOOGLE_API_KEY: str = os.getenv("INTERVIEW_GOOGLE_API_KEY", "")
+    # Spoken-answer transcription needs a model that takes audio input, so it
+    # is separate from INTERVIEW_MODEL_NAME (Muse Spark has no audio input).
+    INTERVIEW_TRANSCRIBE_MODEL_NAME: str = os.getenv(
+        "INTERVIEW_TRANSCRIBE_MODEL_NAME", "google_genai:gemini-3.5-flash-lite"
+    )
     # Core questions per interview. Defaults to the fast development value;
     INTERVIEW_QUESTION_COUNT: int = int(os.getenv("INTERVIEW_QUESTION_COUNT", "1"))
     # Accepted spread around the count when validating LLM output.
@@ -33,7 +38,7 @@ class Config:
         os.getenv("INTERVIEW_QUESTION_COUNT_TOLERANCE", "0")
     )
     # Answer mode for this deployment: "text" (typed) or "audio" (spoken,
-    # transcribed via the interview model).
+    # transcribed via INTERVIEW_TRANSCRIBE_MODEL_NAME).
     INTERVIEW_MODE: str = os.getenv("INTERVIEW_MODE", "text")
     # Whether the interviewer's turns are read aloud: "on" or "off". Separate
     # from INTERVIEW_MODE on purpose -- synthesis is by far the most expensive

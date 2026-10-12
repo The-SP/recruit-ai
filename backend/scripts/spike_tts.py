@@ -26,10 +26,10 @@ M1 findings, recorded 2026-08-09 (see that plan's §3 for the full write-up):
     comparing byte lengths between two voices -- output length varies by a few
     percent between identical calls, so length differences prove nothing.
 
-Usage (REDIS_URL is not optional outside Docker: without
-INTERVIEW_GOOGLE_API_KEY set, build_model() falls through to the Redis rotation
-cursor, and the default port 6379 vs docker's 6380 fails in a way that reads
-like an LLM error):
+Usage (REDIS_URL is not optional outside Docker with more than one key in
+GOOGLE_API_KEYS: build_model() then uses the Redis rotation cursor, and the
+default port 6379 vs docker's 6380 fails in a way that reads like an LLM
+error):
 
     REDIS_URL=redis://localhost:6380/0 uv run -m scripts.spike_tts \
         "Thanks for making time today." --out /tmp/opening.wav
@@ -73,7 +73,7 @@ STYLE_DIRECTION = "Read this aloud in a warm, professional interviewer's voice: 
 
 def synthesize(text: str, model_name: str) -> tuple[bytes, str, dict[str, int]]:
     """One utterance through build_model(). Returns (wav_bytes, mime, usage)."""
-    model = build_model(model_name, Config.INTERVIEW_GOOGLE_API_KEY or None)
+    model = build_model(model_name)
     response = model.invoke(STYLE_DIRECTION + text)
 
     blocks = [b for b in (response.content_blocks or []) if b.get("type") == "audio"]
@@ -145,8 +145,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    if not Config.INTERVIEW_GOOGLE_API_KEY and not Config.GOOGLE_API_KEYS:
-        print("WARNING: no interview or pooled Google API key configured.\n")
+    if not Config.GOOGLE_API_KEYS:
+        print("WARNING: no Google API key configured.\n")
 
     print(f"model: {args.model}")
     print(f"text:  {args.text}")

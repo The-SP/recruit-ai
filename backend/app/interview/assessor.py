@@ -8,12 +8,9 @@ question generation saw, even if the evaluation row was overwritten since.
 
 from typing import Any
 
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
-
 from app.config import Config
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.interview.prompting import json_block, untrusted_block
 from app.interview.rubric import (
     COMPETENCY_LABELS,
@@ -371,19 +368,15 @@ def _invoke(prompt: str) -> AssessorOutput:
 
     Deliberately does NOT consult the circuit breaker: that exists to stop a
     runaway batch from burning the shared scoring quota, while interview calls
-    are singular, background, and use their own key.
+    are singular and background.
     """
-    agent = create_agent(
-        model=build_model(
-            Config.INTERVIEW_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-        ),
-        system_prompt=SYSTEM_PROMPT,
-        response_format=ToolStrategy(AssessorOutput),
-    )
     messages: list[Any] = [{"role": "user", "content": prompt}]
-    result = agent.invoke({"messages": messages})
-    output: AssessorOutput = result["structured_response"]
-    return output
+    return invoke_structured(
+        AssessorOutput,
+        SYSTEM_PROMPT,
+        messages,
+        model_name=Config.INTERVIEW_MODEL_NAME,
+    )
 
 
 def assess_transcript(

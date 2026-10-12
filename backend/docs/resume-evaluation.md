@@ -259,9 +259,10 @@ always sums to 1.0.
 
 Two structural notes:
 
-- Every scorer goes through `core/model_factory.build_model()` and uses LangChain `create_agent`
-  with a `ToolStrategy` structured-output schema, so each returns a validated Pydantic object
-  rather than free text.
+- Every scorer calls `core/model_factory.invoke_structured()` with a Pydantic schema, so each
+  returns a validated object rather than free text. The helper picks the structured-output
+  strategy for the configured provider (`ToolStrategy` on Gemini, strict json_schema on Muse
+  Spark).
 - The LLM decides *matching* — does this resume show this skill, how relevant is this role. All
   arithmetic (weights, tier scores, the critical penalty, overlap handling, thresholds) is plain
   Python and deterministic.

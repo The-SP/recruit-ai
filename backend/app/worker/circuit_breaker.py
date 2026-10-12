@@ -24,10 +24,14 @@ CIRCUIT_BREAKER_TTL = 86400  # 24 hours
 
 
 def is_rate_limit_error(error: Exception | str) -> bool:
-    """Check if error is a rate limit/quota error."""
+    """Check if error is a rate limit/quota error.
+
+    "Error code: 429" is how the openai SDK (Meta models) renders a 429.
+    """
     error_str = str(error)
     return (
         "ResourceExhausted" in error_str
+        or "Error code: 429" in error_str
         or "rate-limits" in error_str.lower()
         or "quota" in error_str.lower()
     )

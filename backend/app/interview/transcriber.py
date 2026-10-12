@@ -6,12 +6,12 @@ would be a dead interface. It lives beside the engine because transcription is
 interview business logic, and it imports nothing from FastAPI — bytes in, text
 out, the same discipline the engine keeps.
 
-STT rides the interview model itself (Config.INTERVIEW_MODEL_NAME +
-Config.INTERVIEW_GOOGLE_API_KEY), the same model/key pair the follow-up call
-and the assessor use. Like every interview LLM call it is exempt from the
-circuit breaker: those calls are singular and interactive, use their own key,
-and a quota trip should surface to the candidate as a retryable 503 rather than
-poison the batch breaker.
+STT has its own model setting (Config.INTERVIEW_TRANSCRIBE_MODEL_NAME, a Gemini
+model): the rest of the interview may run on a text-only model such as Muse
+Spark, which cannot take audio. Like every interview LLM call it is exempt from
+the circuit breaker: those calls are singular and interactive, and a quota trip
+should surface to the candidate as a retryable 503 rather than poison the batch
+breaker.
 """
 
 import base64
@@ -67,9 +67,7 @@ def transcribe_answer(audio: bytes, mime_type: str) -> str:
     "audio/webm;codecs=opus" and bare "audio/webm" are accepted upstream, so
     stripping the suffix would buy nothing.
     """
-    model = build_model(
-        Config.INTERVIEW_MODEL_NAME, Config.INTERVIEW_GOOGLE_API_KEY or None
-    )
+    model = build_model(Config.INTERVIEW_TRANSCRIBE_MODEL_NAME)
     content: list[Any] = [
         {"type": "text", "text": VERBATIM_PROMPT},
         {

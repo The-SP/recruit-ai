@@ -1,12 +1,9 @@
 import base64
-from typing import Any, cast
-
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
+from typing import Any
 
 from app.core.file_storage import get_file_content
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.schemas.resume import ResumeResponse
 
 logger = init_logger(__name__)
@@ -81,24 +78,28 @@ def parse_resume(file_path: str) -> ResumeResponse:
     """Parse a resume PDF and return markdown content for scoring"""
     pdf_base64 = encode_pdf_to_base64(file_path)
 
-    agent = create_agent(
-        model=build_model(),
-        system_prompt="You are a helpful assistant that analyzes documents and returns structured JSON data.",
-        response_format=ToolStrategy(ResumeResponse),
-    )
-
-    messages: Any = [
+    messages: list[Any] = [
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": PROMPT},
-                {"type": "media", "mime_type": "application/pdf", "data": pdf_base64},
+                # LangChain's standard file block, so the PDF reaches either
+                # provider; Gemini's own "media" block does not translate.
+                {
+                    "type": "file",
+                    "base64": pdf_base64,
+                    "mime_type": "application/pdf",
+                    "filename": "resume.pdf",
+                },
             ],
         }
     ]
 
-    result = agent.invoke({"messages": messages})
-    response = result["structured_response"]
+    response = invoke_structured(
+        ResumeResponse,
+        "You are a helpful assistant that analyzes documents and returns structured JSON data.",
+        messages,
+    )
 
     if response.is_resume:
         name = (
@@ -113,4 +114,4 @@ def parse_resume(file_path: str) -> ResumeResponse:
     else:
         logger.warning(f"Document is not a resume - Type: {response.document_type}")
 
-    return cast(ResumeResponse, response)
+    return response

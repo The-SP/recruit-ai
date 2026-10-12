@@ -1,10 +1,7 @@
 from typing import Any
 
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
-
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.schemas.job_description import SkillGroup, SkillRequirements
 from app.schemas.skill_evaluation import (
     LLMEvaluationResponse,
@@ -238,15 +235,12 @@ def calculate_skill_score(
 
     # --- Step 2: Call LLM ---
 
-    agent = create_agent(
-        model=build_model(),
-        system_prompt="You are a helpful assistant that evaluates candidate-job fit and returns structured JSON.",
-        response_format=ToolStrategy(LLMEvaluationResponse),
-    )
-
     messages: list[Any] = [{"role": "user", "content": prompt}]
-    result = agent.invoke({"messages": messages})
-    llm_response: LLMEvaluationResponse = result["structured_response"]
+    llm_response = invoke_structured(
+        LLMEvaluationResponse,
+        "You are a helpful assistant that evaluates candidate-job fit and returns structured JSON.",
+        messages,
+    )
 
     _validate_evaluation_counts(llm_response, skill_requirements)
 

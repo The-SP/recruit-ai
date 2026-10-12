@@ -1,10 +1,7 @@
 from typing import Any
 
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
-
 from app.core.logger import init_logger
-from app.core.model_factory import build_model
+from app.core.model_factory import invoke_structured
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.job_description import EducationRequirement
 
@@ -115,15 +112,12 @@ def calculate_education_score(
 
     # --- Call LLM ---
 
-    agent = create_agent(
-        model=build_model(),
-        system_prompt="You evaluate education qualifications and return structured JSON.",
-        response_format=ToolStrategy(EducationScoreResult),
+    messages: list[Any] = [{"role": "user", "content": prompt}]
+    llm_response = invoke_structured(
+        EducationScoreResult,
+        "You evaluate education qualifications and return structured JSON.",
+        messages,
     )
-
-    messages: Any = [{"role": "user", "content": prompt}]
-    result = agent.invoke({"messages": messages})
-    llm_response: EducationScoreResult = result["structured_response"]
 
     # --- Apply floor if education not required ---
 

@@ -33,6 +33,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 from app.config import Config
+from app.core.model_factory import is_meta_model
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 MODULE_PATHS = {
@@ -211,6 +212,14 @@ def _stub_model(module: ModuleType, prompts: list[str]) -> None:
             prompts.append(payload["messages"][0]["content"])
             raise _Captured()
 
+    def _invoke_structured(
+        schema: Any, system_prompt: str, messages: list[Any], **_: Any
+    ) -> Any:
+        prompts.append(messages[0]["content"])
+        raise _Captured()
+
+    module.invoke_structured = _invoke_structured  # type: ignore[attr-defined]
+    # --ref may load prompts from before invoke_structured existed.
     module.build_model = lambda *a, **k: None  # type: ignore[attr-defined]
     module.create_agent = lambda *a, **k: _Agent()  # type: ignore[attr-defined]
 
@@ -324,11 +333,11 @@ def main() -> None:
     parser.add_argument("--out", help="write the raw results as JSON here")
     args = parser.parse_args()
 
-    if not args.dry_run and not Config.INTERVIEW_GOOGLE_API_KEY:
-        if not Config.GOOGLE_API_KEYS:
-            sys.exit("No Gemini key: set INTERVIEW_GOOGLE_API_KEY or GOOGLE_API_KEYS")
-        # Pin one pool key so build_model skips the Redis rotation cursor.
-        Config.INTERVIEW_GOOGLE_API_KEY = Config.GOOGLE_API_KEYS[0]
+    if is_meta_model(Config.INTERVIEW_MODEL_NAME):
+        if not args.dry_run and not Config.META_API_KEY:
+            sys.exit("No Meta key: set META_API_KEY")
+    elif not args.dry_run and not Config.GOOGLE_API_KEYS:
+        sys.exit("No Gemini key: set GOOGLE_API_KEYS")
 
     print(
         f"Prompts from: {args.ref or 'working tree'} | "
