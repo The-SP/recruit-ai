@@ -87,3 +87,36 @@ export async function listAllRuns(
   if (search) params.set("search", search);
   return apiRequest<AdminRunListResponse>(`/admin/runs?${params}`);
 }
+
+/** Provider-call metrics read back from LangSmith. Aggregates only: prompts
+ *  and outputs never reach the backend endpoint, let alone this page. */
+export interface LlmUsageStats {
+  calls: number;
+  errors: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  /** Sum over priced calls; null when no call in the slice had a price. */
+  cost: number | null;
+  /** Calls LangSmith has no model price for, so `cost` undercounts. */
+  unpriced_calls: number;
+  latency_p50: number | null;
+  latency_p99: number | null;
+}
+
+export interface LlmUsageResponse {
+  /** False when no LangSmith API key is set on the backend. */
+  configured: boolean;
+  project_name: string | null;
+  project_url: string | null;
+  days: number;
+  totals: LlmUsageStats | null;
+  daily: { day: string; stats: LlmUsageStats }[];
+  by_model: { model: string; stats: LlmUsageStats }[];
+  /** The scan hit its run cap, so every number is a lower bound. */
+  truncated: boolean;
+  fetched_at: string | null;
+}
+
+export async function getLlmUsage(days: number): Promise<LlmUsageResponse> {
+  return apiRequest<LlmUsageResponse>(`/admin/llm-usage?days=${days}`);
+}

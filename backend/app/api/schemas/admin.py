@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -79,3 +79,45 @@ class AdminRunRow(BaseModel):
 class AdminRunListResponse(BaseModel):
     items: list[AdminRunRow]
     total: int
+
+
+class LlmUsageStats(BaseModel):
+    calls: int
+    errors: int
+    prompt_tokens: int
+    completion_tokens: int
+    # Sum over priced calls only; None when no call in the slice had a price.
+    cost: float | None
+    # Calls LangSmith has no model price for, so `cost` undercounts by them.
+    unpriced_calls: int
+    latency_p50: float | None
+    latency_p99: float | None
+
+
+class LlmUsageDay(BaseModel):
+    day: date
+    stats: LlmUsageStats
+
+
+class LlmUsageModel(BaseModel):
+    model: str
+    stats: LlmUsageStats
+
+
+class LlmUsageResponse(BaseModel):
+    """Provider-call stats read from LangSmith (core/llm_usage.py).
+
+    `configured` false means no LangSmith API key is set; every other field is
+    then empty. Prompts and outputs never pass through here, only aggregates.
+    """
+
+    configured: bool
+    project_name: str | None = None
+    project_url: str | None = None
+    days: int
+    totals: LlmUsageStats | None = None
+    daily: list[LlmUsageDay] = []
+    by_model: list[LlmUsageModel] = []
+    # The scan hit its run cap, so every number is a lower bound.
+    truncated: bool = False
+    fetched_at: datetime | None = None

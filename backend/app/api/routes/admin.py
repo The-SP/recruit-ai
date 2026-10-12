@@ -21,22 +21,31 @@ The gap this closes is that nothing else in the app can see across users at
 all: every other aggregate query is scoped by user_id or run id.
 
 No handler here calls a model, so none of them call enforce_budget.
+`/admin/llm-usage` reads run metrics back from LangSmith (prompts and outputs
+are never selected), which is not a model call either.
 """
 
+from dataclasses import asdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
+from app.api.exceptions import ServiceUnavailableError
 from app.api.schemas.admin import (
     AdminRunListResponse,
     AdminRunRow,
     AdminStatsResponse,
     AdminUserListResponse,
     AdminUserRow,
+    LlmUsageDay,
+    LlmUsageModel,
+    LlmUsageResponse,
+    LlmUsageStats,
 )
 from app.auth.jwt import require_admin
+from app.core import llm_usage
 from app.core.rate_limit import global_usage
 from app.models.evaluation_run import RunStatus
 from app.repositories.evaluation_run_repository import EvaluationRunRepository
@@ -152,4 +161,41 @@ def list_all_runs(
 
     return AdminRunListResponse(
         items=items, total=run_repo.count_all(status=status, search=search)
+    )
+
+
+@router.get("/llm-usage", response_model=LlmUsageResponse)
+def get_llm_usage(days: int = Query(default=7, ge=1, le=30)) -> LlmUsageResponse:
+    """Provider calls, tokens, cost, errors and latency, read from LangSmith.
+
+    Per UTC day and per configured model, for the last `days` days. Returns
+    `configured: false` rather than an error when no LangSmith key is set, so
+    the page can explain the setup instead of showing a failure.
+    """
+    if not llm_usage.is_configured():
+        return LlmUsageResponse(configured=False, days=days)
+
+    try:
+        usage = llm_usage.get_usage(days)
+    except llm_usage.LlmUsageUnavailableError as e:
+        raise ServiceUnavailableError(
+            "Couldn't load usage from LangSmith. Try again shortly."
+        ) from e
+
+    return LlmUsageResponse(
+        configured=True,
+        project_name=usage.project_name,
+        project_url=usage.project_url,
+        days=usage.days,
+        totals=LlmUsageStats(**asdict(usage.totals)),
+        daily=[
+            LlmUsageDay(day=d.day, stats=LlmUsageStats(**asdict(d.stats)))
+            for d in usage.daily
+        ],
+        by_model=[
+            LlmUsageModel(model=m.model, stats=LlmUsageStats(**asdict(m.stats)))
+            for m in usage.by_model
+        ],
+        truncated=usage.truncated,
+        fetched_at=usage.fetched_at,
     )

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Cpu,
   History,
   LayoutDashboard,
   Layers,
@@ -46,6 +47,7 @@ const adminNavItems: NavItem[] = [
   { label: "Overview", href: "/admin", icon: Shield },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "All runs", href: "/admin/runs", icon: Layers },
+  { label: "LLM usage", href: "/admin/llm", icon: Cpu },
 ];
 
 function NavItems({ items }: { items: NavItem[] }) {

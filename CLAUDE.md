@@ -157,7 +157,7 @@ Next.js App Router. Routes:
 | `/dashboard`, `/dashboard/new` | auth | Stats + recent runs; new-evaluation wizard |
 | `/history`, `/profile` | auth | Past runs; account |
 | `/evaluation/[id]` | auth | Owned run detail |
-| `/admin`, `/admin/runs` | admin | Cross-tenant stats + user list; all runs across accounts |
+| `/admin`, `/admin/runs`, `/admin/llm` | admin | Cross-tenant stats + user list; all runs across accounts; LLM calls/tokens/cost from LangSmith |
 
 Auth-gated routes live in the `app/(dashboard)/` route group. **There is no `middleware.ts`** — gating is client-side in `components/dashboard-layout.tsx`, which redirects to `/login` when `useAuth()` resolves with no user.
 
@@ -176,6 +176,8 @@ The shared components are flow-agnostic on purpose: they never call `useAuth()` 
 Backend env vars are documented in `backend/.env.example`. Key variables: `GOOGLE_API_KEY` / `GOOGLE_API_KEYS` (comma-separated, rotated round-robin, takes precedence), `DATABASE_URL`, `REDIS_URL`, `MODEL_NAME`, `SECRET_KEY` (JWT + OAuth session), `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `EMAIL_PROVIDER` (console|gmail|resend), `META_API_KEY` (for `meta:` model names), `INTERVIEW_MODEL_NAME` / `INTERVIEW_TRANSCRIBE_MODEL_NAME` / `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` / `INTERVIEW_MODE` (text|audio), `USE_S3` + `S3_BUCKET_NAME` / `S3_REGION` / AWS credentials, `BASE_URL`, `FRONTEND_URL`, `LOG_LEVEL`, `LOG_TO_FILE`, `RATE_LIMIT_ENABLED` (on|log|off) / `RATE_LIMIT_DAILY_GLOBAL_UNITS`.
 
 **Rate limiting is only two env vars**, and both **default to their production values in code** (unlike `INTERVIEW_MODE` and `INTERVIEW_QUESTION_COUNT`, which default to the dev-friendly value): those are cost *reducers* where an unseeded deploy is merely expensive, these are cost *guards* where it would be silently unprotected. Set `RATE_LIMIT_ENABLED=off` in a local `.env` if the limits get in the way. `RATE_LIMIT_DAILY_GLOBAL_UNITS` defaults to **100**, roughly 16 anonymous trial runs a day: **raise it before demoing to an audience**. See [backend/docs/rate-limiting.md](backend/docs/rate-limiting.md#7-configuration).
+
+**LLM tracing is LangSmith's built-in LangChain tracing**, configured purely by `LANGSMITH_*` env vars that LangChain reads directly (not `Config`). Per-call tokens, latency, errors, and cost live there, not in the app. `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` must be `true` in production: inputs are resumes, candidate answers, and interview audio. Token counts survive hiding because the tracer copies usage into run metadata, so never set `LANGSMITH_HIDE_METADATA`. `celery_app.py` flushes pending traces on worker shutdown. `GET /admin/llm-usage` (`core/llm_usage.py`) reads it back for `/admin/llm`: one paginated `list_runs` scan selecting numeric fields only (never inputs/outputs), aggregated in Python and cached in process for 5 minutes. Not `/runs/stats`: that endpoint 429s on the second sequential call.
 
 Frontend: `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`), `NEXT_PUBLIC_DEMO_MODE`.
 

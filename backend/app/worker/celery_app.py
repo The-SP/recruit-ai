@@ -1,4 +1,8 @@
+from typing import Any
+
 from celery import Celery
+from celery.signals import worker_process_shutdown
+from langchain_core.tracers.langchain import wait_for_all_tracers
 
 from app.config import Config
 
@@ -28,3 +32,13 @@ celery_app.conf.update(
     # Result expiration (24 hours)
     result_expires=86400,
 )
+
+
+@worker_process_shutdown.connect
+def _flush_llm_traces(**_: Any) -> None:
+    """Send LangSmith traces still queued when a worker process exits.
+
+    The tracer uploads from a background thread, so a restart (every deploy)
+    would otherwise drop the last batch. A no-op when tracing is off.
+    """
+    wait_for_all_tracers()

@@ -83,6 +83,7 @@ function buildCrumbs(pathname: string, labels: Labels): Crumb[] {
         { label: "Admin", href: "/admin" },
         ...(id === "users" ? [{ label: "Users", href: "/admin/users" }] : []),
         ...(id === "runs" ? [{ label: "All runs", href: "/admin/runs" }] : []),
+        ...(id === "llm" ? [{ label: "LLM usage", href: "/admin/llm" }] : []),
       ];
     case "evaluation": {
       if (!id) return [];
