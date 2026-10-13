@@ -130,6 +130,8 @@ export interface InterviewSummary {
   expires_at: string | null;
   created_at: string;
   approved_at: string | null;
+  invite_sent_to: string | null;
+  invite_sent_at: string | null;
 }
 
 /** Findings for one core question; mirrors the backend QuestionAssessment.
@@ -199,6 +201,12 @@ export interface InterviewDetail {
   completed_at: string | null;
   assessed_at: string | null;
   created_at: string;
+  /** Parsed from the resume; prefills the send-invite field. */
+  candidate_email: string | null;
+  /** Where and when an invite email went out for the current link. Null
+   * until one is sent, and cleared again by a reissue. */
+  invite_sent_to: string | null;
+  invite_sent_at: string | null;
 }
 
 /** Cache slot value for a row's interview: null = fetched, none exists. */

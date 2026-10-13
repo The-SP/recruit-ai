@@ -8,6 +8,8 @@ import {
   Copy,
   FileText,
   Loader2,
+  Mail,
+  MailCheck,
   RotateCcw,
   Sparkles,
 } from "lucide-react";
@@ -16,9 +18,15 @@ import React from "react";
 
 import { DemoNotice } from "@/components/demo-notice";
 import { assessmentCopy } from "@/components/interview/assessment-view";
+import { SendInviteForm } from "@/components/interview/send-invite-form";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -188,6 +196,7 @@ export function InterviewTable({
   onReissue,
   onAssess,
   onCopyLink,
+  onSendInvite,
   onViewResume,
   getInterviewHref,
   sort,
@@ -205,6 +214,10 @@ export function InterviewTable({
   onReissue: (item: RunItemSummary) => void;
   onAssess: (item: RunItemSummary) => void;
   onCopyLink: (item: RunItemSummary) => void;
+  // Resolves once sent, or rejects with the reason; the popover's form shows
+  // either. Not routed through busyItemId: sending spends no LLM call, and
+  // its error belongs beside the field rather than in the table banner.
+  onSendInvite: (item: RunItemSummary, email: string) => Promise<void>;
   // Same handler the screening table uses, so a resume fetched on either tab
   // is already cached for the other. Takes the event to match that signature.
   onViewResume: (e: React.MouseEvent, item: RunItemSummary) => void;
@@ -295,6 +308,45 @@ export function InterviewTable({
       </Button>
     );
 
+    // Opens the same form the candidate panel uses. Keyed on the link so a
+    // reissue resets it: the old "Sent to" described a link that's now dead.
+    const sent = !!iv?.invite_sent_at;
+    const emailButton = iv ? (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="icon"
+            variant="outline"
+            title={sent ? `Emailed to ${iv.invite_sent_to}` : "Email invite"}
+            aria-label={sent ? "Invite emailed, send again" : "Email invite"}
+            className="relative z-10 h-8 w-8 shrink-0 cursor-pointer aria-expanded:bg-muted"
+          >
+            {sent ? (
+              <MailCheck className="w-3.5 h-3.5 text-success-foreground" />
+            ) : (
+              <Mail className="w-3.5 h-3.5" />
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80 space-y-3 text-left">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">Email invite</p>
+            <p className="text-xs text-muted-foreground whitespace-normal">
+              Sends the interview link to {item.candidate_name ?? "the candidate"}.
+            </p>
+          </div>
+          <SendInviteForm
+            key={iv.invite_url}
+            defaultEmail={iv.candidate_email}
+            sentTo={iv.invite_sent_to}
+            sentAt={iv.invite_sent_at}
+            onSend={(email) => onSendInvite(item, email)}
+            size="sm"
+          />
+        </PopoverContent>
+      </Popover>
+    ) : null;
+
     // Failed evaluations have no candidate to interview against.
     if (!item.candidate_id) return <span className="text-muted-foreground">—</span>;
 
@@ -331,6 +383,7 @@ export function InterviewTable({
       case "created":
         return (
           <div className="flex items-center justify-end gap-2">
+            {emailButton}
             {copyButton}
             {actionButton(
               "Reissue",
@@ -583,7 +636,11 @@ export function InterviewTable({
                         variant="outline"
                         className={interviewStatusStyles[iv.status] ?? ""}
                       >
-                        {interviewStatusLabels[iv.status] ?? iv.status}
+                        {/* Same status, but the recruiter's next move differs:
+                            a link nobody has emailed may still need sending. */}
+                        {iv.status === "created" && iv.invite_sent_at
+                          ? "Invite emailed"
+                          : interviewStatusLabels[iv.status] ?? iv.status}
                       </Badge>
                     ) : (
                       <Badge

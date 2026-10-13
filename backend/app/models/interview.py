@@ -150,6 +150,9 @@ class Interview(Base):
     completed_at: Mapped[datetime | None] = mapped_column(default=None)
     assessed_at: Mapped[datetime | None] = mapped_column(default=None)
 
+    invite_sent_to: Mapped[str | None] = mapped_column(String(255), default=None)
+    invite_sent_at: Mapped[datetime | None] = mapped_column(default=None)
+
     # InterviewAssessment.model_dump(); assessment_error set if the task failed
     assessment: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     assessment_error: Mapped[str | None] = mapped_column(Text, default=None)

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.config import Config
 from app.interview import state
@@ -280,6 +280,16 @@ class InterviewSummaryResponse(BaseModel):
     expires_at: datetime | None = None
     created_at: datetime
     approved_at: datetime | None = None
+    invite_sent_to: str | None = None
+    invite_sent_at: datetime | None = None
+
+
+class SendInviteRequest(BaseModel):
+    """Where to email the invite. Sent by the client rather than read from
+    the resume: the parsed address can be wrong, so the recruiter confirms or
+    corrects it before anything goes out."""
+
+    email: EmailStr
 
 
 class InterviewDetailResponse(BaseModel):
@@ -317,6 +327,13 @@ class InterviewDetailResponse(BaseModel):
     completed_at: datetime | None = None
     assessed_at: datetime | None = None
     created_at: datetime
+    # The address parsed from the resume, to prefill the send-invite field.
+    # Recruiter-only, like everything on this model.
+    candidate_email: str | None = None
+    # Null until an invite email goes out for the current link -- see
+    # Interview.invite_sent_to.
+    invite_sent_to: str | None = None
+    invite_sent_at: datetime | None = None
 
 
 def _parse_script(script_data: dict[str, Any]) -> InterviewScript | None:
@@ -436,6 +453,8 @@ def build_summary_response(interview: Interview) -> InterviewSummaryResponse:
         expires_at=interview.expires_at,
         created_at=interview.created_at,
         approved_at=interview.approved_at,
+        invite_sent_to=interview.invite_sent_to,
+        invite_sent_at=interview.invite_sent_at,
     )
 
 
@@ -497,4 +516,9 @@ def build_detail_response(
         completed_at=interview.completed_at,
         assessed_at=interview.assessed_at,
         created_at=interview.created_at,
+        # Read live, not from grounding: it is contact data, not something the
+        # model saw, so there is nothing to keep consistent with a snapshot.
+        candidate_email=interview.evaluation.candidate.email,
+        invite_sent_to=interview.invite_sent_to,
+        invite_sent_at=interview.invite_sent_at,
     )

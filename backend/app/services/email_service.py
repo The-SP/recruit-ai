@@ -1,6 +1,9 @@
+import base64
 import smtplib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -14,7 +17,29 @@ from app.core.logger import init_logger
 
 logger = init_logger(__name__)
 
-_template_env = Environment(loader=FileSystemLoader(Path("app/templates/emails")))
+_TEMPLATE_DIR = Path("app/templates/emails")
+SMTP_TIMEOUT_SECONDS = 15
+_template_env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR))
+
+
+@dataclass(frozen=True, slots=True)
+class InlineImage:
+    """An image attached to the message and referenced from the HTML as
+    `cid:<cid>`. Attached rather than linked so it renders without the client
+    fetching anything: no dependency on a public URL, and no "load images?"
+    prompt in clients that block remote content."""
+
+    cid: str
+    filename: str
+    content: bytes
+
+    @classmethod
+    def from_asset(cls, filename: str) -> "InlineImage":
+        return cls(
+            cid=Path(filename).stem,
+            filename=filename,
+            content=(_TEMPLATE_DIR / "assets" / filename).read_bytes(),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +66,14 @@ class EmailProvider(ABC):
         pass
 
     @abstractmethod
-    def send(self, to: str, subject: str, html: str) -> None:
+    def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        images: list[InlineImage],
+        reply_to: str | None = None,
+    ) -> None:
         pass
 
 
@@ -52,9 +84,17 @@ class ConsoleProvider(EmailProvider):
     def name(self) -> str:
         return "console"
 
-    def send(self, to: str, subject: str, html: str) -> None:
+    def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        images: list[InlineImage],
+        reply_to: str | None = None,
+    ) -> None:
         logger.info(
-            f"[console email] to={to} subject={subject!r} html_length={len(html)}"
+            f"[console email] to={to} subject={subject!r} html_length={len(html)} "
+            f"images={[i.filename for i in images]} reply_to={reply_to}"
         )
 
 
@@ -68,14 +108,34 @@ class GmailProvider(EmailProvider):
     def name(self) -> str:
         return "gmail"
 
-    def send(self, to: str, subject: str, html: str) -> None:
-        msg = MIMEMultipart("alternative")
+    def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        images: list[InlineImage],
+        reply_to: str | None = None,
+    ) -> None:
+        # multipart/related is what lets the HTML part resolve `cid:` references
+        # to the image parts sent alongside it.
+        msg = MIMEMultipart("related")
         msg["Subject"] = subject
         msg["From"] = f"{self._cred.from_name} <{self._cred.email}>"
         msg["To"] = to
+        if reply_to:
+            msg["Reply-To"] = reply_to
         msg.attach(MIMEText(html, "html"))
+        for image in images:
+            part = MIMEImage(image.content, _subtype="png")
+            part.add_header("Content-ID", f"<{image.cid}>")
+            part.add_header("Content-Disposition", "inline", filename=image.filename)
+            msg.attach(part)
 
-        with smtplib.SMTP(self._cred.server, self._cred.port) as server:
+        # A timeout because the interview invite is sent inside a request: a
+        # hung SMTP server must fail the request, not hold it open.
+        with smtplib.SMTP(
+            self._cred.server, self._cred.port, timeout=SMTP_TIMEOUT_SECONDS
+        ) as server:
             server.starttls()
             server.login(self._cred.email, self._cred.password)
             server.sendmail(self._cred.email, to, msg.as_string())
@@ -91,16 +151,32 @@ class ResendProvider(EmailProvider):
     def name(self) -> str:
         return "resend"
 
-    def send(self, to: str, subject: str, html: str) -> None:
+    def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        images: list[InlineImage],
+        reply_to: str | None = None,
+    ) -> None:
         resend.api_key = self._cred.api_key
-        resend.Emails.send(
-            {
-                "from": self._cred.from_email,
-                "to": [to],
-                "subject": subject,
-                "html": html,
-            }
-        )
+        params: resend.Emails.SendParams = {
+            "from": self._cred.from_email,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+            "attachments": [
+                {
+                    "filename": image.filename,
+                    "content": base64.b64encode(image.content).decode(),
+                    "content_id": image.cid,
+                }
+                for image in images
+            ],
+        }
+        if reply_to:
+            params["reply_to"] = reply_to
+        resend.Emails.send(params)
 
 
 class EmailService:
@@ -113,37 +189,97 @@ class EmailService:
     def _render(self, template_name: str, **kwargs: Any) -> str:
         return _template_env.get_template(template_name).render(**kwargs)
 
-    def _send(self, to: str, subject: str, template: str, **context: Any) -> None:
+    def _send(
+        self,
+        to: str,
+        subject: str,
+        template: str,
+        hero_image: str | None = None,
+        **context: Any,
+    ) -> None:
+        """Send and swallow failures. For notifications nobody is waiting on."""
         try:
-            html = self._render(template, **context)
-            self._provider.send(to, subject, html)
-            logger.info(f"Sent email to {to} via {self._provider.name}")
+            self._deliver(to, subject, template, hero_image, **context)
         except Exception as e:
             logger.error(f"Failed to send email to {to}: {e}")
 
+    def _deliver(
+        self,
+        to: str,
+        subject: str,
+        template: str,
+        hero_image: str | None = None,
+        reply_to: str | None = None,
+        **context: Any,
+    ) -> None:
+        """Send and raise on failure, for callers that must report it."""
+        images = [InlineImage.from_asset(hero_image)] if hero_image else []
+        html = self._render(
+            template,
+            hero_cid=images[0].cid if images else None,
+            **context,
+        )
+        self._provider.send(to, subject, html, images, reply_to=reply_to)
+        logger.info(f"Sent email to {to} via {self._provider.name}")
+
     def send_batch_completed(self, email: str, token: str) -> None:
-        results_url = f"{self._frontend_url}/evaluation?token={token}"
-        base_url = f"{self._frontend_url}/evaluation"
         self._send(
             to=email,
-            subject="Your Candidate Evaluations Are Ready",
+            subject="Your candidate evaluation is ready",
             template="batch_completed.html",
-            results_url=results_url,
-            token=token,
-            base_url=base_url,
+            hero_image="evaluation-ready.png",
+            results_url=self._results_url(token),
         )
 
     def send_batch_failed(self, email: str, token: str) -> None:
-        results_url = f"{self._frontend_url}/evaluation?token={token}"
-        base_url = f"{self._frontend_url}/evaluation"
         self._send(
             to=email,
-            subject="Your candidate evaluations encountered an error",
+            subject="We couldn't finish your candidate evaluation",
             template="batch_failed.html",
-            results_url=results_url,
-            token=token,
-            base_url=base_url,
+            hero_image="evaluation-failed.png",
+            results_url=self._results_url(token),
         )
+
+    def send_interview_invite(
+        self,
+        email: str,
+        *,
+        invite_url: str,
+        inviter: str,
+        candidate_name: str | None,
+        job_title: str | None,
+        expires_at: datetime,
+        time_limit_seconds: int,
+        reply_to: str | None = None,
+    ) -> None:
+        """Email a candidate their interview link.
+
+        Raises on failure, unlike the batch emails: a recruiter is waiting on
+        this one and needs to know the invite never went out. Never pass
+        anything from the question script or grounding -- this goes to the
+        candidate, and those are the rubric.
+        """
+        subject = (
+            f"Interview invitation: {job_title}"
+            if job_title
+            else "You're invited to an interview"
+        )
+        self._deliver(
+            to=email,
+            subject=subject,
+            template="interview_invite.html",
+            hero_image="interview-invite.png",
+            reply_to=reply_to,
+            invite_url=invite_url,
+            inviter=inviter,
+            candidate_name=candidate_name,
+            job_title=job_title,
+            expires_on=f"{expires_at:%B} {expires_at.day}, {expires_at.year}",
+            time_limit_minutes=time_limit_seconds // 60,
+        )
+
+    def _results_url(self, token: str) -> str:
+        return f"{self._frontend_url}/evaluation?token={token}"
 
 
 def _create_provider() -> EmailProvider:

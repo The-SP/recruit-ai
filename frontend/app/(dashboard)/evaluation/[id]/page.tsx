@@ -84,6 +84,7 @@ import {
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   reissueRunCandidateInterview,
+  sendRunCandidateInterviewInvite,
   retryFailedRun,
   type EvaluationRunDetail,
   type RunItemSummary,
@@ -321,6 +322,15 @@ function RunDetailPageInner({
       reissueRunCandidateInterview(runId, candidateId)
     );
   }, [runId, runInterviewAction]);
+
+  const handleSendInterviewInvite = useCallback(
+    async (item: RunItemSummary, email: string) => {
+      await runInterviewAction(item, (candidateId) =>
+        sendRunCandidateInterviewInvite(runId, candidateId, email)
+      );
+    },
+    [runId, runInterviewAction]
+  );
 
   const handleAssessInterview = useCallback(async (item: RunItemSummary) => {
     await runInterviewAction(item, (candidateId) =>
@@ -985,6 +995,7 @@ function RunDetailPageInner({
                   onGenerateInterview={handleGenerateInterview}
                   onReissueInterview={handleReissueInterview}
                   onAssessInterview={handleAssessInterview}
+                  onSendInterviewInvite={handleSendInterviewInvite}
                   getInterviewHref={(item) =>
                     item.candidate_id
                       ? `/evaluation/${runId}/candidate/${item.candidate_id}/interview`
@@ -1071,6 +1082,7 @@ function RunDetailPageInner({
               onReissue={handleRowReissue}
               onAssess={handleRowAssess}
               onCopyLink={handleRowCopyLink}
+              onSendInvite={handleSendInterviewInvite}
               onViewResume={handleViewResume}
               sort={interviewSort}
               onSort={handleInterviewSort}

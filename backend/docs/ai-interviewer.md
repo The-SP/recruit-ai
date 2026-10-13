@@ -40,6 +40,18 @@ recruiter reads alongside the candidate's score.
   `created`, or from `expired` if the candidate never answered anything — a
   reissue never wipes an existing transcript. Reissuing a `draft` is rejected:
   there is no invite to rotate until it is approved.
+- **Emailing the invite is a separate, explicit step.** `POST
+  .../interview/send-invite` takes the address in the body and only works
+  while `created`. It is never automatic on approve: the address is parsed
+  from the resume and can be wrong, and the link alone grants access, so the
+  recruiter confirms it first. The send is synchronous (a provider failure is
+  a 503 the recruiter can retry), replies go to the recruiter's own address,
+  and a 60s per-interview cooldown (`INVITE_EMAIL_COOLDOWN_SECONDS`), released
+  on failure, keeps the button from flooding an inbox. `invite_sent_to` /
+  `invite_sent_at` record the last send and are cleared by a reissue, since
+  that email now carries a dead link. The email shows only grounding fields
+  (company, candidate name, job title) plus expiry and duration, never the
+  script.
 
 ## The review gate
 
@@ -269,7 +281,7 @@ itself). From there a recruiter can:
 - Read the transcript and assessment.
 - Replay a candidate's recorded answers and interviewer TTS clips
   (synthesizing on demand if a clip hasn't been requested yet).
-- Copy or reissue the invite link.
+- Copy, email, or reissue the invite link.
 - Open the candidate's resume in a side panel without leaving the interview
   view.
 

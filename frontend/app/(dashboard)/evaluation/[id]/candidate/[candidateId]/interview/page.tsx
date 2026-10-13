@@ -12,6 +12,7 @@ import {
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   reissueRunCandidateInterview,
+  sendRunCandidateInterviewInvite,
 } from "@/services/runs";
 import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
 
@@ -55,6 +56,14 @@ export default function RunCandidateInterviewPage({
     await fetchInterview();
   };
 
+  // Refetches quietly rather than through fetchInterview, whose "loading"
+  // state would swap the page for a skeleton just to update one line.
+  const handleSendInvite = async (email: string) => {
+    await sendRunCandidateInterviewInvite(runId, candidateId, email);
+    const detail = await getRunCandidateInterview(runId, candidateId);
+    setInterview(detail);
+  };
+
   const handleAssess = async () => {
     await assessRunCandidateInterview(runId, candidateId);
     await fetchInterview();
@@ -78,6 +87,7 @@ export default function RunCandidateInterviewPage({
       interview={interview}
       onReissue={handleReissue}
       onAssess={handleAssess}
+      onSendInvite={handleSendInvite}
       onFetchTurnAudio={handleFetchTurnAudio}
       onFetchQuestionAudio={handleFetchQuestionAudio}
     />

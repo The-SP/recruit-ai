@@ -263,6 +263,16 @@ def cooldown(key: str, seconds: int) -> int:
         return 0
 
 
+def release_cooldown(key: str) -> None:
+    """Give back a cooldown slot whose action never happened, so a failed
+    attempt doesn't make the user wait to try again. Fails open like
+    cooldown(): at worst the slot runs out its TTL."""
+    try:
+        get_redis().delete(f"{KEY_PREFIX}{key}")
+    except RedisError as e:
+        logger.error(f"Rate limit cooldown release failed for key={key}: {e}")
+
+
 def peek() -> list[tuple[str, int, int]]:
     """List active keys as (key, used, ttl_seconds), for the CLI.
 

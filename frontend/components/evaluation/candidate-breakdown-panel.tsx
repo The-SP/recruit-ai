@@ -163,6 +163,7 @@ export function CandidateBreakdownPanel({
   onGenerateInterview,
   onReissueInterview,
   onAssessInterview,
+  onSendInterviewInvite,
   interviewLocked = false,
 }: {
   breakdown: CandidateBreakdown | "loading" | "error" | undefined;
@@ -174,6 +175,7 @@ export function CandidateBreakdownPanel({
   onGenerateInterview?: () => Promise<void>;
   onReissueInterview?: () => Promise<void>;
   onAssessInterview?: () => Promise<void>;
+  onSendInterviewInvite?: (email: string) => Promise<void>;
   /** Anonymous results page: show the login upsell instead of the callbacks. */
   interviewLocked?: boolean;
 }) {
@@ -441,6 +443,7 @@ export function CandidateBreakdownPanel({
                   onGenerate={onGenerateInterview}
                   onReissue={onReissueInterview}
                   onAssess={onAssessInterview}
+                  onSendInvite={onSendInterviewInvite}
                   locked={interviewLocked}
                 />
               )}

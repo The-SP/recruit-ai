@@ -4,7 +4,8 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.exceptions import NotFoundError, ValidationError
+from app.api.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.api.schemas.interview import build_invite_url
 from app.config import Config
 from app.core.file_storage import (
     file_exists,
@@ -56,6 +57,7 @@ from app.schemas.interview import (
     LevelDescriptions,
     TemplateSettings,
 )
+from app.services.email_service import get_email_service
 from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
 
 logger = init_logger(__name__)
@@ -518,6 +520,61 @@ def reissue_interview(db: Session, run: EvaluationRun, candidate_id: UUID) -> In
     raise ValidationError(
         f"Cannot reissue an interview with status '{interview.status}'."
     )
+
+
+def send_invite_email(
+    db: Session,
+    run: EvaluationRun,
+    candidate_id: UUID,
+    to: str,
+    sender_name: str | None,
+    reply_to: str | None,
+) -> Interview:
+    """Email the candidate their invite link and record where it went.
+
+    Only while `created`: before approval there is no link, and once the
+    candidate has started, a fresh email would only invite confusion.
+    Synchronous because the recruiter is waiting on the outcome, so a provider
+    failure surfaces as a 503 they can retry rather than a silent log line.
+
+    Everything the email shows comes from the grounding snapshot, never the
+    script or rubric -- this goes to the candidate.
+    """
+    interview = get_interview(db, run, candidate_id)
+    if interview.status == InterviewStatus.DRAFT.value:
+        raise ValidationError(
+            "Approve the questions first. The invite link is created on approval."
+        )
+    if interview.status != InterviewStatus.CREATED.value:
+        raise ValidationError(
+            "Invites can only be sent before the candidate starts. "
+            f"This interview is '{interview.status}'."
+        )
+    # Approval sets both, and a created interview has been approved.
+    assert interview.access_token and interview.expires_at
+
+    grounding = interview.grounding or {}
+    try:
+        get_email_service().send_interview_invite(
+            to,
+            invite_url=build_invite_url(interview.access_token) or "",
+            # The company reads better to a candidate than a person they
+            # haven't met; the recruiter's name is the fallback.
+            inviter=grounding.get("company_name") or sender_name or "The hiring team",
+            candidate_name=grounding.get("candidate_name"),
+            job_title=grounding.get("job_title"),
+            expires_at=interview.expires_at,
+            time_limit_seconds=interview.time_limit_seconds,
+            reply_to=reply_to,
+        )
+    except Exception as e:
+        logger.error(f"Invite email failed for interview={interview.id}: {e}")
+        raise ServiceUnavailableError(
+            "The invite email couldn't be sent. Try again, or copy the link "
+            "and send it yourself."
+        ) from e
+
+    return InterviewRepository(db).mark_invite_sent(interview, to)
 
 
 def request_assessment(

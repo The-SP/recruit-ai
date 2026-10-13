@@ -17,6 +17,7 @@ from app.api.schemas.interview import (
     InterviewTemplateResponse,
     OneMoreQuestionRequest,
     QuestionOut,
+    SendInviteRequest,
     build_default_template_response,
     build_detail_response,
     build_invite_url,
@@ -56,7 +57,9 @@ from app.core.rate_limit import (
     interview_invite_cost,
     interview_one_question_cost,
     refund,
+    release_cooldown,
 )
+from app.interview.constants import INVITE_EMAIL_COOLDOWN_SECONDS
 from app.interview.service import (
     approve_interview,
     create_interview_draft,
@@ -68,6 +71,7 @@ from app.interview.service import (
     list_interview_rows,
     reissue_interview,
     request_assessment,
+    send_invite_email,
     update_interview_draft,
     upsert_template,
 )
@@ -99,6 +103,10 @@ dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 _RETRY_COOLDOWN_MESSAGE = (
     "This run was retried a moment ago. Give the current attempt time to "
     "finish before retrying again."
+)
+_INVITE_EMAIL_COOLDOWN_MESSAGE = (
+    "An invite was just emailed for this interview. Wait a moment before "
+    "sending another."
 )
 _ASSESS_COOLDOWN_MESSAGE = (
     "An assessment for this interview was just requested. Give it a moment to "
@@ -286,6 +294,9 @@ def get_evaluation_run(
                         expires_at=row.expires_at,
                         completed_at=row.completed_at,
                         assessed_at=row.assessed_at,
+                        candidate_email=row.candidate_email,
+                        invite_sent_to=row.invite_sent_to,
+                        invite_sent_at=row.invite_sent_at,
                     )
                     if row
                     else None
@@ -796,6 +807,43 @@ def reissue_owned_candidate_interview(
     """Rotate the invite token and expiry. Never wipes a transcript."""
     run = _load_owned_run(db, run_id, current_user)
     interview = reissue_interview(db, run, candidate_id)
+    return build_summary_response(interview)
+
+
+@runs_router.post(
+    "/{run_id}/candidate/{candidate_id}/interview/send-invite",
+    response_model=InterviewSummaryResponse,
+)
+def send_owned_candidate_interview_invite(
+    run_id: UUID,
+    candidate_id: UUID,
+    body: SendInviteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> InterviewSummaryResponse:
+    """Email the candidate their invite link.
+
+    Recruiter-triggered only, never automatic on approve: the address is
+    parsed from the resume, and the link alone grants access, so a human
+    confirms where it goes. Replies go to the recruiter, not our sender.
+    No budget charge -- sending an email calls no model.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    key = f"invite-email:{run.id}:{candidate_id}"
+    enforce_cooldown(key, _INVITE_EMAIL_COOLDOWN_MESSAGE, INVITE_EMAIL_COOLDOWN_SECONDS)
+    try:
+        interview = send_invite_email(
+            db,
+            run,
+            candidate_id,
+            to=str(body.email),
+            sender_name=current_user.full_name,
+            reply_to=current_user.email,
+        )
+    except Exception:
+        # Nothing was sent, so the next attempt shouldn't have to wait.
+        release_cooldown(key)
+        raise
     return build_summary_response(interview)
 
 

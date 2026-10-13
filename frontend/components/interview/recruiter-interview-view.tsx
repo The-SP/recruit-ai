@@ -16,6 +16,7 @@ import {
   assessmentCopy,
   InterviewAssessmentView,
 } from "@/components/interview/assessment-view";
+import { SendInviteForm } from "@/components/interview/send-invite-form";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { TranscriptSheet } from "@/components/interview/transcript-sheet";
 import { TurnAudioPlayer } from "@/components/interview/turn-audio-player";
@@ -50,6 +51,7 @@ export function RecruiterInterviewView({
   interview,
   onReissue,
   onAssess,
+  onSendInvite,
   onFetchTurnAudio,
   onFetchQuestionAudio,
 }: {
@@ -59,6 +61,7 @@ export function RecruiterInterviewView({
   interview: InterviewDetail | "loading" | "error" | null;
   onReissue: () => Promise<void>;
   onAssess: () => Promise<void>;
+  onSendInvite: (email: string) => Promise<void>;
   /** Bound by the page; passed straight through to the transcript so this
    * component stays service-free. */
   onFetchTurnAudio?: (seq: number) => Promise<Blob>;
@@ -255,6 +258,18 @@ export function RecruiterInterviewView({
                 On question {interview.current_question_index + 1} of{" "}
                 {interview.questions_count}
               </p>
+            )}
+            {/* Keyed on the link so a reissue remounts it: the old "Sent to"
+                described an email for a link that no longer works. */}
+            {interview.status === "created" && (
+              <SendInviteForm
+                key={interview.invite_url}
+                defaultEmail={interview.candidate_email}
+                sentTo={interview.invite_sent_to}
+                sentAt={interview.invite_sent_at}
+                onSend={onSendInvite}
+                size="sm"
+              />
             )}
           </div>
         )}

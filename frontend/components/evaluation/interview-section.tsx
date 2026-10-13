@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 
 import { DemoNotice } from "@/components/demo-notice";
+import { SendInviteForm } from "@/components/interview/send-invite-form";
 import {
   assessmentCopy,
   InterviewVerdictSummary,
@@ -50,6 +51,7 @@ export function InterviewSection({
   onGenerate,
   onReissue,
   onAssess,
+  onSendInvite,
   locked = false,
 }: {
   interview: CachedInterview | undefined;
@@ -57,6 +59,7 @@ export function InterviewSection({
   onGenerate?: () => Promise<void>;
   onReissue?: () => Promise<void>;
   onAssess?: () => Promise<void>;
+  onSendInvite?: (email: string) => Promise<void>;
   locked?: boolean;
 }) {
   const { isWorking, error, demoNotice, copied, runAction, copyInviteUrl } =
@@ -239,6 +242,18 @@ export function InterviewSection({
                   </button>
                 )}
               </div>
+              {/* Keyed on the link so a reissue remounts it: the old "Sent
+                  to" described an email for a link that no longer works. */}
+              {detail.status === "created" && onSendInvite && (
+                <SendInviteForm
+                  key={detail.invite_url}
+                  defaultEmail={detail.candidate_email}
+                  sentTo={detail.invite_sent_to}
+                  sentAt={detail.invite_sent_at}
+                  onSend={onSendInvite}
+                  size="sm"
+                />
+              )}
             </div>
           )}
 

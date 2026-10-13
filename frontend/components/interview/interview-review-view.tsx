@@ -18,6 +18,7 @@ import { useMemo, useRef, useState } from "react";
 import { DemoNotice } from "@/components/demo-notice";
 import { InterviewTranscript } from "@/components/interview/transcript";
 import { QuestionEditor } from "@/components/interview/question-editor";
+import { SendInviteForm } from "@/components/interview/send-invite-form";
 import {
   durationMinutes,
   formatDuration,
@@ -852,6 +853,10 @@ export function ApprovedNotice({
   copied,
   backHref,
   interviewHref,
+  candidateEmail,
+  inviteSentTo,
+  inviteSentAt,
+  onSendInvite,
 }: {
   inviteUrl: string;
   status: string;
@@ -864,6 +869,10 @@ export function ApprovedNotice({
   copied: boolean;
   backHref: string;
   interviewHref: string;
+  candidateEmail: string | null;
+  inviteSentTo: string | null;
+  inviteSentAt: string | null;
+  onSendInvite: (email: string) => Promise<void>;
 }) {
   const name = candidateName ?? "the candidate";
   const state = approvedState(status, expiresAt);
@@ -917,9 +926,18 @@ export function ApprovedNotice({
                 Interview approved
               </p>
               <p className="text-sm text-muted-foreground">
-                The invite link is live. Send it to {name}.
+                The invite link is live. Email it to {name}, or copy it and
+                send it yourself.
               </p>
             </div>
+
+            <SendInviteForm
+              defaultEmail={candidateEmail}
+              sentTo={inviteSentTo}
+              sentAt={inviteSentAt}
+              onSend={onSendInvite}
+              primary
+            />
 
             <div className="space-y-2">
               <div className="flex">
@@ -931,6 +949,7 @@ export function ApprovedNotice({
                   className="min-w-0 flex-1 h-10 rounded-l-lg border border-r-0 bg-muted/40 px-3 font-mono text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 />
                 <Button
+                  variant="outline"
                   onClick={onCopy}
                   className="h-10 rounded-l-none rounded-r-lg gap-2 font-semibold cursor-pointer shrink-0"
                 >

@@ -35,13 +35,15 @@ def enforce_budget(cost: int) -> None:
         raise RateLimitError(_BUDGET_MESSAGE, wait)
 
 
-def enforce_cooldown(key: str, message: str) -> None:
+def enforce_cooldown(
+    key: str, message: str, seconds: int = rate_limit.RETRY_COOLDOWN_SECONDS
+) -> None:
     """Allow one action per RETRY_COOLDOWN_SECONDS for `key`, else raise 429.
 
     Separate from enforce_budget() because a budget and a cooldown answer
     different attacks: the daily budget alone would let a hundred scripted retry clicks
     through as long as units remain.
     """
-    remaining = rate_limit.cooldown(key, rate_limit.RETRY_COOLDOWN_SECONDS)
+    remaining = rate_limit.cooldown(key, seconds)
     if remaining:
         raise RateLimitError(message, remaining)

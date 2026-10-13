@@ -1,0 +1,22 @@
+{# Shared building blocks. Tables and inline styles only: Gmail strips <style>
+   for some clients and Outlook ignores flexbox, padding on <a>, and border-radius. #}
+
+{% macro brand(small=False) -%}
+{%- set box = 18 if small else 24 -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td width="{{ box }}" height="{{ box }}" align="center" valign="middle" style="width: {{ box }}px; height: {{ box }}px; background-color: #0d9f5d; border-radius: {{ 5 if small else 6 }}px; color: #ffffff; font-size: {{ 11 if small else 13 }}px; font-weight: 700; line-height: {{ box }}px;">R</td>
+        <td style="padding-left: {{ 6 if small else 8 }}px; font-size: {{ 14 if small else 17 }}px; font-weight: 700; color: #0a0a0a; letter-spacing: -0.2px;">Recruit AI</td>
+    </tr>
+</table>
+{%- endmacro %}
+
+{% macro button(url, label) -%}
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+    <tr>
+        <td align="center" bgcolor="#0d9f5d" style="background-color: #0d9f5d; border-radius: 999px;">
+            <a href="{{ url }}" target="_blank" style="display: inline-block; padding: 13px 30px; font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 999px;">{{ label }}</a>
+        </td>
+    </tr>
+</table>
+{%- endmacro %}

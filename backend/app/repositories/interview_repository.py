@@ -183,6 +183,14 @@ class InterviewRepository:
         )
         return list(self.db.scalars(stmt).all())
 
+    def mark_invite_sent(self, interview: Interview, to: str) -> Interview:
+        interview.invite_sent_to = to
+        interview.invite_sent_at = datetime.now()
+        self.db.commit()
+        self.db.refresh(interview)
+        logger.info(f"Invite emailed: id={interview.id}")
+        return interview
+
     def rotate_token(self, interview: Interview) -> Interview:
         """Issue a new token and expiry, returning the interview to `created`.
 
@@ -193,6 +201,9 @@ class InterviewRepository:
         interview.expires_at = default_expires_at()
         interview.status = InterviewStatus.CREATED.value
         interview.started_at = None
+        # Any invite email carried the old link, so it no longer counts as sent.
+        interview.invite_sent_to = None
+        interview.invite_sent_at = None
         self.db.commit()
         self.db.refresh(interview)
         logger.info(f"Reissued interview token: id={interview.id}")

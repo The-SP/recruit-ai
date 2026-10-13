@@ -45,6 +45,11 @@ ALLOWED_TIME_LIMIT_SECONDS = (10 * 60, 15 * 60, 20 * 60, 30 * 60)
 # `expired`.
 INTERVIEW_INVITE_TTL_DAYS = 7
 
+# Minimum gap between invite emails for one interview. Short on purpose: the
+# common resend is fixing a typo'd address, and that shouldn't wait long. It
+# exists so the button can't be used to flood an inbox from our domain.
+INVITE_EMAIL_COOLDOWN_SECONDS = 60
+
 # Per-turn recording cap (audio mode). Questions are designed to be answerable
 # verbally in 1-3 minutes (question_generator's prompt constraint); 3 minutes
 # also bounds the transcript comfortably under the 5,000-char typed-answer cap

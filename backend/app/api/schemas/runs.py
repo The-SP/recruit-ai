@@ -29,6 +29,11 @@ class RunItemInterview(BaseModel):
     expires_at: datetime | None = None
     completed_at: datetime | None
     assessed_at: datetime | None
+    # For the row's send-invite popover: the resume's address to prefill, and
+    # the last send for the current link (cleared by a reissue).
+    candidate_email: str | None = None
+    invite_sent_to: str | None = None
+    invite_sent_at: datetime | None = None
 
 
 class RunItemSummary(BaseModel):

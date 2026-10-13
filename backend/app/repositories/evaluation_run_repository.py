@@ -57,6 +57,10 @@ class InterviewRow(NamedTuple):
     expires_at: datetime | None
     completed_at: datetime | None
     assessed_at: datetime | None
+    # Parsed from the resume, to prefill the row's send-invite field.
+    candidate_email: str | None
+    invite_sent_to: str | None
+    invite_sent_at: datetime | None
 
 
 # How long a lapsed invite keeps showing as needing attention. Expired rows are
@@ -342,8 +346,12 @@ class EvaluationRunRepository:
                 Interview.expires_at.label("expires_at"),
                 Interview.completed_at.label("completed_at"),
                 Interview.assessed_at.label("assessed_at"),
+                Candidate.email.label("candidate_email"),
+                Interview.invite_sent_to.label("invite_sent_to"),
+                Interview.invite_sent_at.label("invite_sent_at"),
             )
             .join(Interview, Interview.evaluation_id == EvaluationRunItem.evaluation_id)
+            .outerjoin(Candidate, Candidate.id == EvaluationRunItem.candidate_id)
             .where(EvaluationRunItem.evaluation_run_id == run_id)
         )
         return {
@@ -356,6 +364,9 @@ class EvaluationRunRepository:
                 expires_at=row.expires_at,
                 completed_at=row.completed_at,
                 assessed_at=row.assessed_at,
+                candidate_email=row.candidate_email,
+                invite_sent_to=row.invite_sent_to,
+                invite_sent_at=row.invite_sent_at,
             )
             for row in self.db.execute(stmt)
         }

@@ -31,6 +31,11 @@ export interface RunItemInterview {
   expires_at: string;
   completed_at: string | null;
   assessed_at: string | null;
+  /** Parsed from the resume; prefills the row's send-invite field. */
+  candidate_email: string | null;
+  /** The last invite email for the current link; cleared by a reissue. */
+  invite_sent_to: string | null;
+  invite_sent_at: string | null;
 }
 
 export interface RunItemSummary {
@@ -321,6 +326,19 @@ export async function reissueRunCandidateInterview(
   return apiRequest<InterviewSummary>(
     `/evaluations/runs/${runId}/candidate/${candidateId}/interview/reissue`,
     { method: "POST" }
+  );
+}
+
+/** Email the invite link to the candidate. Synchronous: resolves once the
+ * email has gone out, and rejects with the provider failure if it didn't. */
+export async function sendRunCandidateInterviewInvite(
+  runId: string,
+  candidateId: string,
+  email: string
+): Promise<InterviewSummary> {
+  return apiRequest<InterviewSummary>(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/interview/send-invite`,
+    { method: "POST", body: { email } }
   );
 }
 

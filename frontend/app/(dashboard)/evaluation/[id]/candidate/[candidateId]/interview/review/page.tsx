@@ -30,6 +30,7 @@ import {
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   saveInterviewTemplate,
+  sendRunCandidateInterviewInvite,
   updateRunCandidateInterviewDraft,
 } from "@/services/runs";
 import { useBreadcrumbLabel } from "@/components/dashboard-breadcrumbs";
@@ -274,6 +275,15 @@ export default function InterviewReviewPage({
     }
   };
 
+  /** Send, then refetch so the "Sent to" line reflects what the server
+   * recorded rather than what was typed. Throws to the form, which shows the
+   * error beside the field. */
+  const handleSendInvite = async (email: string) => {
+    await sendRunCandidateInterviewInvite(runId, candidateId, email);
+    const fresh = await getRunCandidateInterview(runId, candidateId);
+    if (fresh) setInterview(fresh);
+  };
+
   const backHref = `/evaluation/${runId}?tab=interviews`;
 
   // Approved: the editor is gone for good — the script is frozen once a link
@@ -292,6 +302,10 @@ export default function InterviewReviewPage({
         backHref={backHref}
         interviewHref={`/evaluation/${runId}/candidate/${candidateId}/interview`}
         onCopy={() => runAction(async () => copyInviteUrl(inviteUrl))}
+        candidateEmail={interview?.candidate_email ?? null}
+        inviteSentTo={interview?.invite_sent_to ?? null}
+        inviteSentAt={interview?.invite_sent_at ?? null}
+        onSendInvite={handleSendInvite}
       />
     );
   }
