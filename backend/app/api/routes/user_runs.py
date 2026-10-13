@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Response, UploadFile
@@ -43,7 +44,13 @@ from app.api.schemas.runs import (
     RunItemSummary,
 )
 from app.auth.jwt import get_current_active_user
-from app.core.file_storage import delete_file, resolve_file_path, save_uploaded_file
+from app.core.file_storage import (
+    delete_file,
+    file_exists,
+    get_file_content,
+    resolve_file_path,
+    save_uploaded_file,
+)
 from app.core.file_upload import (
     process_uploaded_files,
     read_pdf_content,
@@ -584,6 +591,62 @@ def get_run_candidate_breakdown(
         skills=skills,
         experience=experience,
         education=education,
+    )
+
+
+def _content_disposition(disposition: str, filename: str) -> str:
+    """Build a Content-Disposition header that survives any uploaded name.
+
+    The stored name is the user's original basename, so it can hold quotes,
+    backslashes, or non-ASCII. The quoted `filename` gets an ASCII-only
+    fallback; `filename*` (RFC 6266/5987) carries the exact UTF-8 name, which
+    every current browser prefers.
+    """
+    fallback = "".join(
+        c if c.isascii() and c.isprintable() and c not in '"\\' else "_"
+        for c in filename
+    )
+    return (
+        f'{disposition}; filename="{fallback}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
+
+
+@runs_router.get("/{run_id}/candidate/{candidate_id}/resume")
+def get_owned_candidate_resume(
+    run_id: UUID,
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Response:
+    """The uploaded PDF behind a candidate, so a recruiter can check the parsed
+    markdown against the source and forward the original.
+
+    Owner-only. There is deliberately no twin under /batch/status/{token}: those
+    links are shareable by design and the PDF carries the candidate's contact
+    details. Served as bytes rather than a presigned URL, for the same reason as
+    the interview recordings below: presigning would open a second auth path
+    outside the JWT.
+    """
+    run = _load_owned_run(db, run_id, current_user)
+    item = next((i for i in run.items if i.candidate_id == candidate_id), None)
+    if not item:
+        raise NotFoundError("Candidate", str(candidate_id))
+
+    path = resolve_file_path(run.folder_path, item.pdf_filename)
+    if not file_exists(path):
+        raise NotFoundError("Resume file", item.pdf_filename)
+
+    return Response(
+        content=get_file_content(path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": _content_disposition("inline", item.pdf_filename),
+            "X-Content-Type-Options": "nosniff",
+            # Never rewritten once uploaded; spares an S3 round trip when the
+            # sheet is reopened.
+            "Cache-Control": "private, max-age=3600",
+        },
     )
 
 

@@ -81,6 +81,7 @@ import {
   deleteRunItem,
   getEvaluationRun,
   getEvaluationJobDescription,
+  fetchCandidateResume,
   getRunCandidateBreakdown,
   getRunCandidateInterview,
   reissueRunCandidateInterview,
@@ -251,6 +252,11 @@ function RunDetailPageInner({
     };
   }, [data, fetchData]);
 
+  const fetchResume = useCallback(
+    (candidateId: string) => fetchCandidateResume(runId, candidateId),
+    [runId]
+  );
+
   const ensureBreakdown = useCallback(async (item: RunItemSummary) => {
     const id = item.item_id;
     if (!item.candidate_id || requestedBreakdowns.current.has(id)) return;
@@ -392,7 +398,7 @@ function RunDetailPageInner({
     if (!item.candidate_id) return;
     const cached = breakdownCache[item.item_id];
     if (cached && cached !== "loading" && cached !== "error" && cached.resume_markdown) {
-      setResumePanel({ name: item.candidate_name ?? null, filename: item.filename, markdown: cached.resume_markdown });
+      setResumePanel({ candidateId: item.candidate_id, name: item.candidate_name ?? null, filename: item.filename, markdown: cached.resume_markdown });
       return;
     }
     requestedBreakdowns.current.add(item.item_id);
@@ -400,7 +406,7 @@ function RunDetailPageInner({
     try {
       const bd = await getRunCandidateBreakdown(runId, item.candidate_id);
       setBreakdownCache(prev => ({ ...prev, [item.item_id]: bd }));
-      setResumePanel({ name: item.candidate_name ?? null, filename: item.filename, markdown: bd.resume_markdown ?? "" });
+      setResumePanel({ candidateId: item.candidate_id, name: item.candidate_name ?? null, filename: item.filename, markdown: bd.resume_markdown ?? "" });
     } catch {
       setBreakdownCache(prev => ({ ...prev, [item.item_id]: "error" }));
     }
@@ -1176,7 +1182,11 @@ function RunDetailPageInner({
         </DialogContent>
       </Dialog>
 
-      <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
+      <ResumeSheet
+        panel={resumePanel}
+        onClose={() => setResumePanel(null)}
+        onFetchOriginal={fetchResume}
+      />
 
       <ConfirmDeleteDialog
         open={deleteRunOpen}

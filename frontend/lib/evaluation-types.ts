@@ -26,6 +26,8 @@ export interface EvaluationItem {
 
 // The right-side resume panel state, shared by both pages.
 export interface ResumePanelState {
+  /** Present when the sheet can fetch the original PDF for this candidate. */
+  candidateId?: string;
   name: string | null;
   filename: string;
   markdown: string;

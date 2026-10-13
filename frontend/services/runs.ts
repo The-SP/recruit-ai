@@ -353,6 +353,24 @@ export async function assessRunCandidateInterview(
 }
 
 /**
+ * Fetch the uploaded PDF behind a candidate.
+ *
+ * A blob rather than an <iframe src>, for the same reason as the audio below:
+ * a bare URL request would carry no Authorization header. Owned flow only;
+ * there is deliberately no token-flavored twin in services/batch.ts.
+ */
+export async function fetchCandidateResume(
+  runId: string,
+  candidateId: string
+): Promise<Blob> {
+  const res = await apiFetch(
+    `/evaluations/runs/${runId}/candidate/${candidateId}/resume`,
+    { headers: authHeaders() }
+  );
+  return res.blob();
+}
+
+/**
  * Fetch the recording behind one answer turn.
  *
  * apiFetch rather than apiRequest, which ends in res.json(): the endpoint

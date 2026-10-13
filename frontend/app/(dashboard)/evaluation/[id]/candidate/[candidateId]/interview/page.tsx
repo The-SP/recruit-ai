@@ -7,6 +7,7 @@ import type { InterviewDetail } from "@/lib/interview-types";
 import type { CandidateBreakdown } from "@/services/batch";
 import {
   assessRunCandidateInterview,
+  fetchCandidateResume,
   fetchInterviewQuestionAudio,
   fetchInterviewTurnAudio,
   getRunCandidateBreakdown,
@@ -69,6 +70,11 @@ export default function RunCandidateInterviewPage({
     await fetchInterview();
   };
 
+  const handleFetchResume = useCallback(
+    (id: string) => fetchCandidateResume(runId, id),
+    [runId]
+  );
+
   const handleFetchTurnAudio = useCallback(
     (seq: number) => fetchInterviewTurnAudio(runId, candidateId, seq),
     [runId, candidateId]
@@ -81,6 +87,7 @@ export default function RunCandidateInterviewPage({
 
   return (
     <RecruiterInterviewView
+      candidateId={candidateId}
       candidateName={breakdown?.candidate_name ?? null}
       resumeFilename={breakdown?.filename ?? null}
       resumeMarkdown={breakdown?.resume_markdown ?? null}
@@ -90,6 +97,7 @@ export default function RunCandidateInterviewPage({
       onSendInvite={handleSendInvite}
       onFetchTurnAudio={handleFetchTurnAudio}
       onFetchQuestionAudio={handleFetchQuestionAudio}
+      onFetchResume={handleFetchResume}
     />
   );
 }

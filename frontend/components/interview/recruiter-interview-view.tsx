@@ -45,6 +45,7 @@ import { useInviteActions } from "@/lib/use-invite-actions";
  * top bar's breadcrumb, not a link here.
  */
 export function RecruiterInterviewView({
+  candidateId,
   candidateName,
   resumeFilename,
   resumeMarkdown,
@@ -54,7 +55,9 @@ export function RecruiterInterviewView({
   onSendInvite,
   onFetchTurnAudio,
   onFetchQuestionAudio,
+  onFetchResume,
 }: {
+  candidateId: string;
   candidateName: string | null;
   resumeFilename: string | null;
   resumeMarkdown: string | null;
@@ -66,6 +69,7 @@ export function RecruiterInterviewView({
    * component stays service-free. */
   onFetchTurnAudio?: (seq: number) => Promise<Blob>;
   onFetchQuestionAudio?: (key: string) => Promise<Blob>;
+  onFetchResume?: (candidateId: string) => Promise<Blob>;
 }) {
   const {
     isWorking,
@@ -174,6 +178,7 @@ export function RecruiterInterviewView({
                 variant="outline"
                 onClick={() =>
                   setResumePanel({
+                    candidateId,
                     name: candidateName,
                     filename: resumeFilename ?? "resume.pdf",
                     markdown: resumeMarkdown,
@@ -401,7 +406,11 @@ export function RecruiterInterviewView({
         )
       )}
     </div>
-    <ResumeSheet panel={resumePanel} onClose={() => setResumePanel(null)} />
+    <ResumeSheet
+      panel={resumePanel}
+      onClose={() => setResumePanel(null)}
+      onFetchOriginal={onFetchResume}
+    />
     <TranscriptSheet
       open={transcriptOpen}
       onClose={() => setTranscriptOpen(false)}
