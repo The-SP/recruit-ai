@@ -1,11 +1,11 @@
 """Interview background work, kept out of tasks.py (the batch-scoring
 pipeline). Registered via the include list in celery_app.py."""
 
+import logging
 from contextlib import closing
 from typing import Any
 from uuid import UUID
 
-from app.core.logger import init_logger
 from app.interview.assessor import assess_transcript
 from app.interview.speaker import (
     script_voice_keys,
@@ -18,7 +18,7 @@ from app.repositories.interview_repository import InterviewRepository
 from app.schemas.interview import InterviewScript
 from app.worker.celery_app import celery_app
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # States an assessment may run from: normal completion, or an expired
 # interview whose partial transcript a recruiter chose to assess.
@@ -45,17 +45,22 @@ def assess_interview(interview_id: str) -> dict[str, Any]:
         interview = repo.get_by_id(UUID(interview_id))
 
         if not interview:
-            logger.error(f"assess_interview: interview {interview_id} not found")
+            logger.error(
+                "Assessment skipped, interview not found: interview=%s", interview_id
+            )
             return {"status": "failed", "error": "Interview not found"}
 
         if interview.status == InterviewStatus.ASSESSED.value:
-            logger.info(f"Interview {interview_id} already assessed; skipping")
+            logger.info(
+                "Interview already assessed, skipping: interview=%s", interview_id
+            )
             return {"status": "skipped", "reason": "already assessed"}
 
         if interview.status not in ASSESSABLE_STATUSES:
             logger.warning(
-                f"Interview {interview_id} not assessable from "
-                f"status '{interview.status}'; skipping"
+                "Interview not assessable, skipping: interview=%s status=%s",
+                interview_id,
+                interview.status,
             )
             return {"status": "skipped", "reason": interview.status}
 
@@ -64,7 +69,7 @@ def assess_interview(interview_id: str) -> dict[str, Any]:
         try:
             assessment = assess_transcript(interview, turns)
         except Exception as e:
-            logger.error(f"Assessment failed for interview {interview_id}: {e}")
+            logger.exception("Assessment failed: interview=%s", interview_id)
             repo.store_assessment_error(interview, str(e)[:500])
             return {"status": "failed", "error": str(e)[:200]}
 
@@ -97,7 +102,8 @@ def synthesize_interview_voice(interview_id: str) -> dict[str, Any]:
 
         if not interview:
             logger.error(
-                f"synthesize_interview_voice: interview {interview_id} not found"
+                "Voice precompute skipped, interview not found: interview=%s",
+                interview_id,
             )
             return {"status": "failed", "error": "Interview not found"}
 
@@ -106,8 +112,8 @@ def synthesize_interview_voice(interview_id: str) -> dict[str, Any]:
 
         try:
             script = InterviewScript.model_validate(interview.question_script)
-        except Exception as e:
-            logger.error(f"Unreadable script for interview {interview_id}: {e}")
+        except Exception:
+            logger.exception("Unreadable question script: interview=%s", interview_id)
             return {"status": "failed", "error": "Unreadable question script"}
 
         synthesized = cached = failed = 0
@@ -123,14 +129,19 @@ def synthesize_interview_voice(interview_id: str) -> dict[str, Any]:
                 # Per slot, so one bad clip can't cost the rest of the interview
                 # its head start.
                 logger.warning(
-                    f"Voice synthesis failed for interview {interview_id} "
-                    f"key '{key}': {e}"
+                    "Voice synthesis failed: interview=%s key=%s error=%s",
+                    interview_id,
+                    key,
+                    e,
                 )
                 failed += 1
 
         logger.info(
-            f"Interview {interview_id} voice precompute: synthesized={synthesized} "
-            f"cached={cached} failed={failed}"
+            "Voice precomputed: interview=%s synthesized=%d cached=%d failed=%d",
+            interview_id,
+            synthesized,
+            cached,
+            failed,
         )
         return {
             "status": "completed",

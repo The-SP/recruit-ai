@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends
@@ -10,14 +11,13 @@ from sqlalchemy import text
 from app.api.dependencies import enforce_budget
 from app.auth.jwt import require_admin
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.model_factory import build_model
 from app.core.rate_limit import COST_HEALTH_PROBE
 from app.core.redis_client import get_redis
 from app.models.database import engine
 from app.worker.celery_app import celery_app
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -42,7 +42,7 @@ def _check_database() -> dict[str, Any]:
             conn.execute(text("SELECT 1"))
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Database health check failed: {e}")
+        logger.error("Health check failed: component=database error=%s", e)
         return {"status": "error", "message": str(e)[:100]}
 
 
@@ -52,7 +52,7 @@ def _check_redis() -> dict[str, Any]:
         get_redis().ping()
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Redis health check failed: {e}")
+        logger.error("Health check failed: component=redis error=%s", e)
         return {"status": "error", "message": str(e)[:100]}
 
 
@@ -70,7 +70,7 @@ def _check_celery() -> dict[str, Any]:
             return {"status": "error", "message": "No active workers found"}
 
     except Exception as e:
-        logger.error(f"Celery health check failed: {e}")
+        logger.error("Health check failed: component=celery error=%s", e)
         return {"status": "error", "message": str(e)[:100]}
 
 
@@ -88,7 +88,7 @@ def _invoke_llm_probe() -> dict[str, Any]:
             return {"status": "error", "message": "No response"}
 
     except Exception as e:
-        logger.error(f"LLM health check failed: {e}")
+        logger.error("Health check failed: component=llm error=%s", e)
         return {"status": "error", "message": str(e)[:100]}
 
 
@@ -112,7 +112,7 @@ def _check_llm() -> dict[str, Any]:
     except (RedisError, ValueError) as e:
         # A broken cache must not take the health check down with it; fall
         # through to a live probe.
-        logger.error(f"LLM health cache read failed: {e}")
+        logger.warning("LLM health cache read failed: error=%s", e)
 
     enforce_budget(COST_HEALTH_PROBE)
     fresh = _invoke_llm_probe()
@@ -120,7 +120,7 @@ def _check_llm() -> dict[str, Any]:
     try:
         get_redis().set(_LLM_CACHE_KEY, json.dumps(fresh), ex=_LLM_CACHE_TTL)
     except RedisError as e:
-        logger.error(f"LLM health cache write failed: {e}")
+        logger.warning("LLM health cache write failed: error=%s", e)
 
     return fresh
 

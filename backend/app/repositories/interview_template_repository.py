@@ -1,13 +1,13 @@
+import logging
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.models.interview_template import InterviewTemplate
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class InterviewTemplateRepository:
@@ -55,8 +55,10 @@ class InterviewTemplateRepository:
 
         self.db.commit()
         self.db.refresh(template)
-        logger.info(
-            f"Saved interview template: run_id={run_id} "
-            f"question_count={question_count} fixed={len(fixed_questions)}"
+        logger.debug(
+            "Saved interview template: run=%s question_count=%d fixed=%d",
+            run_id,
+            question_count,
+            len(fixed_questions),
         )
         return template

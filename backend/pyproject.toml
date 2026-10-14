@@ -55,4 +55,6 @@ exclude = ["alembic"]
 [tool.ruff.lint]
 select = [
     "I",  # isort
+    "G",  # logging-format: %-style args, not f-strings or .format()
+    "LOG",  # logging misuse (e.g. root-logger calls, exc_info outside except)
 ]

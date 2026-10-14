@@ -1,10 +1,10 @@
+import logging
 from typing import Any
 
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.schemas.job_description import JobDescriptionResponse
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 PROMPT = """You are a structured data extractor for job postings.
 
@@ -156,7 +156,7 @@ FINAL SOURCE-GROUNDING AUDIT (complete this silently before responding):
 
 def parse_job_description(text: str) -> JobDescriptionResponse:
     """Parse a job description from plain text and return structured data"""
-    logger.info(f"Parsing job description ({len(text)} chars)")
+    logger.debug("Parsing job description: chars=%d", len(text))
     messages: list[Any] = [
         {
             "role": "user",
@@ -167,10 +167,10 @@ def parse_job_description(text: str) -> JobDescriptionResponse:
     response = invoke_structured(JobDescriptionResponse, PROMPT, messages)
 
     if response.is_job_description:
-        logger.info(f"Parsed job description - Title: {response.job_title}")
+        logger.info("Parsed job description: title=%r", response.job_title)
     else:
         logger.warning(
-            f"Document is not a job description - Type: {response.document_type}"
+            "Document is not a job description: type=%s", response.document_type
         )
 
     return response

@@ -4,11 +4,11 @@ Circuit breaker logic for rate limit handling.
 Provides utilities to detect, activate, and check rate limit circuit breaker state.
 """
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.core.redis_client import get_redis
 from app.models.database import create_session
 from app.repositories.evaluation_run_repository import (
@@ -16,7 +16,7 @@ from app.repositories.evaluation_run_repository import (
     EvaluationRunRepository,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Global circuit breaker key
 CIRCUIT_BREAKER_KEY = "rate_limit_circuit_breaker"
@@ -56,7 +56,7 @@ def activate_circuit_breaker() -> bool:
     was_set = get_redis().set(CIRCUIT_BREAKER_KEY, "1", nx=True, ex=CIRCUIT_BREAKER_TTL)
     if was_set:
         logger.error(
-            "🚨 Circuit breaker activated - tasks blocked for 24h or until manual reset"
+            "Circuit breaker activated: tasks blocked for 24h or until manual reset"
         )
     return bool(was_set)
 
@@ -82,8 +82,11 @@ def handle_rate_limit_failure(
         error: The rate limit exception that occurred
         db: Database session for marking failures
     """
-    logger.error(f"🚨 RATE LIMIT HIT on item={item_id}")
-    logger.error("Daily quota likely exhausted. Manual reset required.")
+    logger.error(
+        "Provider rate limit hit, daily quota likely exhausted: run=%s item=%s",
+        run_id,
+        item_id,
+    )
 
     # Activate circuit breaker to stop all other tasks
     # We only mark the PARENT run as failed if we are the first one to trip the breaker
@@ -98,18 +101,19 @@ def handle_rate_limit_failure(
                 "Rate limit exceeded (daily quota).",
             )
             logger.error(
-                f"Marked run={run_id} as failed due to rate limit. "
-                "Run 'make circuit-reset' after quota resets."
+                "Run failed on rate limit, run 'make circuit-reset' after quota "
+                "resets: run=%s",
+                run_id,
             )
-        except Exception as e:
-            logger.error(f"Failed to mark run as failed: {e}")
+        except Exception:
+            logger.exception("Could not mark run failed: run=%s", run_id)
 
     # Mark this item as failed
     try:
         item_repo = EvaluationRunItemRepository(db)
         item_repo.mark_failed(item_id, f"Rate limit exceeded: {str(error)[:200]}")
-    except Exception as e:
-        logger.error(f"Failed to mark item as failed: {e}")
+    except Exception:
+        logger.exception("Could not mark item failed: item=%s", item_id)
 
 
 def handle_circuit_breaker_skip(item_id: UUID) -> None:
@@ -122,7 +126,7 @@ def handle_circuit_breaker_skip(item_id: UUID) -> None:
     Args:
         item_id: UUID of the evaluation run item to skip
     """
-    logger.warning(f"⚠️  Skipping item={item_id} - circuit breaker active (rate limit)")
+    logger.warning("Item skipped, circuit breaker active: item=%s", item_id)
 
     db = create_session()
     try:
@@ -132,7 +136,7 @@ def handle_circuit_breaker_skip(item_id: UUID) -> None:
             item_repo.mark_failed(
                 item.id, "Skipped - rate limit circuit breaker active"
             )
-    except Exception as e:
-        logger.error(f"Failed to mark item as skipped: {e}")
+    except Exception:
+        logger.exception("Could not mark item skipped: item=%s", item_id)
     finally:
         db.close()

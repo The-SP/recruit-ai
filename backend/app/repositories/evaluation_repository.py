@@ -1,13 +1,13 @@
+import logging
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.models.evaluation import CandidateEvaluation
 from app.schemas.composite_evaluation import CompositeScoreResult
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class EvaluationRepository:
@@ -40,8 +40,11 @@ class EvaluationRepository:
         self.db.add(evaluation)
         self.db.commit()
         self.db.refresh(evaluation)
-        logger.info(
-            f"Created evaluation: candidate={candidate_id}, job={job_id}, score={result.final_score}"
+        logger.debug(
+            "Created evaluation: candidate=%s job=%s score=%s",
+            candidate_id,
+            job_id,
+            result.final_score,
         )
         return evaluation
 
@@ -105,7 +108,9 @@ class EvaluationRepository:
             existing.summary = result.summary
             self.db.commit()
             self.db.refresh(existing)
-            logger.info(f"Updated evaluation: candidate={candidate_id}, job={job_id}")
+            logger.debug(
+                "Updated evaluation: candidate=%s job=%s", candidate_id, job_id
+            )
             return existing
         return self.create(candidate_id, job_id, result)
 
@@ -114,6 +119,6 @@ class EvaluationRepository:
         if evaluation:
             self.db.delete(evaluation)
             self.db.commit()
-            logger.info(f"Deleted evaluation: id={evaluation_id}")
+            logger.debug("Deleted evaluation: evaluation=%s", evaluation_id)
             return True
         return False

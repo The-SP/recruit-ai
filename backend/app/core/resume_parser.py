@@ -1,12 +1,12 @@
 import base64
+import logging
 from typing import Any
 
 from app.core.file_storage import get_file_content
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.schemas.resume import ResumeResponse
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 PROMPT = """You are a precise resume parser. Analyze the provided PDF document.
 
@@ -102,16 +102,11 @@ def parse_resume(file_path: str) -> ResumeResponse:
     )
 
     if response.is_resume:
-        name = (
-            response.personal_information.name
-            if response.personal_information
-            else "Unknown"
-        )
         markdown_chars = (
             len(response.markdown_content) if response.markdown_content else 0
         )
-        logger.info(f"Parsed resume: name='{name}' | markdown={markdown_chars} chars")
+        logger.debug("Parsed resume: markdown_chars=%d", markdown_chars)
     else:
-        logger.warning(f"Document is not a resume - Type: {response.document_type}")
+        logger.warning("Document is not a resume: type=%s", response.document_type)
 
     return response

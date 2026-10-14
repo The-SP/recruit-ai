@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -8,7 +9,6 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.core.logger import init_logger
 from app.interview.constants import INTERVIEW_INVITE_TTL_DAYS
 from app.models.evaluation_run import EvaluationRunItem
 from app.models.interview import (
@@ -18,7 +18,7 @@ from app.models.interview import (
     TurnRole,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def generate_access_token() -> str:
@@ -93,7 +93,9 @@ class InterviewRepository:
         self.db.commit()
         self.db.refresh(interview)
         logger.info(
-            f"Created interview draft: id={interview.id} evaluation_id={evaluation_id}"
+            "Interview draft created: interview=%s evaluation=%s",
+            interview.id,
+            evaluation_id,
         )
         return interview
 
@@ -122,7 +124,7 @@ class InterviewRepository:
         interview.time_limit_seconds = time_limit_seconds
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Updated draft script: id={interview.id}")
+        logger.debug("Updated draft script: interview=%s", interview.id)
         return interview
 
     def approve(self, interview: Interview) -> Interview:
@@ -139,7 +141,7 @@ class InterviewRepository:
         interview.approved_at = datetime.now()
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Approved interview, invite minted: id={interview.id}")
+        logger.info("Interview approved, invite minted: interview=%s", interview.id)
         return interview
 
     def get_by_id(
@@ -188,7 +190,7 @@ class InterviewRepository:
         interview.invite_sent_at = datetime.now()
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Invite emailed: id={interview.id}")
+        logger.info("Invite emailed: interview=%s", interview.id)
         return interview
 
     def rotate_token(self, interview: Interview) -> Interview:
@@ -206,7 +208,7 @@ class InterviewRepository:
         interview.invite_sent_at = None
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Reissued interview token: id={interview.id}")
+        logger.info("Interview token reissued: interview=%s", interview.id)
         return interview
 
     def append_turns_and_advance(
@@ -260,7 +262,7 @@ class InterviewRepository:
         if mark_completed:
             interview.status = InterviewStatus.COMPLETED.value
             interview.completed_at = datetime.now()
-            logger.info(f"Interview completed: id={interview.id}")
+            logger.info("Interview completed: interview=%s", interview.id)
 
         self.db.commit()
         for turn in created:
@@ -302,20 +304,25 @@ class InterviewRepository:
 
         if turn is None:
             logger.warning(
-                f"Cannot attach audio: no turn seq={seq} "
-                f"for interview_id={interview_id}"
+                "Cannot attach audio, no such turn: interview=%s seq=%s",
+                interview_id,
+                seq,
             )
             return False
         if turn.role != TurnRole.CANDIDATE.value:
             logger.warning(
-                f"Cannot attach audio: turn seq={seq} is a {turn.role} turn "
-                f"(interview_id={interview_id})"
+                "Cannot attach audio, not a candidate turn: interview=%s seq=%s "
+                "role=%s",
+                interview_id,
+                seq,
+                turn.role,
             )
             return False
         if turn.audio_path is not None:
             logger.warning(
-                f"Cannot attach audio: turn seq={seq} already has audio "
-                f"(interview_id={interview_id})"
+                "Cannot attach audio, turn already has audio: interview=%s seq=%s",
+                interview_id,
+                seq,
             )
             return False
 
@@ -333,7 +340,7 @@ class InterviewRepository:
         interview.status = InterviewStatus.ASSESSED.value
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Stored interview assessment: id={interview.id}")
+        logger.debug("Stored interview assessment: interview=%s", interview.id)
         return interview
 
     def store_assessment_error(self, interview: Interview, error: str) -> Interview:
@@ -347,7 +354,7 @@ class InterviewRepository:
         interview.status = InterviewStatus.EXPIRED.value
         self.db.commit()
         self.db.refresh(interview)
-        logger.info(f"Interview expired: id={interview.id}")
+        logger.info("Interview expired: interview=%s", interview.id)
         return interview
 
     def get_id_for_evaluation(self, evaluation_id: UUID) -> UUID | None:
@@ -403,5 +410,5 @@ class InterviewRepository:
         expired = result.rowcount or 0
         if expired:
             self.db.commit()
-            logger.info(f"Expired {expired} overdue interview(s) for run {run_id}")
+            logger.info("Expired overdue interviews: run=%s count=%d", run_id, expired)
         return expired

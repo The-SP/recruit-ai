@@ -6,10 +6,10 @@ question_script snapshots exist precisely so assessment sees the same data
 question generation saw, even if the evaluation row was overwritten since.
 """
 
+import logging
 from typing import Any
 
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.interview.prompting import json_block, untrusted_block
 from app.interview.rubric import (
@@ -37,7 +37,7 @@ from app.schemas.interview import (
     ResumeConsistency,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are an experienced technical interviewer reviewing a completed "
@@ -304,7 +304,8 @@ def _repair_per_question(
                 )
             else:
                 logger.warning(
-                    f"Assessor omitted question {question.id}; recording no findings"
+                    "Assessor omitted question, recording no findings: question=%s",
+                    question.id,
                 )
                 notes = "The assessor produced no entry for this question."
             entry = QuestionAssessment(
@@ -327,7 +328,7 @@ def _repair_per_question(
             _quote_found(entry.resume_quote, resume)
         ):
             logger.warning(
-                f"Downgraded unverified contradiction on question {question.id}"
+                "Downgraded unverified contradiction: question=%s", question.id
             )
             entry.resume_consistency = ResumeConsistency.NOT_TESTED
         if entry.resume_consistency != ResumeConsistency.CONTRADICTED:
@@ -350,7 +351,9 @@ def _repair_competencies(
     for competency in Competency:
         rating = by_name.get(competency)
         if rating is None:
-            logger.warning(f"Assessor omitted competency {competency.value}")
+            logger.warning(
+                "Assessor omitted competency: competency=%s", competency.value
+            )
             rating = CompetencyRating(
                 name=competency,
                 seen_in=[],
@@ -432,7 +435,9 @@ def assess_transcript(
     )
 
     logger.info(
-        f"Assessed interview {interview.id}: recommendation={recommendation} "
-        f"levels={[rating.level for rating in competencies]}"
+        "Interview assessed: interview=%s recommendation=%s levels=%s",
+        interview.id,
+        recommendation,
+        [rating.level for rating in competencies],
     )
     return assessment

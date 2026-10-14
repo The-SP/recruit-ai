@@ -1,14 +1,14 @@
+import logging
 from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.models.candidate import Candidate
 from app.schemas.resume import ResumeResponse
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class CandidateRepository:
@@ -34,7 +34,7 @@ class CandidateRepository:
         self.db.add(candidate)
         self.db.commit()
         self.db.refresh(candidate)
-        logger.info(f"Created candidate: id={candidate.id}, name={candidate.name}")
+        logger.debug("Created candidate: candidate=%s", candidate.id)
         return candidate
 
     def get_by_id(self, candidate_id: UUID) -> Candidate | None:
@@ -61,6 +61,6 @@ class CandidateRepository:
         if candidate:
             self.db.delete(candidate)
             self.db.commit()
-            logger.info(f"Deleted candidate: id={candidate_id}")
+            logger.debug("Deleted candidate: candidate=%s", candidate_id)
             return True
         return False

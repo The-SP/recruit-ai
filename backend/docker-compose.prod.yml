@@ -1,8 +1,17 @@
+# Docker's default json-file driver never rotates, so container logs would grow
+# until the disk fills. The app writes to stdout only in production.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # One-shot migration runner, invoked explicitly by deploy.sh via
   # `run --rm migrate`. Kept out of the default profile so `up --wait` does not
   # treat its (expected) exit as a service that failed to stay running.
   migrate:
+    logging: *default-logging
     build: .
     command: alembic upgrade head
     env_file: .env.prod
@@ -10,6 +19,7 @@ services:
     profiles: ["tools"]
 
   api:
+    logging: *default-logging
     build: .
     ports:
       - "127.0.0.1:8000:8000"
@@ -28,14 +38,16 @@ services:
           "-c",
           "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8000/health', timeout=3).status_code == 200 else 1)",
         ]
-      interval: 10s
+      interval: 5m
       timeout: 5s
       retries: 5
       start_period: 30s
+      start_interval: 5s
 
   worker:
+    logging: *default-logging
     build: .
-    command: celery -A app.worker.celery_app worker --loglevel=info
+    command: celery -A app.worker.celery_app worker
     env_file: .env.prod
     volumes:
       - uploads_data:/app/data/uploads
@@ -45,6 +57,7 @@ services:
     restart: unless-stopped
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
     healthcheck:

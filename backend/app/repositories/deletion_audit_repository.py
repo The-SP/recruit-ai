@@ -1,13 +1,13 @@
+import logging
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.models.deletion_audit import DeletionAudit, DeletionTarget
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class DeletionAuditRepository:

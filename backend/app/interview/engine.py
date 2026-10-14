@@ -3,6 +3,7 @@ today, audio in Phase 2) lives in the route layer; nothing here may import
 FastAPI types, and EngineEvent carries no Any.
 """
 
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -13,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from app.api.exceptions import ConflictError, ValidationError
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.interview.prompting import untrusted_block
 from app.interview.state import question_number, time_remaining_seconds
@@ -27,7 +27,7 @@ from app.models.interview import (
 from app.repositories.interview_repository import InterviewRepository
 from app.schemas.interview import FollowupDecision, InterviewQuestion, InterviewScript
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -131,13 +131,13 @@ def _decide_followup(question: InterviewQuestion, answer: str) -> str | None:
             reasoning_effort="minimal",
         )
     except Exception as e:
-        logger.warning(f"Follow-up decision failed, advancing instead: {e}")
+        logger.warning("Follow-up decision failed, advancing instead: error=%s", e)
         return None
 
     if not decision.ask_followup:
         return None
     if not decision.followup_question or not decision.followup_question.strip():
-        logger.warning("Model asked for a follow-up without providing one; advancing")
+        logger.warning("Model asked for a follow-up without providing one, advancing")
         return None
     return decision.followup_question.strip()
 
@@ -171,7 +171,7 @@ def start_interview(db: Session, interview: Interview) -> Interview:
         ],
         mark_started=True,
     )
-    logger.info(f"Interview started: id={interview.id}")
+    logger.info("Interview started: interview=%s", interview.id)
     return interview
 
 

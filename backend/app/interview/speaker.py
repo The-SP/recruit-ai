@@ -31,6 +31,7 @@ are therefore keyed by seq and synthesized on demand.
 """
 
 import base64
+import logging
 import re
 from typing import Any
 from uuid import UUID
@@ -42,12 +43,11 @@ from app.core.file_storage import (
     resolve_file_path,
     save_uploaded_file,
 )
-from app.core.logger import init_logger
 from app.core.model_factory import build_model
 from app.models.interview import Interview, InterviewTurn, TurnKind, TurnRole
 from app.schemas.interview import InterviewScript
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # What the provider returns: a complete WAV (24 kHz, mono, signed 16-bit), not
 # raw PCM -- langchain-google-genai applies the RIFF header itself, so nothing
@@ -221,8 +221,8 @@ def resolve_voice_text(
         script = InterviewScript.model_validate(interview.question_script)
     except Exception:
         logger.warning(
-            f"Interview {interview.id} has an unreadable question_script; "
-            "no scripted voice slots available"
+            "Unreadable question script, no scripted voice slots: interview=%s",
+            interview.id,
         )
     else:
         scripted = dict(script_voice_keys(script)).get(key)

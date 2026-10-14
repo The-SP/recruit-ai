@@ -1,7 +1,7 @@
+import logging
 from datetime import date
 from typing import Any
 
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.schemas.experience_evaluation import (
     ExperienceEvaluation,
@@ -11,7 +11,7 @@ from app.schemas.experience_evaluation import (
 )
 from app.schemas.job_description import ExperienceRequirement
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 
@@ -202,14 +202,14 @@ def calculate_experience_score(
     Returns:
         ExperienceScoreResult with score and evaluations
     """
-    logger.info("Starting experience evaluation")
+    logger.debug("Experience evaluation started")
 
     # --- Handle missing requirements ---
 
     required_years = experience_requirement.min_years or 0.0
 
     if required_years == 0:
-        logger.info("No experience requirement specified, returning perfect score")
+        logger.debug("No experience requirement, returning perfect score")
         return ExperienceScoreResult(
             llm_response=LLMExperienceResponse(evaluations=[]),
             effective_months=0,
@@ -271,8 +271,10 @@ def calculate_experience_score(
     )
 
     logger.info(
-        f"Experience evaluation complete - Score: {experience_score:.3f} | "
-        f"Effective: {effective_years:.1f} years | Required: {required_years} years"
+        "Experience score: score=%.3f years=%.1f required=%.1f",
+        experience_score,
+        effective_years,
+        required_years,
     )
 
     return ExperienceScoreResult(

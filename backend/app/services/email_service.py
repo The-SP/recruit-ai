@@ -1,4 +1,5 @@
 import base64
+import logging
 import smtplib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -13,9 +14,9 @@ import resend
 from jinja2 import Environment, FileSystemLoader
 
 from app.config import Config
-from app.core.logger import init_logger
+from app.core.logger import mask_email
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _TEMPLATE_DIR = Path("app/templates/emails")
 SMTP_TIMEOUT_SECONDS = 15
@@ -93,8 +94,12 @@ class ConsoleProvider(EmailProvider):
         reply_to: str | None = None,
     ) -> None:
         logger.info(
-            f"[console email] to={to} subject={subject!r} html_length={len(html)} "
-            f"images={[i.filename for i in images]} reply_to={reply_to}"
+            "Console email: to=%s subject=%r html_length=%d images=%s reply_to=%s",
+            mask_email(to),
+            subject,
+            len(html),
+            [i.filename for i in images],
+            mask_email(reply_to) if reply_to else None,
         )
 
 
@@ -200,8 +205,10 @@ class EmailService:
         """Send and swallow failures. For notifications nobody is waiting on."""
         try:
             self._deliver(to, subject, template, hero_image, **context)
-        except Exception as e:
-            logger.error(f"Failed to send email to {to}: {e}")
+        except Exception:
+            logger.exception(
+                "Email not sent: to=%s subject=%r", mask_email(to), subject
+            )
 
     def _deliver(
         self,
@@ -220,7 +227,12 @@ class EmailService:
             **context,
         )
         self._provider.send(to, subject, html, images, reply_to=reply_to)
-        logger.info(f"Sent email to {to} via {self._provider.name}")
+        logger.info(
+            "Email sent: to=%s subject=%r provider=%s",
+            mask_email(to),
+            subject,
+            self._provider.name,
+        )
 
     def send_batch_completed(self, email: str, token: str) -> None:
         self._send(

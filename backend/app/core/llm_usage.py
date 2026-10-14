@@ -24,6 +24,7 @@ admin page and keeps this off Redis.
 No FastAPI imports: the route maps LlmUsageUnavailableError to a 503.
 """
 
+import logging
 import math
 import threading
 import time
@@ -35,9 +36,7 @@ from typing import Any
 from langsmith import Client
 from langsmith.utils import get_env_var
 
-from app.core.logger import init_logger
-
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _CACHE_SECONDS = 300
 _MAX_RUNS = 5000
@@ -246,7 +245,7 @@ def get_usage(days: int) -> LlmUsage:
     try:
         usage = _fetch(days)
     except Exception as e:
-        logger.error(f"LangSmith usage fetch failed: {e}")
+        logger.exception("LangSmith usage fetch failed: days=%d", days)
         raise LlmUsageUnavailableError(str(e)) from e
 
     with _lock:

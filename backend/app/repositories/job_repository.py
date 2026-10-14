@@ -1,14 +1,14 @@
+import logging
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.logger import init_logger
 from app.models.job import Job, JobRequirements
 from app.schemas.job_description import JobDescriptionResponse
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class JobRepository:
@@ -57,8 +57,6 @@ class JobRepository:
         title = job_title or jd.job_title
         company = company_name or jd.company_name
 
-        logger.info(f"Creating job: {title or 'Unknown'}")
-
         job = Job(
             raw_text=raw_text,
             is_valid_jd=jd.is_job_description,
@@ -94,7 +92,7 @@ class JobRepository:
         self.db.commit()
         self.db.refresh(job)
 
-        logger.info(f"Created job with id={job.id}")
+        logger.debug("Created job: job=%s title=%r", job.id, title)
         return job
 
     def get_by_id(self, job_id: UUID, with_requirements: bool = False) -> Job | None:
@@ -110,6 +108,6 @@ class JobRepository:
         if job:
             self.db.delete(job)
             self.db.commit()
-            logger.info(f"Deleted job with id={job_id}")
+            logger.debug("Deleted job: job=%s", job_id)
             return True
         return False

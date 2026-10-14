@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 from uuid import UUID
@@ -6,7 +7,6 @@ from celery import chord, group
 from celery.exceptions import SoftTimeLimitExceeded
 
 from app.core.file_storage import resolve_file_path
-from app.core.logger import init_logger
 from app.core.resume_parser import parse_resume
 from app.evaluation.composite_scorer import calculate_composite_score
 from app.models.database import create_session
@@ -30,7 +30,7 @@ from app.worker.circuit_breaker import (
     is_rate_limit_error,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _job_model_to_response(job: Job) -> JobDescriptionResponse:
@@ -55,8 +55,8 @@ def _send_failure_email(run_id: UUID) -> None:
         run = run_repo.get_by_id(run_id)
         if run and run.email and run.access_token:
             send_batch_failed(run.email, run.access_token)
-    except Exception as e:
-        logger.error(f"Failed to send failure email: {e}")
+    except Exception:
+        logger.exception("Failure email not sent: run=%s", run_id)
     finally:
         db.close()
 
@@ -77,11 +77,11 @@ def process_evaluation_run(self: Any, run_id: str) -> str:
     Returns:
         run_id as string
     """
-    logger.info(f"Processing evaluation run: {run_id}")
+    logger.info("Processing run: run=%s", run_id)
 
     if is_circuit_breaker_active():
         error_msg = "Cannot process run - rate limit circuit breaker is active."
-        logger.error(error_msg)
+        logger.error("Run rejected, circuit breaker active: run=%s", run_id)
         db = create_session()
         try:
             run_repo = EvaluationRunRepository(db)
@@ -128,8 +128,6 @@ def process_evaluation_run(self: Any, run_id: str) -> str:
         if not item_ids:
             raise ValueError(f"No pending items found for run: {run_id}")
 
-        logger.info(f"Found {len(item_ids)} pending items for run={run_id}")
-
         # Mark run as processing
         run_repo.mark_started(UUID(run_id))
 
@@ -150,7 +148,7 @@ def process_evaluation_run(self: Any, run_id: str) -> str:
     try:
         workflow.apply_async()
     except Exception as e:
-        logger.error(f"Failed to dispatch tasks for run={run_id}: {e}")
+        logger.exception("Dispatch failed: run=%s", run_id)
         db = create_session()
         try:
             run_repo = EvaluationRunRepository(db)
@@ -160,7 +158,7 @@ def process_evaluation_run(self: Any, run_id: str) -> str:
             db.close()
         raise
 
-    logger.info(f"Dispatched {len(item_ids)} tasks for run={run_id}")
+    logger.info("Dispatched items: run=%s count=%d", run_id, len(item_ids))
     return run_id
 
 
@@ -176,7 +174,7 @@ def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[st
     Returns:
         dict with status and optional error
     """
-    logger.info(f"Processing item={item_id}")
+    logger.debug("Processing item: item=%s", item_id)
 
     if is_circuit_breaker_active():
         handle_circuit_breaker_skip(UUID(item_id))
@@ -202,7 +200,7 @@ def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[st
         file_path = resolve_file_path(run.folder_path, item.pdf_filename)
 
         # Parse resume
-        logger.info(f"Parsing resume: {file_path}")
+        logger.debug("Parsing resume: run=%s item=%s", run_id, item_id)
         resume = parse_resume(file_path)
 
         if not resume.is_resume or not resume.markdown_content:
@@ -220,7 +218,12 @@ def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[st
         jd = JobDescriptionResponse.model_validate(jd_dict)
 
         # Calculate composite score
-        logger.info(f"Scoring candidate={candidate.id} against job={run.job_id}")
+        logger.debug(
+            "Scoring candidate: item=%s candidate=%s job=%s",
+            item_id,
+            candidate.id,
+            run.job_id,
+        )
         result = calculate_composite_score(
             jd=jd, resume_markdown=resume.markdown_content
         )
@@ -237,21 +240,26 @@ def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[st
         )
 
         logger.info(
-            f"✓ Completed item={item_id}: candidate={candidate.id}, score={result.final_score}"
+            "Item completed: run=%s item=%s candidate=%s score=%s signal=%s",
+            run_id,
+            item_id,
+            candidate.id,
+            result.final_score,
+            result.hire_signal.value,
         )
 
         return {"status": "completed", "item_id": item_id}
 
     except SoftTimeLimitExceeded:
-        logger.error(f"✗ Timeout on item={item_id} (soft time limit exceeded)")
+        logger.error("Item timed out (soft limit): run=%s item=%s", run_id, item_id)
 
         try:
             item_repo = EvaluationRunItemRepository(db)
             item = item_repo.get_by_id(UUID(item_id))
             if item:
                 item_repo.mark_failed(item.id, "Task timed out (soft limit)")
-        except Exception as inner_e:
-            logger.error(f"Failed to mark timed-out item as failed: {inner_e}")
+        except Exception:
+            logger.exception("Could not mark timed-out item failed: item=%s", item_id)
 
         return {"status": "failed", "item_id": item_id, "error": "Task timed out"}
 
@@ -266,15 +274,15 @@ def evaluate_resume(self: Any, item_id: str, jd_dict: dict[str, Any]) -> dict[st
 
         # Handle other errors (non-rate-limit)
         error_str = str(e)
-        logger.error(f"✗ Failed item={item_id}: {error_str}")
+        logger.exception("Item failed: run=%s item=%s", run_id, item_id)
 
         try:
             item_repo = EvaluationRunItemRepository(db)
             item = item_repo.get_by_id(UUID(item_id))
             if item:
                 item_repo.mark_failed(item.id, error_str[:500])
-        except Exception as inner_e:
-            logger.error(f"Failed to mark item as failed: {inner_e}")
+        except Exception:
+            logger.exception("Could not mark item failed: item=%s", item_id)
 
         return {"status": "failed", "item_id": item_id, "error": error_str[:200]}
 
@@ -296,7 +304,7 @@ def finalize_evaluation_run(
     Returns:
         Summary dict
     """
-    logger.info(f"Finalizing run={run_id}")
+    logger.debug("Finalizing run: run=%s", run_id)
 
     db = create_session()
     total_processed = 0
@@ -325,7 +333,7 @@ def finalize_evaluation_run(
                 if run.email and run.access_token:
                     send_batch_completed(run.email, run.access_token)
         else:
-            logger.info("Run already marked as failed, skipping completion")
+            logger.info("Run already failed, skipping completion: run=%s", run_id)
 
     finally:
         db.close()
@@ -340,14 +348,20 @@ def finalize_evaluation_run(
         "failed_count": total_failed,
     }
 
-    logger.info(f"✓ Finalized run={run_id}: {summary}")
+    logger.info(
+        "Run finalized: run=%s status=%s processed=%d failed=%d",
+        run_id,
+        final_status,
+        total_processed,
+        total_failed,
+    )
     return summary
 
 
 @celery_app.task(name="on_chord_error")
 def on_chord_error(request: Any, exc: Any, traceback: Any, run_id: str) -> None:
     """Error callback when a chord fails due to a hard task failure."""
-    logger.error(f"Chord failed for run={run_id}: {exc}")
+    logger.error("Chord failed: run=%s", run_id, exc_info=exc)
 
     db = create_session()
     try:

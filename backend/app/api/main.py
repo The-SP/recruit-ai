@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -15,9 +16,9 @@ from app.api.routes import (
     user_runs,
 )
 from app.config import Config
-from app.core.logger import init_logger
+from app.core.logger import configure_logging
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -29,6 +30,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    configure_logging()
+
     app = FastAPI(
         title="Recruit AI",
         description="LLM-Enhanced Resume Screening System",

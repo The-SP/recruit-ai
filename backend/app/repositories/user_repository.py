@@ -1,13 +1,13 @@
+import logging
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.logger import init_logger
 from app.models.user import User
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class UserRepository:
@@ -27,7 +27,7 @@ class UserRepository:
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
-        logger.info(f"Created user: id={user.id}, email={user.email}")
+        logger.info("User created: user=%s", user.id)
         return user
 
     def list_all(

@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple, cast
@@ -15,7 +16,6 @@ from app.core.file_storage import (
     get_batch_folder,
     resolve_file_path,
 )
-from app.core.logger import init_logger
 from app.models.candidate import Candidate
 from app.models.deletion_audit import DeletionTarget
 from app.models.evaluation import CandidateEvaluation
@@ -40,7 +40,7 @@ from app.repositories.interview_repository import (
     InterviewRepository,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class InterviewRow(NamedTuple):
@@ -113,13 +113,13 @@ class EvaluationRunRepository:
     def create_draft(self, job_id: UUID) -> EvaluationRun:
         """Create a draft evaluation run for file uploads."""
         run = self._create_draft_internal(job_id)
-        logger.info(f"Created draft evaluation run: id={run.id}")
+        logger.debug("Created draft run: run=%s", run.id)
         return run
 
     def create_for_user(self, job_id: UUID, user_id: UUID) -> EvaluationRun:
         """Create a draft evaluation run tied to an authenticated user."""
         run = self._create_draft_internal(job_id, user_id=user_id)
-        logger.info(f"Created evaluation run for user={user_id}: id={run.id}")
+        logger.info("Run created: run=%s user=%s", run.id, user_id)
         return run
 
     def create_with_token(self, job_id: UUID, email: str) -> tuple[EvaluationRun, str]:
@@ -152,7 +152,7 @@ class EvaluationRunRepository:
 
         ensure_folder(run.folder_path)
 
-        logger.info(f"Created evaluation run with token: id={run.id}")
+        logger.info("Run created: run=%s user=anonymous", run.id)
         return run, token
 
     def get_by_id(self, run_id: UUID, with_items: bool = False) -> EvaluationRun | None:
@@ -244,7 +244,7 @@ class EvaluationRunRepository:
             run.started_at = None  # cleared so wave duration is measured from new start
             run.failed_count = 0
             self.db.commit()
-            logger.info(f"Reopened evaluation run: id={run_id}")
+            logger.info("Run reopened: run=%s", run_id)
 
     def mark_started(self, run_id: UUID) -> None:
         run = self.get_by_id(run_id)
@@ -265,7 +265,7 @@ class EvaluationRunRepository:
                     run.processing_time_seconds or 0
                 ) + current_wave
             self.db.commit()
-            logger.info(f"Completed evaluation run: id={run_id}")
+            logger.debug("Marked run completed: run=%s", run_id)
 
     def mark_failed(self, run_id: UUID, error: str) -> None:
         run = self.get_by_id(run_id)
@@ -274,7 +274,7 @@ class EvaluationRunRepository:
             run.status = RunStatus.FAILED.value
             run.completed_at = datetime.now()
             self.db.commit()
-            logger.error(f"Failed evaluation run: id={run_id}, error={error}")
+            logger.error("Run failed: run=%s error=%r", run_id, error)
 
     def get_by_user(
         self,
@@ -780,9 +780,11 @@ class EvaluationRunRepository:
         # Audit and deletion commit together: neither can exist without the other.
         self.db.commit()
         logger.info(
-            f"Deleted evaluation run: id={run_id}, "
-            f"candidates={len(candidate_ids)}, interviews={len(interview_ids)}, "
-            f"actor={actor.email if actor else 'system'}"
+            "Run deleted: run=%s candidates=%d interviews=%d actor=%s",
+            run_id,
+            len(candidate_ids),
+            len(interview_ids),
+            actor.id if actor else "system",
         )
         return True
 
@@ -804,7 +806,7 @@ class EvaluationRunItemRepository:
         self.db.add(item)
         self.db.commit()
         self.db.refresh(item)
-        logger.info(f"Created uploaded item: id={item.id}, filename={filename}")
+        logger.debug("Created uploaded item: item=%s", item.id)
         return item
 
     def get_by_id(self, item_id: UUID) -> EvaluationRunItem | None:
@@ -861,7 +863,7 @@ class EvaluationRunItemRepository:
         if item:
             self.db.delete(item)
             self.db.commit()
-            logger.info(f"Deleted item: id={item_id}")
+            logger.debug("Deleted item: item=%s", item_id)
             return True
         return False
 
@@ -925,9 +927,9 @@ class EvaluationRunItemRepository:
             # permissions or network failure is indistinguishable from an
             # already-missing file. Not fatal -- the rows should still go -- but
             # a retained object must leave a trace.
-            logger.warning(
-                f"Resume file not removed: path={resume_path}, item={item_id}"
-            )
+            # Not the path: it ends in the uploaded filename, often the
+            # candidate's name.
+            logger.warning("Resume file not removed: item=%s", item_id)
         if interview_id:
             delete_interview_audio(interview_id)
 
@@ -944,9 +946,12 @@ class EvaluationRunItemRepository:
 
         EvaluationRunRepository(self.db).remove_item_counts(run_id)
         logger.info(
-            f"Deleted run item fully: id={item_id}, run={run_id}, "
-            f"candidate={candidate_id}, interview={interview_id}, "
-            f"actor={actor.email if actor else 'system'}"
+            "Item deleted: run=%s item=%s candidate=%s interview=%s actor=%s",
+            run_id,
+            item_id,
+            candidate_id,
+            interview_id,
+            actor.id if actor else "system",
         )
 
     def filename_exists(self, run_id: UUID, filename: str) -> bool:

@@ -1,9 +1,9 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.core.logger import init_logger
-
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class NotFoundError(Exception):
@@ -114,7 +114,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        logger.error(f"Unhandled exception: {exc}", exc_info=True)
+        # The route template, not the URL: token-bearing paths
+        # (/batch/status/{token}, /interviews/{token}) must not reach the logs.
+        route = getattr(request.scope.get("route"), "path", "-")
+        logger.error(
+            "Unhandled exception: method=%s route=%s",
+            request.method,
+            route,
+            exc_info=exc,
+        )
         return JSONResponse(
             status_code=500, content={"detail": "Internal server error"}
         )

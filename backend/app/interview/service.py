@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -13,7 +14,6 @@ from app.core.file_storage import (
     get_interview_audio_folder,
     save_uploaded_file,
 )
-from app.core.logger import init_logger
 from app.interview.constants import (
     ALLOWED_TIME_LIMIT_SECONDS,
     ANSWER_AUDIO_EXTENSIONS,
@@ -60,7 +60,7 @@ from app.schemas.interview import (
 from app.services.email_service import get_email_service
 from app.worker.interview_tasks import assess_interview, synthesize_interview_voice
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def resolve_evaluation_id(db: Session, run: EvaluationRun, candidate_id: UUID) -> UUID:
@@ -142,8 +142,9 @@ def _configured_mode() -> InterviewMode:
         return InterviewMode(Config.INTERVIEW_MODE)
     except ValueError:
         logger.warning(
-            f"Invalid INTERVIEW_MODE '{Config.INTERVIEW_MODE}'; falling back to "
-            f"'{InterviewMode.TEXT.value}'"
+            "Invalid INTERVIEW_MODE, falling back: value=%r fallback=%s",
+            Config.INTERVIEW_MODE,
+            InterviewMode.TEXT.value,
         )
         return InterviewMode.TEXT
 
@@ -158,8 +159,9 @@ def _configured_voice() -> InterviewVoice:
         return InterviewVoice(Config.INTERVIEW_VOICE)
     except ValueError:
         logger.warning(
-            f"Invalid INTERVIEW_VOICE '{Config.INTERVIEW_VOICE}'; falling back to "
-            f"'{InterviewVoice.OFF.value}'"
+            "Invalid INTERVIEW_VOICE, falling back: value=%r fallback=%s",
+            Config.INTERVIEW_VOICE,
+            InterviewVoice.OFF.value,
         )
         return InterviewVoice.OFF
 
@@ -299,8 +301,8 @@ def create_interview_draft(
 
     existing = interview_repo.get_by_evaluation_id(evaluation_id)
     if existing:
-        logger.info(
-            f"Interview already exists for evaluation {evaluation_id}; returning it"
+        logger.debug(
+            "Interview already exists, returning it: evaluation=%s", evaluation_id
         )
         return apply_lazy_expiry(db, existing), False
 
@@ -352,8 +354,8 @@ def create_interview_draft(
         if not existing:
             raise
         logger.info(
-            f"Concurrent interview creation for evaluation {evaluation_id}; "
-            "returning the interview that won"
+            "Concurrent interview creation, returning the winner: evaluation=%s",
+            evaluation_id,
         )
         return apply_lazy_expiry(db, existing), False
 
@@ -568,7 +570,7 @@ def send_invite_email(
             reply_to=reply_to,
         )
     except Exception as e:
-        logger.error(f"Invite email failed for interview={interview.id}: {e}")
+        logger.exception("Invite email failed: interview=%s", interview.id)
         raise ServiceUnavailableError(
             "The invite email couldn't be sent. Try again, or copy the link "
             "and send it yourself."
@@ -614,7 +616,7 @@ def request_assessment(
         )
 
     assess_interview.delay(str(interview.id))
-    logger.info(f"Dispatched manual assessment for interview {interview.id}")
+    logger.info("Manual assessment dispatched: interview=%s", interview.id)
     return interview
 
 
@@ -667,7 +669,7 @@ def get_interview_voice(db: Session, interview: Interview, key: str) -> bytes:
     if text is None:
         raise NotFoundError("Interview audio", key)
 
-    logger.info(f"Synthesizing interview {interview.id} voice key '{key}' on demand")
+    logger.debug("Synthesizing voice on demand: interview=%s key=%s", interview.id, key)
     return synthesize_and_store(interview.id, key, text)
 
 

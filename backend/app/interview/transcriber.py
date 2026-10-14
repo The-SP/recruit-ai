@@ -15,14 +15,14 @@ breaker.
 """
 
 import base64
+import logging
 from typing import Any
 
 from app.api.exceptions import ValidationError
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.model_factory import build_model
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # The transcript is both the audit trail and the assessment input, so
 # transcription fidelity is a correctness concern: without this prompt the

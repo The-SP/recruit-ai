@@ -31,16 +31,16 @@ No FastAPI imports: scripts/ and Celery tasks read this too. The HTTP layer
 policy and arithmetic only.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from redis.exceptions import RedisError
 
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.redis_client import get_redis
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "rl:"
 
@@ -181,8 +181,12 @@ def consume(cost: int) -> int:
             wait = _seconds_to_utc_midnight()
             log_only = _log_only()
             logger.warning(
-                f"Rate limit {'would reject' if log_only else 'rejected'}: "
-                f"cost={cost} used={used} limit={limit} retry_after={wait}"
+                "Rate limit %s: cost=%d used=%d limit=%d retry_after=%d",
+                "would reject" if log_only else "rejected",
+                cost,
+                used,
+                limit,
+                wait,
             )
             return 0 if log_only else wait
 
@@ -196,7 +200,7 @@ def consume(cost: int) -> int:
         return 0
 
     except RedisError as e:
-        logger.error(f"Rate limiter unavailable, failing open: {e}")
+        logger.warning("Rate limiter unavailable, failing open: error=%s", e)
         return 0
 
 
@@ -234,7 +238,7 @@ def refund(cost: int) -> None:
         if cast(int, pipe.execute()[0]) < 0:
             client.set(key, 0, keepttl=True)
     except RedisError as e:
-        logger.error(f"Rate limit refund failed: {e}")
+        logger.error("Rate limit refund failed: error=%s", e)
 
 
 def cooldown(key: str, seconds: int) -> int:
@@ -259,7 +263,7 @@ def cooldown(key: str, seconds: int) -> int:
         # that as "free" rather than inventing a wait.
         return remaining if remaining > 0 else 0
     except RedisError as e:
-        logger.error(f"Rate limit cooldown check failed for key={key}: {e}")
+        logger.error("Rate limit cooldown check failed: key=%s error=%s", key, e)
         return 0
 
 
@@ -270,7 +274,7 @@ def release_cooldown(key: str) -> None:
     try:
         get_redis().delete(f"{KEY_PREFIX}{key}")
     except RedisError as e:
-        logger.error(f"Rate limit cooldown release failed for key={key}: {e}")
+        logger.error("Rate limit cooldown release failed: key=%s error=%s", key, e)
 
 
 def peek() -> list[tuple[str, int, int]]:

@@ -1,6 +1,6 @@
+import logging
 from typing import Any
 
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.schemas.job_description import SkillGroup, SkillRequirements
 from app.schemas.skill_evaluation import (
@@ -10,7 +10,7 @@ from app.schemas.skill_evaluation import (
     SkillScoreResult,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 
@@ -166,7 +166,10 @@ def _validate_evaluation_counts(
     for tier in ("critical", "required", "preferred"):
         if expected[tier] != actual[tier]:
             logger.warning(
-                f"Tier '{tier}' count mismatch: expected {expected[tier]}, got {actual[tier]}"
+                "Skill tier count mismatch: tier=%s expected=%d actual=%d",
+                tier,
+                expected[tier],
+                actual[tier],
             )
 
 
@@ -218,7 +221,7 @@ def calculate_skill_score(
         SkillScoreResult with scores and evaluations
     """
 
-    logger.info("Starting skill evaluation")
+    logger.debug("Skill evaluation started")
 
     # --- Step 1: Build prompt ---
 
@@ -254,7 +257,8 @@ def calculate_skill_score(
         critical_score = _calculate_tier_score(critical_evals)
     elif skill_requirements.critical:
         logger.warning(
-            f"LLM returned 0 critical evaluations but {len(skill_requirements.critical)} critical skill groups exist"
+            "LLM returned no evaluations for a tier: tier=critical groups=%d",
+            len(skill_requirements.critical),
         )
         critical_score = 0.0
     else:
@@ -264,7 +268,8 @@ def calculate_skill_score(
         required_score = _calculate_tier_score(required_evals)
     elif skill_requirements.required:
         logger.warning(
-            f"LLM returned 0 required evaluations but {len(skill_requirements.required)} required skill groups exist"
+            "LLM returned no evaluations for a tier: tier=required groups=%d",
+            len(skill_requirements.required),
         )
         required_score = 0.0
     else:
@@ -274,7 +279,8 @@ def calculate_skill_score(
         preferred_score = _calculate_tier_score(preferred_evals)
     elif skill_requirements.preferred:
         logger.warning(
-            f"LLM returned 0 preferred evaluations but {len(skill_requirements.preferred)} preferred skill groups exist"
+            "LLM returned no evaluations for a tier: tier=preferred groups=%d",
+            len(skill_requirements.preferred),
         )
         preferred_score = 0.0
     else:
@@ -317,7 +323,7 @@ def calculate_skill_score(
     )
 
     logger.info(
-        f"Skill evaluation complete - Final score: {final_score:.3f} | Critical gaps: {len(critical_gaps)}"
+        "Skill score: score=%.3f critical_gaps=%d", final_score, len(critical_gaps)
     )
 
     # --- Return result ---

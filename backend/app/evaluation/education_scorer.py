@@ -1,11 +1,11 @@
+import logging
 from typing import Any
 
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.schemas.education_evaluation import EducationScoreResult
 from app.schemas.job_description import EducationRequirement
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 EDUCATION_OPTIONAL_SCORE_FLOOR = 0.4
 
@@ -75,7 +75,7 @@ def calculate_education_score(
     Returns:
         EducationScoreResult with score and summary
     """
-    logger.info("Starting education evaluation")
+    logger.debug("Education evaluation started")
 
     # --- Handle no requirements ---
 
@@ -83,7 +83,7 @@ def calculate_education_score(
         not education_requirement.min_degree
         and not education_requirement.preferred_fields
     ):
-        logger.info("No education requirement specified, returning perfect score")
+        logger.debug("No education requirement, returning perfect score")
         return EducationScoreResult(
             score=1.0,
             candidate_degree=None,
@@ -125,8 +125,10 @@ def calculate_education_score(
         llm_response.score = max(llm_response.score, EDUCATION_OPTIONAL_SCORE_FLOOR)
 
     logger.info(
-        f"Education evaluation complete - Score: {llm_response.score:.2f} | "
-        f"Degree: {llm_response.candidate_degree} | Field: {llm_response.field_of_study}"
+        "Education score: score=%.2f degree=%s field=%r",
+        llm_response.score,
+        llm_response.candidate_degree,
+        llm_response.field_of_study,
     )
 
     return llm_response

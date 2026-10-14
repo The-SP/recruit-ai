@@ -4,6 +4,7 @@ never include the script, the rubric, or the assessment.
 """
 
 import json
+import logging
 from collections.abc import Iterator
 from uuid import UUID
 
@@ -25,7 +26,6 @@ from app.api.schemas.interview import (
     build_turn_out,
 )
 from app.core.file_upload import read_answer_audio_content
-from app.core.logger import init_logger
 from app.core.rate_limit import COST_ANSWER_AUDIO, COST_ANSWER_TEXT
 from app.interview import engine
 from app.interview.service import (
@@ -44,7 +44,7 @@ from app.models.interview import Interview, InterviewMode, InterviewStatus
 from app.repositories.interview_repository import InterviewRepository
 from app.worker.interview_tasks import assess_interview
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 

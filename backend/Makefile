@@ -9,7 +9,7 @@ dev: ## Start the FastAPI server in development mode
 	uv run uvicorn app.api.main:app --reload
 
 worker:  ## Start Celery worker
-	uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
+	uv run celery -A app.worker.celery_app worker --concurrency=1
 
 flower:  ## Start Flower monitoring
 	uv run celery -A app.worker.celery_app flower

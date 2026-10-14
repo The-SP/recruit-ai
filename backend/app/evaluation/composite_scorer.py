@@ -1,4 +1,5 @@
-from app.core.logger import init_logger
+import logging
+
 from app.evaluation.education_scorer import calculate_education_score
 from app.evaluation.experience_scorer import calculate_experience_score
 from app.evaluation.skill_scorer import calculate_skill_score
@@ -8,7 +9,7 @@ from app.schemas.experience_evaluation import ExperienceScoreResult
 from app.schemas.job_description import JobDescriptionResponse
 from app.schemas.skill_evaluation import SkillScoreResult
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 
@@ -145,7 +146,7 @@ def calculate_composite_score(
     Returns:
         CompositeScoreResult with final score and component breakdown
     """
-    logger.info("Starting composite scoring")
+    logger.debug("Composite scoring started")
 
     # --- Step 1: Detect active components ---
 
@@ -162,7 +163,7 @@ def calculate_composite_score(
     if has_education:
         active_components.append("education")
 
-    logger.info(f"Active components: {active_components}")
+    logger.debug("Active components: components=%s", active_components)
 
     # --- Step 2: Handle edge case - no requirements ---
 
@@ -179,7 +180,7 @@ def calculate_composite_score(
     # --- Step 3: Redistribute weights ---
 
     weights = _redistribute_weights(active_components)
-    logger.info(f"Adjusted weights: {weights}")
+    logger.debug("Adjusted weights: weights=%s", weights)
 
     # --- Step 4: Evaluate active components ---
 
@@ -192,7 +193,7 @@ def calculate_composite_score(
     education_score: float | None = None
 
     if has_skills and jd.requirements and jd.requirements.skills:
-        logger.info("Evaluating skills...")
+        logger.debug("Evaluating skills")
         skill_result = calculate_skill_score(
             skill_requirements=jd.requirements.skills,
             resume_markdown=resume_markdown,
@@ -200,7 +201,7 @@ def calculate_composite_score(
         skill_score = skill_result.final_score
 
     if has_experience and jd.requirements and jd.requirements.experience:
-        logger.info("Evaluating experience...")
+        logger.debug("Evaluating experience")
         experience_result = calculate_experience_score(
             experience_requirement=jd.requirements.experience,
             resume_markdown=resume_markdown,
@@ -209,7 +210,7 @@ def calculate_composite_score(
         experience_score = experience_result.experience_score
 
     if has_education and jd.requirements and jd.requirements.education:
-        logger.info("Evaluating education...")
+        logger.debug("Evaluating education")
         education_result = calculate_education_score(
             education_requirement=jd.requirements.education,
             resume_markdown=resume_markdown,
@@ -243,9 +244,7 @@ def calculate_composite_score(
         education_score=education_score,
     )
 
-    logger.info(
-        f"Composite scoring complete - Score: {final_score} | Signal: {hire_signal.value}"
-    )
+    logger.debug("Composite score: score=%s signal=%s", final_score, hire_signal.value)
 
     return CompositeScoreResult(
         final_score=final_score,

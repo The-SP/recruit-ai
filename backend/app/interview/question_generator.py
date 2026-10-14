@@ -6,10 +6,10 @@ secondary. A script built only from flagged weaknesses would give a skewed
 read of a strong candidate and inherit any scorer mistake wholesale.
 """
 
+import logging
 from typing import Any
 
 from app.config import Config
-from app.core.logger import init_logger
 from app.core.model_factory import invoke_structured
 from app.interview.constants import MAX_GAP_PROBES
 from app.interview.prompting import json_block
@@ -26,7 +26,7 @@ from app.schemas.interview import (
 from app.schemas.job_utils import build_job_requirements_schema
 from app.schemas.skill_evaluation import MatchType, SkillScoreResult
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are an experienced technical interviewer. You design short, fair "
@@ -217,7 +217,7 @@ def _extract_scorer_signals(
         skill_result = SkillScoreResult.model_validate(evaluation.skill_result)
     except Exception as e:
         logger.warning(
-            f"Could not parse skill_result for evaluation {evaluation.id}: {e}"
+            "Could not parse skill_result: evaluation=%s error=%s", evaluation.id, e
         )
         return [], []
 
@@ -375,7 +375,7 @@ def generate_script(
             questions=[],
             closing=template.closing or DEFAULT_CLOSING,
         )
-        logger.info("Skipped generation: fixed questions fill the interview")
+        logger.info("Generation skipped, fixed questions fill the interview")
     else:
         prompt = GENERATION_PROMPT.format(
             **_grounding_fields(grounding),
@@ -390,7 +390,7 @@ def generate_script(
         problem = _validate_script(script, generated_count)
 
         if problem:
-            logger.warning(f"Regenerating interview script: {problem}")
+            logger.warning("Regenerating interview script: problem=%r", problem)
             script = _invoke(
                 f"{prompt}\n\nYour previous attempt was rejected because {problem}. "
                 "Follow the constraints exactly this time."
@@ -420,5 +420,5 @@ def generate_script(
     for index, question in enumerate(script.questions):
         question.id = index
 
-    logger.info(f"Generated interview script with {len(script.questions)} questions")
+    logger.info("Interview script generated: questions=%d", len(script.questions))
     return script

@@ -1,10 +1,11 @@
 from typing import Any
 
 from celery import Celery
-from celery.signals import worker_process_shutdown
+from celery.signals import setup_logging, worker_process_shutdown
 from langchain_core.tracers.langchain import wait_for_all_tracers
 
 from app.config import Config
+from app.core.logger import configure_logging
 
 celery_app = Celery(
     "recruit_ai",
@@ -42,3 +43,15 @@ def _flush_llm_traces(**_: Any) -> None:
     would otherwise drop the last batch. A no-op when tracing is off.
     """
     wait_for_all_tracers()
+
+
+@setup_logging.connect
+def _configure_logging(**_: Any) -> None:
+    """Use the app's logging config instead of Celery's.
+
+    Connecting any receiver to this signal stops Celery from configuring the
+    root logger itself, so the worker gets the same format, level, and muted
+    third-party loggers as the API. It also means the worker's `--loglevel`
+    flag is ignored: `LOG_LEVEL` is the control.
+    """
+    configure_logging()
