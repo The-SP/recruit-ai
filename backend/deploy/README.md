@@ -30,8 +30,9 @@ Related, outside this directory:
    on the same deploy that ships it.
 4. `deploy.sh` renders `.env.prod` from SSM, builds images, runs
    `alembic upgrade head` via the one-shot `migrate` service, then brings the
-   stack up with `--wait` so it returns only once healthchecks pass. A build or
-   migration failure aborts before the swap, leaving the old stack serving.
+   stack up and polls the API's `/health` until it answers (180s limit) and
+   every service is running. A build or migration failure aborts before the
+   swap, leaving the old stack serving.
 5. The workflow polls the SSM invocation to completion, echoes the remote
    stdout/stderr into the job log, and finally probes
    `https://api.recruitai.qzz.io/health`.

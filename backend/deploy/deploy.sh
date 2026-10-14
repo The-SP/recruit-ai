@@ -63,18 +63,31 @@ docker compose -f "${COMPOSE_FILE}" --profile tools build
 echo "==> Applying database migrations"
 docker compose -f "${COMPOSE_FILE}" run --rm migrate
 
-# --wait blocks until every service with a healthcheck reports healthy, so the
-# script only returns once the new API is actually serving. Without it, `up -d`
-# returns as soon as containers are *created* and the workflow's health check
-# races a still-booting app.
-echo "==> Starting containers"
-if ! docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans --wait --wait-timeout 180; then
-  echo "ERROR: containers did not all report healthy (timeout 180s)" >&2
+fail() {
+  echo "ERROR: $1" >&2
   echo "----- container status -----" >&2
   docker compose -f "${COMPOSE_FILE}" ps >&2 || true
   echo "----- recent logs -----" >&2
   docker compose -f "${COMPOSE_FILE}" logs --tail 50 >&2 || true
   exit 1
-fi
+}
+
+echo "==> Starting containers"
+docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans || fail "docker compose up failed"
+
+# Poll /health directly instead of `up --wait`: the API's compose healthcheck
+# interval is long (to keep the access log quiet), so --wait would time out.
+echo "==> Waiting for API health"
+deadline=$((SECONDS + 180))
+until curl -fsS --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; do
+  [ "${SECONDS}" -ge "${deadline}" ] && fail "API not healthy after 180s"
+  sleep 5
+done
+
+# A crashed worker never fails the API probe, so also require every service
+# to still be running.
+expected=$(docker compose -f "${COMPOSE_FILE}" config --services | wc -l)
+running=$(docker compose -f "${COMPOSE_FILE}" ps --status running --services | wc -l)
+[ "${running}" -eq "${expected}" ] || fail "only ${running}/${expected} services running"
 
 echo "==> Deploy complete"
