@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export function BrandMark({ size = "sm" }: { size?: "sm" | "lg" }) {
   return (
     <span className="flex items-center gap-2">
-      <span className="bg-primary p-1.5 rounded-lg group-hover:bg-primary/90 transition-colors">
+      <span className="bg-primary p-1.5 rounded-full group-hover:bg-primary/90 transition-colors">
         <Briefcase
           className={cn("text-primary-foreground", size === "lg" ? "w-5 h-5" : "w-4 h-4")}
         />

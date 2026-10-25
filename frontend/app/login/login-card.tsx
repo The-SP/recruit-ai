@@ -80,10 +80,10 @@ export function LoginCard({ next, error }: LoginCardProps) {
 
   return (
     <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-md gap-8 px-6 py-10 sm:px-10 sm:py-12 text-center">
+      <Card className="w-full max-w-md gap-8 rounded-3xl px-6 py-10 sm:px-10 sm:py-12 text-center">
         <div className="space-y-3">
           <div className="flex justify-center pb-2">
-            <div className="bg-primary p-3 rounded-2xl">
+            <div className="bg-primary p-3 rounded-full">
               <Briefcase className="w-8 h-8 text-primary-foreground" />
             </div>
           </div>
@@ -113,7 +113,7 @@ export function LoginCard({ next, error }: LoginCardProps) {
           <Button
             variant="outline"
             size="lg"
-            className={cn("w-full h-12 gap-3 text-base", isDisabled && "pointer-events-none opacity-60")}
+            className={cn("w-full h-12 gap-3 text-base rounded-full", isDisabled && "pointer-events-none opacity-60")}
             asChild
           >
             <a

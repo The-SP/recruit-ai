@@ -92,13 +92,13 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Button asChild size="lg" className="gap-2 px-6">
+            <Button asChild size="lg" className="gap-2 px-6 rounded-full">
               <Link href="/login">
                 Get started free
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="gap-2 px-6">
+            <Button asChild size="lg" variant="outline" className="gap-2 px-6 rounded-full">
               <Link href="/demo">Try it free, no sign-up</Link>
             </Button>
           </div>
@@ -113,7 +113,7 @@ export default function LandingPage() {
       <section className="px-6 py-12">
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
           {features.map((f) => (
-            <Card key={f.title} className="p-6 gap-3">
+            <Card key={f.title} className="p-6 gap-3 rounded-3xl">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-1">
                 <f.icon className="w-5 h-5 text-primary" />
               </div>
@@ -136,27 +136,27 @@ export default function LandingPage() {
       {/* CTA strip */}
       <section className="px-6 py-16">
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card className="p-8 gap-4">
+          <Card className="p-8 gap-4 rounded-3xl">
             <h3 className="text-xl font-bold">Sign in to interview candidates</h3>
             <p className="text-sm text-muted-foreground flex-1">
               A free account adds AI interviews, unlimited resumes per run, and
               saved run history with side-by-side comparison within each run.
             </p>
-            <Button asChild className="w-full gap-2">
+            <Button asChild className="w-full gap-2 rounded-full">
               <Link href="/login">
                 Create a free account <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
           </Card>
 
-          <Card className="p-8 gap-4">
+          <Card className="p-8 gap-4 rounded-3xl">
             <h3 className="text-xl font-bold">Just want to try it?</h3>
             <p className="text-sm text-muted-foreground flex-1">
               No account needed. Evaluate up to {MAX_ANONYMOUS_RESUMES} resumes
               against a job description and get results by email and a
               shareable link.
             </p>
-            <Button asChild variant="outline" className="w-full gap-2">
+            <Button asChild variant="outline" className="w-full gap-2 rounded-full">
               <Link href="/demo">
                 Try it free <ArrowRight className="w-4 h-4" />
               </Link>
