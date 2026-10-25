@@ -1,3 +1,7 @@
+import { CircleCheck, CircleDashed, Contrast, type LucideIcon } from "lucide-react";
+
+import type { SkillGroupDetail } from "@/services/batch";
+
 export const statusStyles: Record<string, string> = {
   completed: "bg-success text-success-foreground border-success-edge",
   processing: "bg-info text-info-foreground border-info-edge",
@@ -40,6 +44,40 @@ export const matchTypeLabels: Record<string, string> = {
   partial: "Partial match",
   none: "No match",
 };
+
+// Best first: the breakdown panel's rows and the compare summary both read
+// in this order.
+export const MATCH_TYPES = ["exact", "partial", "none"] as const;
+
+// Icon form of a match type, for places too dense for a labelled badge (the
+// panel's row labels, the compare matrix cells).
+export const matchTypeIcons: Record<
+  (typeof MATCH_TYPES)[number],
+  { icon: LucideIcon; iconClass: string; barClass: string }
+> = {
+  exact: { icon: CircleCheck, iconClass: "text-success-foreground", barClass: "bg-success-bar" },
+  partial: { icon: Contrast, iconClass: "text-warning-foreground", barClass: "bg-warning-bar" },
+  none: { icon: CircleDashed, iconClass: "text-muted-foreground", barClass: "bg-muted-foreground/25" },
+};
+
+/** The resume's name for a matched skill, or null when it adds nothing: a
+ * miss has nothing to cite (the model often fills in "N/A" anyway), and
+ * "via Python" on a Python row is noise. */
+export function matchedByText(ev: SkillGroupDetail): string | null {
+  if (ev.match_type === "none" || !ev.matched_by) return null;
+  const by = ev.matched_by.trim().toLowerCase();
+  return ev.skill_options.some((o) => o.trim().toLowerCase() === by) ? null : ev.matched_by;
+}
+
+/** critical_gaps arrives as each group's options joined with ", ", so the
+ * joined list read as one gap per option. Map back to the evaluation to
+ * show one label per requirement. */
+export function criticalGapLabel(gap: string, evaluations: SkillGroupDetail[]): string {
+  const ev = evaluations.find(
+    (e) => e.tier === "critical" && e.skill_options.join(", ") === gap
+  );
+  return ev ? ev.skill_options.join(" / ") : gap;
+}
 
 // Amber is reserved for "waiting on the user", so the middle grade is blue.
 export const relevanceStyles: Record<string, string> = {

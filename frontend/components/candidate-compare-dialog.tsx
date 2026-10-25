@@ -11,10 +11,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  MATCH_TYPES,
   SKILL_TIERS,
+  criticalGapLabel,
+  matchTypeIcons,
   matchTypeLabels,
   matchTypeStyles,
+  matchedByText,
   scoreBarColor,
   signalLabels,
   signalStyles,
@@ -33,6 +38,13 @@ const tierBadgeStyles: Record<string, string> = {
   critical: "bg-error text-error-foreground border-error-edge",
   required: "bg-info text-info-foreground border-info-edge",
   preferred: "bg-muted text-muted-foreground border-border",
+};
+
+// Lowercase forms for the tier summary line ("10 exact · 2 partial").
+const summaryLabels: Record<(typeof MATCH_TYPES)[number], string> = {
+  exact: "exact",
+  partial: "partial",
+  none: "no match",
 };
 
 // The dialog only needs these fields; both page item types (via EvaluationItem)
@@ -116,6 +128,56 @@ function PendingCell({ bd }: { bd: CachedBreakdown }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
+/** One matrix cell: a worded badge (icons alone were hard to read) and the
+ * resume's name for the skill, with the evidence on hover or focus. */
+function SkillMatchCell({ ev }: { ev: SkillGroupDetail }) {
+  const label = matchTypeLabels[ev.match_type] || ev.match_type;
+  const matchedBy = matchedByText(ev);
+  return (
+    <div className="space-y-1">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge asChild variant="outline" className={cn("cursor-default", matchTypeStyles[ev.match_type])}>
+            <button type="button">{label}</button>
+          </Badge>
+        </TooltipTrigger>
+        {ev.evidence && (
+          <TooltipContent side="top" className="max-w-xs text-left text-pretty">
+            {ev.evidence}
+          </TooltipContent>
+        )}
+      </Tooltip>
+      {matchedBy && (
+        <p className="text-xs text-muted-foreground break-words">via {matchedBy}</p>
+      )}
+    </div>
+  );
+}
+
+/** A candidate's match counts for one tier, as a segmented bar plus worded
+ * counts, so tiers compare at a glance before any individual row. */
+function TierSummary({ evaluations }: { evaluations: SkillGroupDetail[] }) {
+  const counts = MATCH_TYPES.map((t) => evaluations.filter((ev) => ev.match_type === t).length);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+        {MATCH_TYPES.map((t, i) =>
+          counts[i] > 0 ? (
+            <div
+              key={t}
+              className={matchTypeIcons[t].barClass}
+              style={{ width: `${(counts[i] / evaluations.length) * 100}%` }}
+            />
+          ) : null
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground tabular-nums">
+        {MATCH_TYPES.map((t, i) => `${counts[i]} ${summaryLabels[t]}`).join(" · ")}
+      </p>
+    </div>
+  );
+}
+
 function ScoreRow({
   label,
   icon,
@@ -166,6 +228,16 @@ export function CandidateCompareDialog({
   onRemove,
 }: CandidateCompareDialogProps) {
   const n = candidates.length;
+  // Rows where every candidate matched the same way can't separate them, so
+  // each tier folds them into a chip line until that tier is expanded.
+  const [expandedTiers, setExpandedTiers] = React.useState<Set<string>>(() => new Set());
+  const toggleTier = (tier: string) =>
+    setExpandedTiers((prev) => {
+      const next = new Set(prev);
+      if (next.has(tier)) next.delete(tier);
+      else next.add(tier);
+      return next;
+    });
 
   // Union of skill requirement groups across candidates, grouped by tier.
   // Skill groups come from the job requirements, so they align across
@@ -209,12 +281,21 @@ export function CandidateCompareDialog({
     (c) => c.candidate_id && breakdowns[c.candidate_id] === "error"
   );
 
-  const sectionHeader = (label: string, extraClass?: string) => (
+  /** Each candidate's evaluation for a row, or undefined while loading. */
+  const rowEvaluations = (key: string) =>
+    candidates.map((c) => (c.candidate_id ? skillLookup.get(c.candidate_id)?.get(key) : undefined));
+
+  // Only once every candidate has loaded can a row be called identical.
+  const isIdentical = (key: string) => {
+    const evs = rowEvaluations(key);
+    return evs.every((ev) => ev && ev.match_type === evs[0]?.match_type);
+  };
+
+  const firstTier = SKILL_TIERS.find((t) => (skillRows.get(t)?.length ?? 0) > 0);
+
+  const sectionHeader = (label: string) => (
     <div
-      className={cn(
-        "px-4 py-2 bg-muted/60 border-b border-border text-xs font-semibold text-foreground",
-        extraClass
-      )}
+      className="px-4 py-2 bg-muted/60 border-b border-border text-xs font-semibold text-foreground"
       style={{ gridColumn: `1 / span ${n + 1}` }}
     >
       {label}
@@ -304,7 +385,9 @@ export function CandidateCompareDialog({
                   {skills ? (
                     skills.critical_gaps.length > 0 ? (
                       <p className="text-error-foreground font-medium break-words">
-                        {skills.critical_gaps.join(", ")}
+                        {skills.critical_gaps
+                          .map((gap) => criticalGapLabel(gap, skills.llm_response.evaluations))
+                          .join(", ")}
                       </p>
                     ) : (
                       <span className="text-muted-foreground">None</span>
@@ -346,12 +429,25 @@ export function CandidateCompareDialog({
               const rows = skillRows.get(tier);
               if (!rows || rows.length === 0) return null;
               const { label } = tierSectionStyles[tier];
+              const expanded = expandedTiers.has(tier);
+              // Chips run exact, partial, no match, so like matches sit together.
+              const identical = rows
+                .filter((row) => isIdentical(row.key))
+                .sort(
+                  (a, b) =>
+                    MATCH_TYPES.indexOf(rowEvaluations(a.key)[0]!.match_type) -
+                    MATCH_TYPES.indexOf(rowEvaluations(b.key)[0]!.match_type)
+                );
+              const visible = expanded ? rows : rows.filter((row) => !isIdentical(row.key));
               return (
                 <React.Fragment key={tier}>
-                  <div
-                    className="px-4 py-2 bg-muted/40 border-b border-border"
-                    style={{ gridColumn: `1 / span ${n + 1}` }}
-                  >
+                  {/* A gap plus a tinted header row, so one tier's last row
+                      can't be read as the start of the next. */}
+                  {tier !== firstTier && (
+                    <div className="h-4" style={{ gridColumn: `1 / span ${n + 1}` }} />
+                  )}
+                  {/* Tier row doubles as each candidate's summary for it. */}
+                  <LabelCell className="bg-muted border-t">
                     <span
                       className={cn(
                         "inline-block rounded-md border px-2 py-0.5 text-xs font-semibold",
@@ -360,42 +456,74 @@ export function CandidateCompareDialog({
                     >
                       {label}
                     </span>
-                  </div>
-                  {rows.map((row) => (
-                    <React.Fragment key={row.key}>
-                      <LabelCell className="text-foreground font-medium normal-case">
-                        {row.label}
-                      </LabelCell>
-                      {candidates.map((c, i) => {
-                        const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
-                        const ev = c.candidate_id
-                          ? skillLookup.get(c.candidate_id)?.get(row.key)
-                          : undefined;
-                        return (
-                          <ValueCell key={c.candidate_id ?? i}>
-                            {ev ? (
-                              <div className="space-y-1">
-                                <Badge
-                                  variant="outline"
-                                  className={matchTypeStyles[ev.match_type]}
-                                  title={ev.reasoning}
-                                >
-                                  {matchTypeLabels[ev.match_type] || ev.match_type}
-                                </Badge>
-                                {ev.matched_by && ev.match_type !== "none" && (
-                                  <p className="text-xs text-muted-foreground break-words">
-                                    via {ev.matched_by}
-                                  </p>
-                                )}
-                              </div>
-                            ) : (
-                              <PendingCell bd={bd} />
-                            )}
-                          </ValueCell>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
+                  </LabelCell>
+                  {candidates.map((c, i) => {
+                    const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
+                    const map = c.candidate_id ? skillLookup.get(c.candidate_id) : undefined;
+                    const evs = map ? Array.from(map.values()).filter((ev) => ev.tier === tier) : [];
+                    return (
+                      <ValueCell key={c.candidate_id ?? i} className="bg-muted border-t">
+                        {evs.length > 0 ? <TierSummary evaluations={evs} /> : <PendingCell bd={bd} />}
+                      </ValueCell>
+                    );
+                  })}
+                  {/* Folded rows stay readable as chips: every candidate shares
+                      the match, so one word per skill says it all. Placed under
+                      the tier header so it reads as part of this tier. */}
+                  {identical.length > 0 && (
+                    <div
+                      className="px-4 py-2.5 border-b border-border flex flex-wrap items-center gap-1.5 text-xs"
+                      style={{ gridColumn: `1 / span ${n + 1}` }}
+                    >
+                      <span className="mr-1 text-muted-foreground">
+                        {expanded ? "Showing all skills" : "Same for all candidates"}
+                      </span>
+                      {!expanded &&
+                        identical.map((row) => {
+                          const type = rowEvaluations(row.key)[0]!.match_type;
+                          return (
+                            <span
+                              key={row.key}
+                              className={cn(
+                                "rounded-md border border-border px-2 py-0.5 text-foreground break-words",
+                                type === "none" && "border-dashed"
+                              )}
+                            >
+                              {row.label}
+                              <span className={matchTypeIcons[type].iconClass}>
+                                {" · "}{summaryLabels[type]}
+                              </span>
+                            </span>
+                          );
+                        })}
+                      <button
+                        type="button"
+                        onClick={() => toggleTier(tier)}
+                        className="ml-1 font-medium text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
+                      >
+                        {expanded ? "Show differences only" : "Show as rows"}
+                      </button>
+                    </div>
+                  )}
+                  {visible.map((row) => {
+                    const evs = rowEvaluations(row.key);
+                    return (
+                      <React.Fragment key={row.key}>
+                        <LabelCell className="py-2 text-foreground font-medium normal-case">
+                          {row.label}
+                        </LabelCell>
+                        {candidates.map((c, i) => {
+                          const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
+                          const ev = evs[i];
+                          return (
+                            <ValueCell key={c.candidate_id ?? i} className="py-2">
+                              {ev ? <SkillMatchCell ev={ev} /> : <PendingCell bd={bd} />}
+                            </ValueCell>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
                 </React.Fragment>
               );
             })}

@@ -9,9 +9,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
+  MATCH_TYPES,
   SKILL_TIERS,
+  criticalGapLabel,
+  matchTypeIcons,
   matchTypeLabels,
   matchTypeStyles,
+  matchedByText,
   relevanceStyles,
   scoreBarColor,
   tierSectionStyles,
@@ -21,9 +25,6 @@ import type { CachedInterview } from "@/lib/interview-types";
 import type { CandidateBreakdown, SkillGroupDetail } from "@/services/batch";
 
 const STRENGTHS_PREVIEW = 6;
-
-// Misses first: they are what a recruiter scans a tier for.
-const MATCH_ORDER: Record<string, number> = { none: 0, partial: 1, exact: 2 };
 
 /** The section with the lowest score, so the panel opens on whatever pulled
  * the candidate down. Ties keep the card order. */
@@ -56,16 +57,6 @@ function formatMonth(value: string): string {
   const [year, month] = value.split("-").map(Number);
   if (!year || !month) return value;
   return new Date(year, month - 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
-}
-
-/** critical_gaps arrives as each group's options joined with ", ", so the
- * joined list read as one gap per option. Map back to the evaluation to
- * render one chip per requirement. */
-function gapLabel(gap: string, evaluations: SkillGroupDetail[]): string {
-  const ev = evaluations.find(
-    (e) => e.tier === "critical" && e.skill_options.join(", ") === gap
-  );
-  return ev ? ev.skill_options.join(" / ") : gap;
 }
 
 /** Text clamped to two lines, with a toggle only when it actually overflows. */
@@ -102,56 +93,124 @@ function ClampedText({ text, className }: { text: string; className?: string }) 
   );
 }
 
-function SkillRow({ ev }: { ev: SkillGroupDetail }) {
+/** The clicked chip's evidence, shown once per tier under its chip rows. */
+function SkillDetail({ ev, onClose }: { ev: SkillGroupDetail; onClose: () => void }) {
   const [open, setOpen] = useState(false);
-  // "Matched by: Python" under a "Python" row says nothing; keep it only
-  // when the resume used a different name for the skill.
-  const showMatchedBy =
-    !!ev.matched_by &&
-    !ev.skill_options.some((o) => o.trim().toLowerCase() === ev.matched_by!.trim().toLowerCase());
+  const matchedBy = matchedByText(ev);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} asChild>
-      <li className="px-3 py-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-0.5">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-medium text-sm text-foreground break-words">
-                {ev.skill_options.join(" / ")}
-              </span>
-              <Badge variant="outline" className={matchTypeStyles[ev.match_type]}>
-                {matchTypeLabels[ev.match_type] || ev.match_type}
-              </Badge>
-              {showMatchedBy && (
-                <span className="text-xs text-muted-foreground break-words">
-                  via <span className="font-medium text-foreground">{ev.matched_by}</span>
-                </span>
-              )}
-            </div>
-            {ev.evidence && (
-              <p className={cn("text-xs text-muted-foreground break-words", !open && "line-clamp-1")}>
-                {ev.evidence}
-              </p>
-            )}
-          </div>
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="shrink-0 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted aria-expanded:text-foreground aria-expanded:bg-muted cursor-pointer"
-            >
-              Reasoning
-              <ChevronDown
-                className={cn("w-3.5 h-3.5 transition-transform", open && "rotate-180")}
-                aria-hidden
-              />
-            </button>
-          </CollapsibleTrigger>
+    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 space-y-1">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium text-sm text-foreground break-words">
+            {ev.skill_options.join(" / ")}
+          </span>
+          <Badge variant="outline" className={matchTypeStyles[ev.match_type]}>
+            {matchTypeLabels[ev.match_type] || ev.match_type}
+          </Badge>
+          {matchedBy && (
+            <span className="text-xs text-muted-foreground break-words">
+              via <span className="font-medium text-foreground">{matchedBy}</span>
+            </span>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close skill details"
+          className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+        >
+          <X className="w-3.5 h-3.5" aria-hidden />
+        </button>
+      </div>
+      {ev.evidence && <p className="text-xs text-muted-foreground break-words">{ev.evidence}</p>}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="-ml-1.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted aria-expanded:text-foreground aria-expanded:bg-muted cursor-pointer"
+          >
+            Reasoning
+            <ChevronDown
+              className={cn("w-3.5 h-3.5 transition-transform", open && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+        </CollapsibleTrigger>
         <CollapsibleContent>
-          <p className="mt-1.5 text-xs text-foreground/80 break-words">{ev.reasoning}</p>
+          <p className="mt-1 text-xs text-foreground/80 break-words">{ev.reasoning}</p>
         </CollapsibleContent>
-      </li>
-    </Collapsible>
+      </Collapsible>
+    </div>
+  );
+}
+
+// The row label carries the match colour; chips stay neutral so a tier
+// doesn't turn into a wall of tinted pills. A dashed chip reads as absent.
+const chipClasses: Record<(typeof MATCH_TYPES)[number], string> = {
+  exact: "border-border text-foreground",
+  partial: "border-border text-foreground",
+  none: "border-dashed border-border text-foreground",
+};
+
+/** One tier: a labelled chip row per match type, and the selected chip's
+ * detail below them. */
+function SkillTier({ tier, evaluations }: { tier: string; evaluations: SkillGroupDetail[] }) {
+  const [selected, setSelected] = useState<number | null>(null);
+
+  // No tier-level count: the row labels already carry one per match type,
+  // and a "matched" total counted partials as matches.
+  return (
+    <section>
+      <div className="px-4 pt-3 pb-3 space-y-2.5">
+        <h4 className={cn("text-sm font-semibold", tierSectionStyles[tier].headerClass)}>
+          {tierSectionStyles[tier].label}
+        </h4>
+        {/* Exact first: critical gaps are already called out above the
+            sections, so each tier leads with what the candidate brings. */}
+        {MATCH_TYPES.map((group) => {
+          const indices = evaluations.flatMap((ev, i) => (ev.match_type === group ? [i] : []));
+          if (indices.length === 0) return null;
+          const { icon: Icon, iconClass } = matchTypeIcons[group];
+          const chipClass = chipClasses[group];
+          return (
+            <div key={group} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">
+              <span className="shrink-0 sm:w-32 sm:pt-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Icon className={cn("w-3.5 h-3.5", iconClass)} aria-hidden />
+                {matchTypeLabels[group]}
+                <span className="font-normal tabular-nums">{indices.length}</span>
+              </span>
+              <div className="min-w-0 flex flex-wrap items-center gap-1.5">
+                {indices.map((i) => {
+                  const isSelected = selected === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-expanded={isSelected}
+                      onClick={() => setSelected(isSelected ? null : i)}
+                      className={cn(
+                        "max-w-full rounded-md border px-2 py-1 text-left text-xs break-words cursor-pointer transition-colors hover:bg-muted hover:text-foreground",
+                        chipClass,
+                        isSelected && "bg-muted text-foreground border-foreground/30 border-solid"
+                      )}
+                    >
+                      {evaluations[i].skill_options.join(" / ")}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {/* Inset inside the tier so it reads as belonging to the chip, not
+            as a section of its own. Keyed so switching chips resets the
+            Reasoning toggle. */}
+        {selected !== null && evaluations[selected] && (
+          <SkillDetail key={selected} ev={evaluations[selected]} onClose={() => setSelected(null)} />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -287,7 +346,7 @@ export function CandidateBreakdownPanel({
                             variant="outline"
                             className="border-error-edge text-foreground whitespace-normal break-words"
                           >
-                            {gapLabel(gap, loaded.skills!.llm_response.evaluations)}
+                            {criticalGapLabel(gap, loaded.skills!.llm_response.evaluations)}
                           </Badge>
                         ))}
                       </div>
@@ -321,32 +380,21 @@ export function CandidateBreakdownPanel({
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <Zap className="w-3.5 h-3.5" />
                     Skill evaluation
+                    {/* Chips don't look like buttons, so say they open. */}
+                    <span className="ml-auto text-xs text-muted-foreground font-normal">
+                      Click a skill to see its evidence
+                    </span>
                   </h3>
 
-                  {SKILL_TIERS.map((tier) => {
-                    const evsForTier = loaded.skills!.llm_response.evaluations
-                      .filter((ev) => ev.tier === tier)
-                      .sort((a, b) => (MATCH_ORDER[a.match_type] ?? 0) - (MATCH_ORDER[b.match_type] ?? 0));
-                    if (evsForTier.length === 0) return null;
-                    const matched = evsForTier.filter((ev) => ev.match_type !== "none").length;
-                    return (
-                      <div key={tier} className="space-y-1.5">
-                        <p className="text-xs font-semibold text-muted-foreground">
-                          <span className={tierSectionStyles[tier].headerClass}>
-                            {tierSectionStyles[tier].label}
-                          </span>
-                          <span className="font-normal">
-                            {" · "}{matched} of {evsForTier.length} matched
-                          </span>
-                        </p>
-                        <ul className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
-                          {evsForTier.map((ev, i) => (
-                            <SkillRow key={i} ev={ev} />
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
+                  <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
+                    {SKILL_TIERS.map((tier) => {
+                      const evsForTier = loaded.skills!.llm_response.evaluations.filter(
+                        (ev) => ev.tier === tier
+                      );
+                      if (evsForTier.length === 0) return null;
+                      return <SkillTier key={tier} tier={tier} evaluations={evsForTier} />;
+                    })}
+                  </div>
                 </div>
               )}
 
