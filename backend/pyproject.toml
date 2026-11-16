@@ -38,7 +38,13 @@ dev = [
     "pre-commit>=4.5.0",
     "ruff>=0.14.6",
     "pytest>=9.1.1",
+    "fakeredis>=2.40.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
 
 [tool.mypy]
 strict = true
@@ -58,3 +64,6 @@ select = [
     "G",  # logging-format: %-style args, not f-strings or .format()
     "LOG",  # logging misuse (e.g. root-logger calls, exc_info outside except)
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "helpers"]

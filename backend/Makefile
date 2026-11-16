@@ -69,6 +69,9 @@ lint:  ## Lint code
 	uv run ruff check .
 	@echo "✓ Lint passed"
 
+test:  ## Run the test suite
+	uv run pytest -q
+
 format:  ## Format code
 	@echo "Formatting code..."
 	uv run ruff format .

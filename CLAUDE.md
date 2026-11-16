@@ -73,7 +73,13 @@ docker compose up     # Start PostgreSQL (5433), Redis (6380), API (8000), Worke
 
 ### Testing
 
-There is no test suite yet — no pytest, no vitest, no test files anywhere in the repo.
+```bash
+make test             # from backend/; needs a local Postgres
+```
+
+`backend/tests/` is a small, fixed suite of core invariants: scoring math, the rate limiter, auth and ownership boundaries, the anonymous resume cap, and interview redaction. It uses a real Postgres (a separate `test-recruit-ai` database on `localhost:5432`, created on first run and rolled back per test) and fakeredis, and fails any test that reaches an LLM. There is no frontend test suite.
+
+New features do not add tests unless they change one of those invariants.
 
 ## Architecture
 
@@ -186,7 +192,7 @@ Frontend: `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`), `NEXT_PUBLIC_
 
 - **Backend:** Ruff for linting/formatting (`I` isort, plus `G`/`LOG` so f-string log calls fail lint), MyPy strict mode, `alembic/` excluded from both
 - **Frontend:** ESLint with Next.js config, TypeScript strict
-- **CI** (`.github/workflows/ci.yml`) runs on pull requests to `main` only: backend `ruff check` + `ruff format --check` + `mypy app`; frontend `pnpm lint` + `pnpm typecheck`. No build or test step.
+- **CI** (`.github/workflows/ci.yml`) runs on pull requests to `main` only: backend `ruff check` + `ruff format --check` + `mypy app`, plus `pytest` against a Postgres service container; frontend `pnpm lint` + `pnpm typecheck`. No build step.
 - **Git hooks are split:** husky at the repo root runs lint-staged (ESLint) on staged `*.{ts,tsx}`; ruff runs through a separate `pre-commit install` inside `backend/`.
 
 ## Deployment
