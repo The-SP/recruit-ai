@@ -40,7 +40,7 @@ jobs:
         run: uv run mypy app
 
   frontend:
-    name: Frontend (eslint)
+    name: Frontend (eslint + tsc)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -65,3 +65,6 @@ jobs:
 
       - name: ESLint
         run: pnpm lint
+
+      - name: TypeScript
+        run: pnpm typecheck
