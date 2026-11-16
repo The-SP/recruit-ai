@@ -286,50 +286,73 @@ export function CandidateBreakdownPanel({
                   than rounded server-side, so it disagreed with the bars. */}
 
               {/* Score cards double as the section toggles; the chevron and
-                  aria-expanded say so. */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {([
+                  aria-expanded say so. A null score means the JD had no
+                  requirement for that component, so the backend dropped it
+                  and reweighted the rest: no card, since it would read as 0%. */}
+              {(() => {
+                const cards = ([
                   { key: "skills" as BreakdownSection, label: "Skills", value: loaded.skill_score, icon: <Zap className="w-4 h-4" /> },
                   { key: "experience" as BreakdownSection, label: "Experience", value: loaded.experience_score, icon: <Briefcase className="w-4 h-4" /> },
                   { key: "education" as BreakdownSection, label: "Education", value: loaded.education_score, icon: <BookOpen className="w-4 h-4" /> },
-                ]).map(({ key, label, value, icon }) => {
-                  const isActive = activeSection === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleBarClick(key)}
-                      aria-expanded={isActive}
+                ]);
+                const scored = cards.filter((c) => c.value != null);
+                const unscored = cards.filter((c) => c.value == null).map((c) => c.label.toLowerCase());
+                return (
+                  <div className="space-y-2">
+                    <div
                       className={cn(
-                        "text-left rounded-xl p-3 space-y-1.5 border transition-all cursor-pointer select-none",
-                        isActive
-                          ? "bg-muted border-foreground/20 shadow-sm"
-                          : "bg-card/50 border-border/60 hover:border-border hover:bg-card hover:shadow-sm"
+                        "grid grid-cols-1 gap-3",
+                        scored.length === 3 && "sm:grid-cols-3",
+                        scored.length === 2 && "sm:grid-cols-2"
                       )}
                     >
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className={cn("flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground")}>
-                          {icon}
-                          {label}
-                        </span>
-                        <span className={cn("flex items-center gap-1", isActive ? "text-foreground" : "text-muted-foreground")}>
-                          {value != null ? `${Math.round(value * 100)}%` : "N/A"}
-                          <ChevronDown
-                            className={cn("w-3.5 h-3.5 transition-transform", isActive && "rotate-180")}
-                            aria-hidden
-                          />
-                        </span>
-                      </div>
-                      {/* Neutral track: the default primary-tinted one put a
-                          green wash behind amber and red bars. */}
-                      <Progress
-                        value={value != null ? Math.round(value * 100) : 0}
-                        className={cn("h-2 bg-muted", value != null && scoreBarColor(value))}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
+                      {scored.map(({ key, label, value, icon }) => {
+                        const isActive = activeSection === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleBarClick(key)}
+                            aria-expanded={isActive}
+                            className={cn(
+                              "text-left rounded-xl p-3 space-y-1.5 border transition-all cursor-pointer select-none",
+                              isActive
+                                ? "bg-muted border-foreground/20 shadow-sm"
+                                : "bg-card/50 border-border/60 hover:border-border hover:bg-card hover:shadow-sm"
+                            )}
+                          >
+                            <div className="flex items-center justify-between text-xs font-semibold">
+                              <span className={cn("flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground")}>
+                                {icon}
+                                {label}
+                              </span>
+                              <span className={cn("flex items-center gap-1", isActive ? "text-foreground" : "text-muted-foreground")}>
+                                {value != null ? `${Math.round(value * 100)}%` : "N/A"}
+                                <ChevronDown
+                                  className={cn("w-3.5 h-3.5 transition-transform", isActive && "rotate-180")}
+                                  aria-hidden
+                                />
+                              </span>
+                            </div>
+                            {/* Neutral track: the default primary-tinted one put a
+                                green wash behind amber and red bars. */}
+                            <Progress
+                              value={value != null ? Math.round(value * 100) : 0}
+                              className={cn("h-2 bg-muted", value != null && scoreBarColor(value))}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {unscored.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {unscored.join(" and ").replace(/^./, (c) => c.toUpperCase())} not scored: the job
+                        description sets no requirement for {unscored.length === 1 ? "it" : "them"}.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* The two facts that explain the score, visible without opening
                   a section. A critical gap halves the skill score, so it leads. */}

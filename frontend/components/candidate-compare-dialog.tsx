@@ -281,6 +281,17 @@ export function CandidateCompareDialog({
     (c) => c.candidate_id && breakdowns[c.candidate_id] === "error"
   );
 
+  // A component the JD sets no requirement for is skipped by the backend for
+  // every candidate in the run, so its row would be all dashes. Hide it once
+  // a breakdown has loaded and confirmed that (rows stay while loading).
+  const loadedBreakdowns = candidates
+    .map((c) => (c.candidate_id ? loaded(breakdowns[c.candidate_id]) : null))
+    .filter((bd): bd is CandidateBreakdown => bd != null);
+  const isUnscored = (getScore: (bd: CandidateBreakdown) => number | null) =>
+    loadedBreakdowns.length > 0 && loadedBreakdowns.every((bd) => getScore(bd) == null);
+  const showExperience = !isUnscored((bd) => bd.experience_score);
+  const showEducation = !isUnscored((bd) => bd.education_score);
+
   /** Each candidate's evaluation for a row, or undefined while loading. */
   const rowEvaluations = (key: string) =>
     candidates.map((c) => (c.candidate_id ? skillLookup.get(c.candidate_id)?.get(key) : undefined));
@@ -408,20 +419,24 @@ export function CandidateCompareDialog({
               breakdowns={breakdowns}
               getScore={(bd) => bd.skill_score}
             />
-            <ScoreRow
-              label="Experience"
-              icon={<Briefcase className="w-3.5 h-3.5" />}
-              candidates={candidates}
-              breakdowns={breakdowns}
-              getScore={(bd) => bd.experience_score}
-            />
-            <ScoreRow
-              label="Education"
-              icon={<BookOpen className="w-3.5 h-3.5" />}
-              candidates={candidates}
-              breakdowns={breakdowns}
-              getScore={(bd) => bd.education_score}
-            />
+            {showExperience && (
+              <ScoreRow
+                label="Experience"
+                icon={<Briefcase className="w-3.5 h-3.5" />}
+                candidates={candidates}
+                breakdowns={breakdowns}
+                getScore={(bd) => bd.experience_score}
+              />
+            )}
+            {showEducation && (
+              <ScoreRow
+                label="Education"
+                icon={<BookOpen className="w-3.5 h-3.5" />}
+                candidates={candidates}
+                breakdowns={breakdowns}
+                getScore={(bd) => bd.education_score}
+              />
+            )}
 
             {/* Skill matrix */}
             {skillRows.size > 0 && sectionHeader("Skill matrix")}
@@ -472,37 +487,41 @@ export function CandidateCompareDialog({
                       the tier header so it reads as part of this tier. */}
                   {identical.length > 0 && (
                     <div
-                      className="px-4 py-2.5 border-b border-border flex flex-wrap items-center gap-1.5 text-xs"
+                      className="px-4 py-2.5 border-b border-border flex flex-col gap-1.5 sm:flex-row sm:items-baseline sm:gap-2.5 text-xs"
                       style={{ gridColumn: `1 / span ${n + 1}` }}
                     >
-                      <span className="mr-1 text-muted-foreground">
+                      {/* Own column so wrapped chips hang under the first
+                          chip, not under the label. */}
+                      <span className="shrink-0 text-muted-foreground">
                         {expanded ? "Showing all skills" : "Same for all candidates"}
                       </span>
-                      {!expanded &&
-                        identical.map((row) => {
-                          const type = rowEvaluations(row.key)[0]!.match_type;
-                          return (
-                            <span
-                              key={row.key}
-                              className={cn(
-                                "rounded-md border border-border px-2 py-0.5 text-foreground break-words",
-                                type === "none" && "border-dashed"
-                              )}
-                            >
-                              {row.label}
-                              <span className={matchTypeIcons[type].iconClass}>
-                                {" · "}{summaryLabels[type]}
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        {!expanded &&
+                          identical.map((row) => {
+                            const type = rowEvaluations(row.key)[0]!.match_type;
+                            return (
+                              <span
+                                key={row.key}
+                                className={cn(
+                                  "rounded-md border border-border px-2 py-0.5 text-foreground break-words",
+                                  type === "none" && "border-dashed"
+                                )}
+                              >
+                                {row.label}
+                                <span className={matchTypeIcons[type].iconClass}>
+                                  {" · "}{summaryLabels[type]}
+                                </span>
                               </span>
-                            </span>
-                          );
-                        })}
-                      <button
-                        type="button"
-                        onClick={() => toggleTier(tier)}
-                        className="ml-1 font-medium text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
-                      >
-                        {expanded ? "Show differences only" : "Show as rows"}
-                      </button>
+                            );
+                          })}
+                        <button
+                          type="button"
+                          onClick={() => toggleTier(tier)}
+                          className="ml-1 font-medium text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer"
+                        >
+                          {expanded ? "Show differences only" : "Show as rows"}
+                        </button>
+                      </div>
                     </div>
                   )}
                   {visible.map((row) => {
@@ -578,34 +597,38 @@ export function CandidateCompareDialog({
             })}
 
             {/* Education */}
-            {sectionHeader("Education")}
-            <LabelCell>
-              <BookOpen className="w-3.5 h-3.5" />
-              Degree
-            </LabelCell>
-            {candidates.map((c, i) => {
-              const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
-              const edu = loaded(bd)?.education;
-              return (
-                <ValueCell key={c.candidate_id ?? i}>
-                  {edu ? (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {edu.candidate_degree ?? "—"}
-                        {edu.field_of_study && (
-                          <span className="text-muted-foreground font-normal">
-                            {" — "}{edu.field_of_study}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{edu.summary}</p>
-                    </div>
-                  ) : (
-                    <PendingCell bd={bd} />
-                  )}
-                </ValueCell>
-              );
-            })}
+            {showEducation && (
+              <>
+                {sectionHeader("Education")}
+                <LabelCell>
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Degree
+                </LabelCell>
+                {candidates.map((c, i) => {
+                  const bd = c.candidate_id ? breakdowns[c.candidate_id] : undefined;
+                  const edu = loaded(bd)?.education;
+                  return (
+                    <ValueCell key={c.candidate_id ?? i}>
+                      {edu ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">
+                            {edu.candidate_degree ?? "—"}
+                            {edu.field_of_study && (
+                              <span className="text-muted-foreground font-normal">
+                                {" — "}{edu.field_of_study}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{edu.summary}</p>
+                        </div>
+                      ) : (
+                        <PendingCell bd={bd} />
+                      )}
+                    </ValueCell>
+                  );
+                })}
+              </>
+            )}
           </div>
 
           {anyError && (
