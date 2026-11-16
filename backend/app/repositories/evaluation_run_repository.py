@@ -282,8 +282,12 @@ class EvaluationRunRepository:
         limit: int = 50,
         offset: int = 0,
         with_job: bool = True,
+        search: str | None = None,
     ) -> list[EvaluationRun]:
-        """List non-draft runs for a user, newest first."""
+        """List non-draft runs for a user, newest first.
+
+        `search` matches job title or company (case-insensitive substring).
+        """
         stmt = (
             select(EvaluationRun)
             .where(EvaluationRun.user_id == user_id)
@@ -292,6 +296,7 @@ class EvaluationRunRepository:
             .limit(limit)
             .offset(offset)
         )
+        stmt = self._apply_owner_search(stmt, search)
         if with_job:
             stmt = stmt.options(joinedload(EvaluationRun.job))
         return list(self.db.scalars(stmt).unique().all())
@@ -383,15 +388,34 @@ class EvaluationRunRepository:
         )
         return self.db.scalars(stmt).first()
 
-    def count_by_user(self, user_id: UUID) -> int:
-        """Count non-draft runs for a user."""
+    def count_by_user(self, user_id: UUID, search: str | None = None) -> int:
+        """Count non-draft runs for a user, with the same `search` as get_by_user."""
         stmt = (
             select(func.count())
             .select_from(EvaluationRun)
             .where(EvaluationRun.user_id == user_id)
             .where(EvaluationRun.status != RunStatus.DRAFT.value)
         )
+        stmt = self._apply_owner_search(stmt, search)
         return self.db.scalar(stmt) or 0
+
+    @staticmethod
+    def _apply_owner_search(stmt: Any, search: str | None) -> Any:
+        """Filter an owner's runs by job title or company.
+
+        `%`, `_` and `\\` are escaped so the term matches literally: a search
+        for "100%" shouldn't match every title containing "100". Emails are
+        not matched (unlike the admin `_apply_search`): every run here has
+        the same owner.
+        """
+        if not search:
+            return stmt
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        return stmt.outerjoin(EvaluationRun.job).where(
+            Job.title.ilike(pattern, escape="\\")
+            | Job.company_name.ilike(pattern, escape="\\")
+        )
 
     def sum_candidates_by_user(self, user_id: UUID) -> int:
         """Sum total_count across all non-draft runs for a user."""

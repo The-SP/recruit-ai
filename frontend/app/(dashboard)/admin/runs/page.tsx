@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
+
+import {
+  ListPagination,
+  PAGE_SIZE,
+  pageHref,
+  parsePage,
+} from "@/components/list-pagination";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -21,8 +29,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiError } from "@/services/api";
-import { listAllRuns, type AdminRunRow } from "@/services/admin";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { useUrlSearch } from "@/hooks/use-url-search";
+import { listAllRuns } from "@/services/admin";
 import { statusLabels, statusStyles } from "@/lib/evaluation-styles";
 
 // "all" is the sentinel for no filter — Radix Select cannot hold an empty
@@ -37,54 +46,53 @@ const STATUS_OPTIONS = [
   { value: "draft", label: "Draft (abandoned)" },
 ];
 
-export default function AdminRunsPage() {
-  const [items, setItems] = useState<AdminRunRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [status, setStatus] = useState("all");
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const STATUS_VALUES = new Set(STATUS_OPTIONS.map((opt) => opt.value));
 
-  // Debounce keystrokes so each character doesn't fire its own request.
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(id);
-  }, [search]);
+// Filters live in the URL next to ?page= so a refresh or back keeps them, and
+// a filter change resets to page 1 in the same navigation (no race between
+// "new filter" and "back to page 1").
+function listHref(page: number, status: string, q: string): string {
+  return pageHref("/admin/runs", page, {
+    status: status === "all" ? undefined : status,
+    q,
+  });
+}
 
-  useEffect(() => {
-    // `cancelled` drops a response whose filter has since been changed, so a
-    // fast switch can't leave the slower request's rows on screen.
-    let cancelled = false;
-    listAllRuns(
-      100,
-      0,
-      status === "all" ? undefined : status,
-      debouncedSearch || undefined,
-    )
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load runs.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status, debouncedSearch]);
+function AdminRunsPageInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const page = parsePage(params.get("page"));
+  const rawStatus = params.get("status");
+  const status = rawStatus && STATUS_VALUES.has(rawStatus) ? rawStatus : "all";
+  const q = params.get("q") ?? "";
 
-  // The spinner is reset here rather than in the effect: setState in an effect
-  // body cascades renders, and the filter change is the real trigger anyway.
+  const fetchPage = useCallback(
+    (limit: number, offset: number) =>
+      listAllRuns(
+        limit,
+        offset,
+        status === "all" ? undefined : status,
+        q || undefined,
+      ),
+    [status, q],
+  );
+  const hrefFor = useCallback((p: number) => listHref(p, status, q), [status, q]);
+  const searchHref = useCallback((next: string) => listHref(1, status, next), [status]);
+
+  const { items, total, shownPage, loading, error, showLoading } = usePagedList({
+    page,
+    fetchPage,
+    hrefFor,
+    errorMessage: "Failed to load runs.",
+  });
+  const [search, setSearch] = useUrlSearch(q, searchHref);
+
+  // A new status filter swaps in the spinner: the old rows would read as
+  // results for the new filter until the response lands.
   function handleStatusChange(next: string) {
-    setStatus(next);
-    setLoading(true);
-    setError(null);
+    if (next === status) return;
+    showLoading();
+    router.replace(listHref(1, next, q));
   }
 
   return (
@@ -137,16 +145,13 @@ export default function AdminRunsPage() {
       {!loading && !error && items.length === 0 && (
         <Card className="p-12 text-center">
           <p className="font-semibold text-muted-foreground">
-            No runs match this {debouncedSearch ? "search" : "filter"}
+            No runs match this {q ? "search" : "filter"}
           </p>
         </Card>
       )}
 
       {!loading && !error && items.length > 0 && (
         <>
-          <p className="text-sm text-muted-foreground">
-            Showing {items.length} of {total}
-          </p>
           <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
             <div className="overflow-x-auto">
               <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
@@ -224,8 +229,25 @@ export default function AdminRunsPage() {
               </Table>
             </div>
           </div>
+          <ListPagination
+            hrefFor={hrefFor}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            shownPage={shownPage}
+            shownCount={items.length}
+          />
         </>
       )}
     </div>
+  );
+}
+
+// useSearchParams (the ?page=/?status=/?q= state) needs a Suspense boundary.
+export default function AdminRunsPage() {
+  return (
+    <Suspense>
+      <AdminRunsPageInner />
+    </Suspense>
   );
 }

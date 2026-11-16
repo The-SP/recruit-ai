@@ -1,7 +1,7 @@
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import enforce_budget, enforce_cooldown, get_db
@@ -224,17 +224,21 @@ async def create_evaluation_run(
 
 @runs_router.get("", response_model=EvaluationRunListResponse)
 def list_evaluation_runs(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    search: str | None = Query(default=None, max_length=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> EvaluationRunListResponse:
-    """List all evaluation runs for the current user, newest first."""
+    """List the current user's evaluation runs, newest first.
+
+    `search` matches job title or company (case-insensitive substring).
+    """
     run_repo = EvaluationRunRepository(db)
     runs = run_repo.get_by_user(
-        current_user.id, limit=limit, offset=offset, with_job=True
+        current_user.id, limit=limit, offset=offset, with_job=True, search=search
     )
-    total = run_repo.count_by_user(current_user.id)
+    total = run_repo.count_by_user(current_user.id, search=search)
     return EvaluationRunListResponse(
         items=[_build_run_summary(r) for r in runs],
         total=total,

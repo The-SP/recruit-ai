@@ -92,8 +92,8 @@ def get_admin_stats(db: Session = Depends(get_db)) -> AdminStatsResponse:
 
 @router.get("/users", response_model=AdminUserListResponse)
 def list_all_users(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     search: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> AdminUserListResponse:
@@ -126,8 +126,8 @@ def list_all_users(
 
 @router.get("/runs", response_model=AdminRunListResponse)
 def list_all_runs(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     status: RunStatus | None = Query(default=None),
     search: str | None = Query(default=None),
     db: Session = Depends(get_db),

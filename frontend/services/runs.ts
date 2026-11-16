@@ -134,13 +134,15 @@ export async function createEvaluationRun(
   });
 }
 
+/** `search` matches job title or company (case-insensitive substring). */
 export async function listEvaluationRuns(
   limit = 50,
-  offset = 0
+  offset = 0,
+  search?: string
 ): Promise<EvaluationRunListResponse> {
-  return apiRequest<EvaluationRunListResponse>(
-    `/evaluations/runs?limit=${limit}&offset=${offset}`
-  );
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (search) params.set("search", search);
+  return apiRequest<EvaluationRunListResponse>(`/evaluations/runs?${params}`);
 }
 
 export async function getEvaluationRun(runId: string): Promise<EvaluationRunDetail> {

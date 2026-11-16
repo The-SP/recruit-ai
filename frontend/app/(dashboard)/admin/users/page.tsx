@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
+
+import {
+  ListPagination,
+  PAGE_SIZE,
+  pageHref,
+  parsePage,
+} from "@/components/list-pagination";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +24,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiError } from "@/services/api";
-import { listAllUsers, type AdminUserRow } from "@/services/admin";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { useUrlSearch } from "@/hooks/use-url-search";
+import { listAllUsers } from "@/services/admin";
 
 function initials(name: string | null): string {
   if (!name) return "?";
@@ -37,39 +46,37 @@ function shortDate(value: string): string {
   });
 }
 
-export default function AdminUsersPage() {
-  const [users, setUsers] = useState<AdminUserRow[]>([]);
-  const [userTotal, setUserTotal] = useState(0);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// Search lives in the URL next to ?page= so a refresh or back keeps it, and a
+// new search resets to page 1 in the same navigation.
+function listHref(page: number, q: string): string {
+  return pageHref("/admin/users", page, { q });
+}
 
-  // Debounce keystrokes so each character doesn't fire its own request.
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(id);
-  }, [search]);
+function AdminUsersPageInner() {
+  const params = useSearchParams();
+  const page = parsePage(params.get("page"));
+  const q = params.get("q") ?? "";
 
-  useEffect(() => {
-    let cancelled = false;
-    listAllUsers(100, 0, debouncedSearch || undefined)
-      .then((u) => {
-        if (cancelled) return;
-        setUsers(u.items);
-        setUserTotal(u.total);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "Failed to load users.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedSearch]);
+  const fetchPage = useCallback(
+    (limit: number, offset: number) => listAllUsers(limit, offset, q || undefined),
+    [q],
+  );
+  const hrefFor = useCallback((p: number) => listHref(p, q), [q]);
+  const searchHref = useCallback((next: string) => listHref(1, next), []);
+
+  const {
+    items: users,
+    total: userTotal,
+    shownPage,
+    loading,
+    error,
+  } = usePagedList({
+    page,
+    fetchPage,
+    hrefFor,
+    errorMessage: "Failed to load users.",
+  });
+  const [search, setSearch] = useUrlSearch(q, searchHref);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -115,9 +122,6 @@ export default function AdminUsersPage() {
 
       {!error && !loading && users.length > 0 && (
         <>
-          <p className="text-sm text-muted-foreground">
-            Showing {users.length} of {userTotal}
-          </p>
           <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-sm">
             <div className="overflow-x-auto">
               <Table className="[&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
@@ -180,8 +184,25 @@ export default function AdminUsersPage() {
               </Table>
             </div>
           </div>
+          <ListPagination
+            hrefFor={hrefFor}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={userTotal}
+            shownPage={shownPage}
+            shownCount={users.length}
+          />
         </>
       )}
     </div>
+  );
+}
+
+// useSearchParams (the ?page=/?q= state) needs a Suspense boundary.
+export default function AdminUsersPage() {
+  return (
+    <Suspense>
+      <AdminUsersPageInner />
+    </Suspense>
   );
 }
