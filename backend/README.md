@@ -1,56 +1,60 @@
+# Recruit AI: Backend
+
+FastAPI API and Celery worker. Needs PostgreSQL 16 and Redis 7.
+
 ## Getting Started
 
-1. Clone the repository
-2. Set up environment variables in `.env`:
+1. **Install dependencies** with [`uv`](https://docs.astral.sh/uv/):
 
-   - Create a `.env` file in the `backend/` directory using `.env.example` as a template
-   - Configure your API keys, email configs and database connection
-
-3. **Install dependencies:**
-
-   - Using `uv` (recommended)
-
-     ```bash
-     uv sync
-     ```
-
-   - Using `pip`
-     ```bash
-     python -m venv .venv
-     source .venv/bin/activate
-     pip install -e .
-     ```
-
-4. **Set up the database:**
    ```bash
-   make migrate  # Run database migrations
+   uv sync
+   ```
+
+2. **Configure environment variables:**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   At minimum set `GOOGLE_API_KEY`, and point `DATABASE_URL` and `REDIS_URL` at your PostgreSQL and Redis instances. Every variable is documented in `.env.example`.
+
+3. **Run database migrations:**
+
+   ```bash
+   make migrate
    ```
 
 ## Run the Application
 
 ### Option 1: Local Development
 
-Start the required services:
-
 ```bash
-make worker  # Start Celery worker for background tasks
-make dev     # Start FastAPI server
+make worker  # Celery worker for background evaluation
+make dev     # FastAPI server with hot reload
 ```
 
 ### Option 2: Docker
 
 ```bash
-docker compose up
+docker compose up  # PostgreSQL, Redis, API, and worker
 ```
 
-- The API will be accessible at http://localhost:8000
+- API: http://localhost:8000
 - Interactive API docs: http://localhost:8000/docs
+
+Run `make help` for the full list of commands (linting, formatting, budget and circuit-breaker operations).
+
+## Tests
+
+```bash
+make test
+```
 
 ## Infrastructure
 
-- **EC2** — API, Celery worker, and Redis as Docker Compose services behind nginx
-- **RDS** — PostgreSQL
-- **S3** — resume storage
-- **SSM Parameter Store** — production config, rendered on each deploy
+- **EC2:** API, Celery worker, and Redis as Docker Compose services behind nginx
+- **RDS:** PostgreSQL
+- **S3:** resume and interview audio storage
+- **SSM Parameter Store:** production config, rendered on each deploy
 
-Deploys run from the **Deploy to EC2** GitHub Actions workflow (manual trigger).
+Deploys run from the **Deploy to EC2** GitHub Actions workflow. See [`deploy/README.md`](deploy/README.md).

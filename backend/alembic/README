@@ -1,6 +1,6 @@
-Generic single-database configuration.
-
 # Alembic Migrations
+
+The common cases are wrapped by `make migrate`, `make migrate-create m="..."`, and `make migrate-down`.
 
 ## Commands
 
