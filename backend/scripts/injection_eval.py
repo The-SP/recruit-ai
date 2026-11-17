@@ -33,7 +33,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 from app.config import Config
-from app.core.model_factory import is_meta_model
+from app.core.model_factory import is_openai_model
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 MODULE_PATHS = {
@@ -333,9 +333,9 @@ def main() -> None:
     parser.add_argument("--out", help="write the raw results as JSON here")
     args = parser.parse_args()
 
-    if is_meta_model(Config.INTERVIEW_MODEL_NAME):
-        if not args.dry_run and not Config.META_API_KEY:
-            sys.exit("No Meta key: set META_API_KEY")
+    if is_openai_model(Config.INTERVIEW_MODEL_NAME):
+        if not args.dry_run and not Config.OPENAI_API_KEY:
+            sys.exit("No OpenAI-compatible key: set OPENAI_API_KEY")
     elif not args.dry_run and not Config.GOOGLE_API_KEYS:
         sys.exit("No Gemini key: set GOOGLE_API_KEYS")
 

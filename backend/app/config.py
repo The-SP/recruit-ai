@@ -48,9 +48,13 @@ class Config:
         )
         if k.strip()
     ]
-    # Meta Model API (Muse Spark), used by any *_MODEL_NAME set to "meta:<model>".
-    META_API_KEY: str = os.getenv("META_API_KEY", "")
-    META_BASE_URL: str = os.getenv("META_BASE_URL", "https://api.meta.ai/v1")
+    # OpenAI, or any OpenAI-compatible API via OPENAI_BASE_URL (e.g. Meta's
+    # Muse Spark at https://api.meta.ai/v1). Used by any *_MODEL_NAME set to
+    # "openai:<model>".
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    # Leave empty for non-reasoning models (gpt-4o, gpt-4.1).
+    OPENAI_REASONING_EFFORT: str = os.getenv("OPENAI_REASONING_EFFORT", "")
 
     # LLM models
     MODEL_NAME: str = os.getenv("MODEL_NAME", "google_genai:gemini-2.5-flash-lite")

@@ -261,8 +261,8 @@ Two structural notes:
 
 - Every scorer calls `core/model_factory.invoke_structured()` with a Pydantic schema, so each
   returns a validated object rather than free text. The helper picks the structured-output
-  strategy for the configured provider (`ToolStrategy` on Gemini, strict json_schema on Muse
-  Spark).
+  strategy for the configured provider (`ToolStrategy` on Gemini, strict json_schema on
+  `openai:` models).
 - The LLM decides *matching* — does this resume show this skill, how relevant is this role. All
   arithmetic (weights, tier scores, the critical penalty, overlap handling, thresholds) is plain
   Python and deterministic.

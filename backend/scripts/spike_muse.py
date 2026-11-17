@@ -74,7 +74,7 @@ def _model(name: str, effort: str | None) -> Any:
         name,
         model_provider="openai",
         base_url=BASE_URL,
-        api_key=os.environ["META_API_KEY"],
+        api_key=os.environ["OPENAI_API_KEY"],
         **kwargs,
     )
 

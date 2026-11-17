@@ -355,8 +355,8 @@ and the recruiter UI shows a retry button rather than leaving the run stuck.
 | `INTERVIEW_MODE` | `text` or `audio` answers | `text` locally (no mic needed), `audio` in production |
 | `INTERVIEW_VOICE` | `on`/`off` — whether questions are spoken. Defaults to `off` even when `INTERVIEW_MODE=audio`; an unrecognized value for either setting degrades silently to the safe default rather than failing invite creation | `off` locally, `on` in production |
 | `INTERVIEW_QUESTION_COUNT` / `INTERVIEW_QUESTION_COUNT_TOLERANCE` | The **default** question count for a run with no saved template, and the tolerance its generated output is validated against. A template overrides the count, bounded by `MIN`/`MAX_QUESTIONS_PER_INTERVIEW` | Code default `1`/`0` for fast local test interviews, full 5-6 in production |
-| `INTERVIEW_MODEL_NAME` | Model used for question generation, the turn engine, and assessment. Can be a `meta:` Muse Spark model (needs `META_API_KEY`) | — |
-| `INTERVIEW_TRANSCRIBE_MODEL_NAME` | Model that transcribes spoken answers. Must accept audio input, so it stays Gemini even when the interview model is Muse Spark | — |
+| `INTERVIEW_MODEL_NAME` | Model used for question generation, the turn engine, and assessment. Can be an `openai:` model (needs `OPENAI_API_KEY`; any OpenAI-compatible API via `OPENAI_BASE_URL`, e.g. Muse Spark) | — |
+| `INTERVIEW_TRANSCRIBE_MODEL_NAME` | Model that transcribes spoken answers. Must accept audio input, so it stays Gemini even when the interview model is an `openai:` one | — |
 | `INTERVIEW_TTS_MODEL_NAME` | Model used for speech synthesis | — |
 
 **Interview length is not an env var.** It is a per-run template setting

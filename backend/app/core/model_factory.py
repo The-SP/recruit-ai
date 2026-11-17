@@ -9,18 +9,15 @@ from app.core.redis_client import get_redis
 
 _CURSOR_KEY = "google_api_key_cursor"
 
-# Model names are "<provider>:<model>". "meta:" is ours, not LangChain's: Meta's
-# API is OpenAI-compatible, so it is served by langchain-openai pointed at
-# META_BASE_URL. Every other prefix goes to init_chat_model unchanged.
-META_PREFIX = "meta:"
-
-# Muse Spark always reasons ("none" is a 400), and reasoning tokens bill as
-# output. "low" is the default; latency-bound call sites pass "minimal".
-META_REASONING_EFFORT = "low"
+# Model names are "<provider>:<model>", LangChain's own convention. "openai:"
+# models are pointed at OPENAI_BASE_URL, so any OpenAI-compatible API (OpenAI
+# itself, or e.g. Meta's Muse Spark) works by overriding the base URL. Every
+# other prefix goes to init_chat_model with a rotated Google key.
+OPENAI_PREFIX = "openai:"
 
 
-def is_meta_model(model_name: str | None = None) -> bool:
-    return (model_name or Config.MODEL_NAME).startswith(META_PREFIX)
+def is_openai_model(model_name: str | None = None) -> bool:
+    return (model_name or Config.MODEL_NAME).startswith(OPENAI_PREFIX)
 
 
 def _next_api_key() -> str | None:
@@ -45,18 +42,24 @@ def build_model(
 ) -> Any:
     """Build a chat model for `model_name` (default Config.MODEL_NAME).
 
+    "openai:" models go to Config.OPENAI_BASE_URL with Config.OPENAI_API_KEY.
     Google models are bound to the next rotated key from GOOGLE_API_KEYS; every
-    call site, scoring and interview alike, shares that one pool. Meta models
-    use Config.META_API_KEY. `reasoning_effort` only applies to Meta models.
+    call site, scoring and interview alike, shares that one pool.
+
+    `reasoning_effort` only applies to OpenAI models, and is sent only when a
+    call site or OPENAI_REASONING_EFFORT sets one: non-reasoning models
+    (gpt-4o, gpt-4.1) reject the parameter outright.
     """
     name = model_name or Config.MODEL_NAME
-    if name.startswith(META_PREFIX):
+    if is_openai_model(name):
+        kwargs: dict[str, Any] = {}
+        if effort := reasoning_effort or Config.OPENAI_REASONING_EFFORT:
+            kwargs["reasoning_effort"] = effort
         return init_chat_model(
-            name.removeprefix(META_PREFIX),
-            model_provider="openai",
-            base_url=Config.META_BASE_URL,
-            api_key=Config.META_API_KEY,
-            reasoning_effort=reasoning_effort or META_REASONING_EFFORT,
+            name,
+            base_url=Config.OPENAI_BASE_URL,
+            api_key=Config.OPENAI_API_KEY,
+            **kwargs,
         )
 
     key = _next_api_key()
@@ -70,13 +73,14 @@ def _structured_strategy(
 ) -> ToolStrategy[Any] | ProviderStrategy[Any]:
     """The create_agent response_format for `schema` on `model_name`'s provider.
 
-    Muse Spark rejects ToolStrategy (it forces tool_choice, and Meta only
-    accepts "auto"), so Meta gets native json_schema output instead. strict is
-    not optional there: without it the model was seen emitting corrupted keys
-    ("markdown_contentVEL") that Pydantic silently drops as unknown fields.
+    OpenAI models get native json_schema output. Muse Spark (served through
+    the OpenAI-compatible path) rejects ToolStrategy, which forces tool_choice
+    while Meta only accepts "auto". strict is not optional: without it Muse
+    was seen emitting corrupted keys ("markdown_contentVEL") that Pydantic
+    silently drops as unknown fields.
     Gemini keeps ToolStrategy, which is what its call sites were tuned on.
     """
-    if is_meta_model(model_name):
+    if is_openai_model(model_name):
         return ProviderStrategy(schema, strict=True)
     return ToolStrategy(schema)
 

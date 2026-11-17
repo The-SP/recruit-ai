@@ -26,7 +26,7 @@ CIRCUIT_BREAKER_TTL = 86400  # 24 hours
 def is_rate_limit_error(error: Exception | str) -> bool:
     """Check if error is a rate limit/quota error.
 
-    "Error code: 429" is how the openai SDK (Meta models) renders a 429.
+    "Error code: 429" is how the openai SDK ("openai:" models) renders a 429.
     """
     error_str = str(error)
     return (
